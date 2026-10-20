@@ -25,6 +25,12 @@ esac
 echo "New version: ${NEW}"
 echo ""
 
+# Make sure the local dependencies the build and tests need are installed —
+# the compiler fixture tests below fail without the Svelte compiler packages
+# under scripts/compiler-runtime/node_modules.
+"$(dirname "$0")/dev-setup.sh"
+echo ""
+
 # Update Cargo.toml
 sed -i.bak "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
 rm -f Cargo.toml.bak
