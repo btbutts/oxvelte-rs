@@ -29,7 +29,7 @@
 use crate::ast::TemplateNode;
 use crate::linter::{LintContext, Rule};
 use oxc::ast::ast::{
-    Argument, Declaration, Expression, IdentifierReference, ImportDeclarationSpecifier,
+    Expression, ImportDeclarationSpecifier,
     ModuleExportName, Statement,
 };
 use oxc::ast::AstKind;

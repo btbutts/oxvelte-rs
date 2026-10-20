@@ -209,7 +209,7 @@ enum OpenNode<'a> {
 }
 
 impl<'a> OpenNode<'a> {
-    fn as_element(&self) -> Option<&OpenElement> {
+    fn as_element(&self) -> Option<&OpenElement<'_>> {
         match self {
             Self::Element(e) => Some(e),
             Self::Block(_) => None,
