@@ -40,11 +40,11 @@ rm -f Cargo.toml.bak
 
 # Verify build (this also updates the version recorded in Cargo.lock)
 echo "Building..."
-cargo build --release
+cargo build --release --color always
 
 echo "Running tests..."
-cargo test --lib
-
+cargo test --lib --color always
+  
 # Commit and tag
 git add Cargo.toml Cargo.lock
 git commit -m "release: v${NEW}" || true
