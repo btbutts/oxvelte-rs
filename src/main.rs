@@ -140,10 +140,10 @@ fn load_lint_config(
         return Ok((config, config_dir));
     }
 
-    Ok((
-        oxvelte::config::OxvelteConfig::load(search_dir),
-        search_dir.to_path_buf(),
-    ))
+    // Auto-discovery: the directory the config was found in is the base for
+    // relative paths inside it (e.g. customRules globs), and an unreadable or
+    // invalid discovered config is a hard error, same as --config.
+    oxvelte::config::OxvelteConfig::load_with_dir(search_dir)
 }
 
 fn cmd_lint(
@@ -183,9 +183,10 @@ fn cmd_lint(
         linter::Linter::recommended()
     };
 
-    // Add rules the config switches on, then drop the ones it switches off.
+    // Add rules the config switches on, then load custom JS rules (when the
+    // feature is enabled), and only then drop the rules the config switches
+    // off — a "custom/foo": "off" entry must apply to custom rules too.
     lint.add_enabled_rules(&config);
-    lint.remove_disabled_rules(&config);
 
     // Load custom JS rules when the feature is enabled.
     #[cfg(feature = "custom-rules")]
@@ -196,6 +197,8 @@ fn cmd_lint(
             lint = lint.with_custom_rules(custom);
         }
     }
+
+    lint.remove_disabled_rules(&config);
 
     let files = collect_lint_files(paths);
     let file_count = files.len();
@@ -257,14 +260,34 @@ fn cmd_lint(
                 }
             } else if is_svelte_module {
                 let is_ts = path_str.ends_with(".ts");
-                lint.lint_svelte_script_with_project_config_and_path(
-                    &source,
-                    is_ts,
-                    &config,
-                    &file_path_owned,
-                )
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    lint.lint_svelte_script_with_project_config_and_path(
+                        &source,
+                        is_ts,
+                        &config,
+                        &file_path_owned,
+                    )
+                })) {
+                    Ok(d) => d,
+                    Err(_) => {
+                        eprintln!("oxvelte: internal error linting {}", path.display());
+                        return None;
+                    }
+                }
             } else {
-                lint.lint_script_with_project_config_and_path(&source, &config, &file_path_owned)
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    lint.lint_script_with_project_config_and_path(
+                        &source,
+                        &config,
+                        &file_path_owned,
+                    )
+                })) {
+                    Ok(d) => d,
+                    Err(_) => {
+                        eprintln!("oxvelte: internal error linting {}", path.display());
+                        return None;
+                    }
+                }
             };
             if diags.is_empty() {
                 return None;
@@ -316,7 +339,7 @@ fn cmd_lint(
             serde_json::to_string_pretty(&json_results).unwrap_or_default()
         );
     } else if !quiet {
-        print_diagnostics(&file_results, use_color);
+        print_diagnostics(&file_results, use_color, false);
 
         if total_diags > 0 {
             print_summary(
@@ -329,6 +352,11 @@ fn cmd_lint(
         }
     }
     if quiet {
+        // Text mode: --quiet suppresses warnings but errors are still shown,
+        // matching the CLI help text and the JSON path's filtering.
+        if !json_output {
+            print_diagnostics(&file_results, use_color, true);
+        }
         let elapsed = start.elapsed();
         if use_color {
             if error_count > 0 {
@@ -388,8 +416,16 @@ fn visible_file_diagnostics<'a>(
         .collect()
 }
 
-fn print_diagnostics(file_results: &[FileResult], use_color: bool) {
+fn print_diagnostics(file_results: &[FileResult], use_color: bool, errors_only: bool) {
     for file_result in file_results {
+        let visible: Vec<&FileDiagnostic> = file_result
+            .diagnostics
+            .iter()
+            .filter(|d| !errors_only || d.severity == DiagnosticSeverity::Error)
+            .collect();
+        if visible.is_empty() {
+            continue;
+        }
         // File header — underlined, clickable in VS Code
         if use_color {
             eprintln!("\n\x1b[4m{}\x1b[0m", file_result.path);
@@ -398,14 +434,13 @@ fn print_diagnostics(file_results: &[FileResult], use_color: bool) {
         }
 
         // Find max widths for alignment
-        let max_loc_width = file_result
-            .diagnostics
+        let max_loc_width = visible
             .iter()
             .map(|d| format!("{}:{}", d.line, d.col).len())
             .max()
             .unwrap_or(0);
 
-        for d in &file_result.diagnostics {
+        for d in &visible {
             let loc = format!("{}:{}", d.line, d.col);
             if use_color {
                 let color = match d.severity {

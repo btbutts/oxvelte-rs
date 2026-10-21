@@ -25,7 +25,7 @@
 use crate::linter::RuleConfig;
 use serde_json::Value;
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Parsed oxvelte configuration.
 #[derive(Debug, Clone, Default)]
@@ -55,23 +55,40 @@ impl RuleEntry {
 
 impl OxvelteConfig {
     /// Load config from the nearest `oxvelte.config.json` walking up from `start_dir`.
+    ///
+    /// Kept for callers that only need the config values; ignores read/parse
+    /// errors and the config's location. Prefer [`OxvelteConfig::load_with_dir`].
     pub fn load(start_dir: &Path) -> Self {
+        Self::load_with_dir(start_dir)
+            .map(|(config, _)| config)
+            .unwrap_or_default()
+    }
+
+    /// Load config from the nearest `oxvelte.config.json` walking up from
+    /// `start_dir`, also returning the directory that contains it (so
+    /// relative paths in the config, such as `customRules` globs, resolve
+    /// against the config's own location, not the lint path's directory).
+    ///
+    /// A config file that exists but cannot be read or parsed is a hard
+    /// error: silently falling back to a parent config or the defaults would
+    /// lint the project with the wrong rules and no indication.
+    pub fn load_with_dir(start_dir: &Path) -> Result<(Self, PathBuf), String> {
         let mut dir = start_dir;
         loop {
             let config_path = dir.join("oxvelte.config.json");
             if config_path.exists() {
-                if let Ok(content) = std::fs::read_to_string(&config_path) {
-                    if let Ok(config) = Self::parse(&content) {
-                        return config;
-                    }
-                }
+                let content = std::fs::read_to_string(&config_path)
+                    .map_err(|e| format!("Error reading config {}: {e}", config_path.display()))?;
+                let config = Self::parse(&content)
+                    .map_err(|e| format!("Error parsing config {}: {e}", config_path.display()))?;
+                return Ok((config, dir.to_path_buf()));
             }
             match dir.parent() {
                 Some(parent) => dir = parent,
                 None => break,
             }
         }
-        Self::default()
+        Ok((Self::default(), start_dir.to_path_buf()))
     }
 
     /// Parse config from a JSON string.
@@ -339,5 +356,32 @@ mod tests {
         let output = config.to_json();
         let reparsed = OxvelteConfig::parse(&output).unwrap();
         assert_eq!(reparsed.rules.len(), 2);
+    }
+
+    #[test]
+    fn load_with_dir_returns_the_configs_own_directory() {
+        let base = std::env::temp_dir()
+            .join(format!("oxvelte-cfg-dir-{}", std::process::id()));
+        let child = base.join("sub");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::write(base.join("oxvelte.config.json"), "{ \"rules\": {} }").unwrap();
+        let (_config, dir) = OxvelteConfig::load_with_dir(&child).unwrap();
+        assert_eq!(
+            dir, base,
+            "customRules globs must resolve against the config's directory"
+        );
+        std::fs::remove_dir_all(&base).ok();
+    }
+
+    #[test]
+    fn load_with_dir_errors_on_invalid_discovered_config() {
+        let base = std::env::temp_dir()
+            .join(format!("oxvelte-cfg-bad-{}", std::process::id()));
+        let child = base.join("sub");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::write(base.join("oxvelte.config.json"), "{ not json").unwrap();
+        // An invalid config must surface, not be skipped silently.
+        assert!(OxvelteConfig::load_with_dir(&child).is_err());
+        std::fs::remove_dir_all(&base).ok();
     }
 }

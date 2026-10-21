@@ -213,6 +213,32 @@ mod tests {
     }
 
     #[test]
+    fn ts_as_expression_serializes_as_ts_node() {
+        let source = "<script lang=\"ts\">let x: unknown = \"\";</script>{x as string}";
+        let alloc = oxc::allocator::Allocator::default();
+        let result = crate::parser::parse(source, &alloc);
+        let modern = to_modern_json(&result.ast, source);
+        let expr = &modern["fragment"]["nodes"][0]["expression"];
+        assert_eq!(expr["type"], "TSAsExpression", "{expr:?}");
+        assert_eq!(expr["expression"]["type"], "Identifier");
+        assert_eq!(expr["expression"]["name"], "x");
+        assert_eq!(expr["typeAnnotation"]["type"], "TSStringKeyword");
+    }
+
+    #[test]
+    fn partial_expression_parse_falls_back_instead_of_dropping_trailing_input() {
+        // `{foo bar}` must not serialize as Identifier(foo) with ` bar`
+        // silently dropped; it takes the invalid-expression fallback instead.
+        let source = "{foo bar}";
+        let alloc = oxc::allocator::Allocator::default();
+        let result = crate::parser::parse(source, &alloc);
+        let legacy = to_legacy_json(&result.ast, source);
+        let expr = &legacy["html"]["children"][0]["expression"];
+        assert_eq!(expr["type"], "Identifier", "{expr:?}");
+        assert_eq!(expr["name"], "", "{expr:?}");
+    }
+
+    #[test]
     fn top_level_script_braced_attribute_value_stays_static_text() {
         let source = "<script lang={ts}>\n</script>";
         let alloc = oxc::allocator::Allocator::default();
@@ -432,6 +458,7 @@ fn loc_json_with_char(source: &str, start: u32, end: u32) -> Value {
 fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value {
     use oxc::allocator::Allocator;
     use oxc::parser::Parser;
+    use oxc::span::GetSpan;
     use oxc::span::SourceType;
 
     let has_comments = expr_str.contains("//") || expr_str.contains("/*");
@@ -480,7 +507,10 @@ fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value 
     let js_result = Parser::new(&alloc, expr_str, SourceType::mjs()).parse_expression();
 
     if let Ok(expr) = &js_result {
-        if !expr_str.ends_with('.') {
+        // parse_expression stops after one expression; trailing input means
+        // the expression text was only partially consumed (e.g. `{foo bar}`)
+        // and serializing it would silently drop the remainder.
+        if !expr_str.ends_with('.') && only_trailing_trivia(&expr_str[expr.span().end as usize..]) {
             let mut result = estree_expr(expr, source, expr_start);
             if has_comments {
                 add_leading_comment_from_text(&mut result, expr_str, expr_start);
@@ -494,7 +524,10 @@ fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value 
     let ts_result = Parser::new(&alloc_ts, expr_str, SourceType::ts()).parse_expression();
 
     match ts_result {
-        Ok(expr) if !expr_str.ends_with('.') => {
+        Ok(expr)
+            if !expr_str.ends_with('.')
+                && only_trailing_trivia(&expr_str[expr.span().end as usize..]) =>
+        {
             return estree_expr(&expr, source, expr_start);
         }
         _ => {}
@@ -508,6 +541,28 @@ fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value 
         "end": expr_end,
         "name": ""
     })
+}
+
+/// True when `text` holds nothing but whitespace and comments — used to
+/// detect partial expression parses (`{foo bar}` parses as `foo` and stops).
+fn only_trailing_trivia(text: &str) -> bool {
+    let mut rest = text.trim_start();
+    loop {
+        if rest.is_empty() {
+            return true;
+        }
+        if rest.starts_with("//") {
+            return true; // a line comment runs to the end of the text
+        }
+        if let Some(after) = rest.strip_prefix("/*") {
+            match after.find("*/") {
+                Some(end) => rest = after[end + 2..].trim_start(),
+                None => return false, // unterminated block comment
+            }
+            continue;
+        }
+        return false;
+    }
 }
 
 /// Add leading comment from expression text (for the fallback path).
@@ -1164,6 +1219,67 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                 }
             })
         }
+        // TypeScript wrapper expressions — the ordinary shapes TS Svelte
+        // components produce (`as`, `satisfies`, `!`, `<T>x`, `f<T>()`).
+        Expression::TSAsExpression(e) => {
+            let start = offset + e.span.start;
+            let end = offset + e.span.end;
+            json!({
+                "type": "TSAsExpression",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "expression": estree_expr(&e.expression, source, offset),
+                "typeAnnotation": estree_ts_type(&e.type_annotation, source, offset)
+            })
+        }
+        Expression::TSSatisfiesExpression(e) => {
+            let start = offset + e.span.start;
+            let end = offset + e.span.end;
+            json!({
+                "type": "TSSatisfiesExpression",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "expression": estree_expr(&e.expression, source, offset),
+                "typeAnnotation": estree_ts_type(&e.type_annotation, source, offset)
+            })
+        }
+        Expression::TSNonNullExpression(e) => {
+            let start = offset + e.span.start;
+            let end = offset + e.span.end;
+            json!({
+                "type": "TSNonNullExpression",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "expression": estree_expr(&e.expression, source, offset)
+            })
+        }
+        Expression::TSTypeAssertion(e) => {
+            let start = offset + e.span.start;
+            let end = offset + e.span.end;
+            json!({
+                "type": "TSTypeAssertion",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "expression": estree_expr(&e.expression, source, offset),
+                "typeAnnotation": estree_ts_type(&e.type_annotation, source, offset)
+            })
+        }
+        Expression::TSInstantiationExpression(e) => {
+            let start = offset + e.span.start;
+            let end = offset + e.span.end;
+            json!({
+                "type": "TSInstantiationExpression",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "expression": estree_expr(&e.expression, source, offset),
+                "typeArguments": estree_ts_type_arguments(&e.type_arguments, source, offset)
+            })
+        }
         // Fallback for unsupported expression types
         _ => {
             json!({
@@ -1171,6 +1287,217 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                 "raw": "unsupported"
             })
         }
+    }
+}
+
+/// Serialize an oxc `TSType` to the acorn-typescript-flavored JSON shape the
+/// Svelte compiler emits for type annotations (e.g. `TSStringKeyword`,
+/// `TSTypeReference`). Unsupported type nodes use the same `UnknownExpression`
+/// fallback shape as unsupported expressions.
+fn estree_ts_type(ty: &oxc::ast::ast::TSType<'_>, source: &str, offset: u32) -> Value {
+    use oxc::ast::ast::TSType;
+    use oxc::span::GetSpan;
+
+    let start = offset + ty.span().start;
+    let end = offset + ty.span().end;
+    let loc = loc_json(source, start, end);
+
+    // Simple keyword types carry nothing but their span.
+    let keyword = match ty {
+        TSType::TSAnyKeyword(_) => Some("TSAnyKeyword"),
+        TSType::TSBigIntKeyword(_) => Some("TSBigIntKeyword"),
+        TSType::TSBooleanKeyword(_) => Some("TSBooleanKeyword"),
+        TSType::TSNeverKeyword(_) => Some("TSNeverKeyword"),
+        TSType::TSNullKeyword(_) => Some("TSNullKeyword"),
+        TSType::TSNumberKeyword(_) => Some("TSNumberKeyword"),
+        TSType::TSObjectKeyword(_) => Some("TSObjectKeyword"),
+        TSType::TSStringKeyword(_) => Some("TSStringKeyword"),
+        TSType::TSSymbolKeyword(_) => Some("TSSymbolKeyword"),
+        TSType::TSUndefinedKeyword(_) => Some("TSUndefinedKeyword"),
+        TSType::TSUnknownKeyword(_) => Some("TSUnknownKeyword"),
+        TSType::TSVoidKeyword(_) => Some("TSVoidKeyword"),
+        _ => None,
+    };
+    if let Some(keyword) = keyword {
+        return json!({
+            "type": keyword,
+            "start": start,
+            "end": end,
+            "loc": loc
+        });
+    }
+
+    match ty {
+        TSType::TSTypeReference(reference) => json!({
+            "type": "TSTypeReference",
+            "start": start,
+            "end": end,
+            "loc": loc,
+            "typeName": estree_ts_type_name(&reference.type_name, source, offset),
+            "typeArguments": reference
+                .type_arguments
+                .as_ref()
+                .map(|args| estree_ts_type_arguments(args, source, offset))
+                .unwrap_or(Value::Null)
+        }),
+        TSType::TSArrayType(array) => json!({
+            "type": "TSArrayType",
+            "start": start,
+            "end": end,
+            "loc": loc,
+            "elementType": estree_ts_type(&array.element_type, source, offset)
+        }),
+        TSType::TSUnionType(union) => json!({
+            "type": "TSUnionType",
+            "start": start,
+            "end": end,
+            "loc": loc,
+            "types": union.types.iter().map(|t| estree_ts_type(t, source, offset)).collect::<Vec<_>>()
+        }),
+        TSType::TSIntersectionType(intersection) => json!({
+            "type": "TSIntersectionType",
+            "start": start,
+            "end": end,
+            "loc": loc,
+            "types": intersection.types.iter().map(|t| estree_ts_type(t, source, offset)).collect::<Vec<_>>()
+        }),
+        TSType::TSParenthesizedType(paren) => json!({
+            "type": "TSParenthesizedType",
+            "start": start,
+            "end": end,
+            "loc": loc,
+            "typeAnnotation": estree_ts_type(&paren.type_annotation, source, offset)
+        }),
+        TSType::TSLiteralType(literal) => json!({
+            "type": "TSLiteralType",
+            "start": start,
+            "end": end,
+            "loc": loc,
+            "literal": estree_ts_literal(&literal.literal, source, offset)
+        }),
+        _ => json!({
+            "type": "UnknownExpression",
+            "raw": "unsupported"
+        }),
+    }
+}
+
+fn estree_ts_type_arguments(
+    args: &oxc::ast::ast::TSTypeParameterInstantiation<'_>,
+    source: &str,
+    offset: u32,
+) -> Value {
+    let start = offset + args.span.start;
+    let end = offset + args.span.end;
+    json!({
+        "type": "TSTypeParameterInstantiation",
+        "start": start,
+        "end": end,
+        "loc": loc_json(source, start, end),
+        "params": args.params.iter().map(|p| estree_ts_type(p, source, offset)).collect::<Vec<_>>()
+    })
+}
+
+fn estree_ts_type_name(
+    name: &oxc::ast::ast::TSTypeName<'_>,
+    source: &str,
+    offset: u32,
+) -> Value {
+    use oxc::ast::ast::TSTypeName;
+    use oxc::span::GetSpan;
+    match name {
+        TSTypeName::IdentifierReference(ident) => {
+            let start = offset + ident.span.start;
+            let end = offset + ident.span.end;
+            json!({
+                "type": "Identifier",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "name": ident.name.as_str()
+            })
+        }
+        TSTypeName::QualifiedName(qualified) => {
+            let start = offset + qualified.span.start;
+            let end = offset + qualified.span.end;
+            let right_start = offset + qualified.right.span.start;
+            let right_end = offset + qualified.right.span.end;
+            json!({
+                "type": "TSQualifiedName",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "left": estree_ts_type_name(&qualified.left, source, offset),
+                "right": {
+                    "type": "Identifier",
+                    "start": right_start,
+                    "end": right_end,
+                    "loc": loc_json(source, right_start, right_end),
+                    "name": qualified.right.name.as_str()
+                }
+            })
+        }
+        other => {
+            let start = offset + other.span().start;
+            let end = offset + other.span().end;
+            json!({
+                "type": "Identifier",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "name": &source[start as usize..end as usize]
+            })
+        }
+    }
+}
+
+fn estree_ts_literal(
+    literal: &oxc::ast::ast::TSLiteral<'_>,
+    source: &str,
+    offset: u32,
+) -> Value {
+    use oxc::ast::ast::TSLiteral;
+    match literal {
+        TSLiteral::StringLiteral(lit) => {
+            let start = offset + lit.span.start;
+            let end = offset + lit.span.end;
+            json!({
+                "type": "Literal",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "value": lit.value.as_str(),
+                "raw": &source[start as usize..end as usize]
+            })
+        }
+        TSLiteral::NumericLiteral(lit) => {
+            let start = offset + lit.span.start;
+            let end = offset + lit.span.end;
+            json!({
+                "type": "Literal",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "value": lit.value,
+                "raw": &source[start as usize..end as usize]
+            })
+        }
+        TSLiteral::BooleanLiteral(lit) => {
+            let start = offset + lit.span.start;
+            let end = offset + lit.span.end;
+            json!({
+                "type": "Literal",
+                "start": start,
+                "end": end,
+                "loc": loc_json(source, start, end),
+                "value": lit.value,
+                "raw": if lit.value { "true" } else { "false" }
+            })
+        }
+        _ => json!({
+            "type": "UnknownExpression",
+            "raw": "unsupported"
+        }),
     }
 }
 

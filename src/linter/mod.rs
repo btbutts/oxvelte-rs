@@ -724,10 +724,11 @@ fn is_ts_like_path(file_path: &str) -> bool {
 
 /// Byte offset in the original source where a `<script ...>` block's content starts
 /// (i.e. just after the open tag's `>`).
-fn script_content_offset(script: &Script, source: &str) -> u32 {
-    let tag_text = &source[script.span.start as usize..script.span.end as usize];
-    let gt = tag_text.find('>').unwrap_or(0);
-    script.span.start + gt as u32 + 1
+fn script_content_offset(script: &Script, _source: &str) -> u32 {
+    // The scanner records the open tag's end quote-aware, so a `>` inside a
+    // quoted attribute value (e.g. `generics="T extends (x: string) => void"`)
+    // is not mistaken for the tag end.
+    script.content_span.start
 }
 
 /// Svelte 5 runes. A file is runes-mode iff it contains a call expression whose
@@ -1675,5 +1676,39 @@ mod suppression_tests {
         // Escaped quotes do not end the string early.
         let escaped = "<script>let s = \"a \\\" b // eslint-disable-next-line\";\nlet t = 1;</script>\n";
         assert!(parse_directives(escaped).is_empty());
+    }
+
+    #[test]
+    fn script_content_offset_ignores_quoted_gt_in_attributes() {
+        // The `>` inside the quoted `=>` must not be mistaken for the end of
+        // the open tag.
+        let source = "<script lang=\"ts\" generics=\"T extends (x: string) => void\">\nlet x = 1;\n</script>";
+        let alloc = oxc::allocator::Allocator::default();
+        let parsed = crate::parser::parse_for_lint(source, &alloc);
+        let script = parsed.ast.instance.as_ref().unwrap();
+        let offset = script_content_offset(script, source) as usize;
+        assert_eq!(offset, source.find('\n').unwrap());
+    }
+
+    struct DummyCustomRule;
+    impl Rule for DummyCustomRule {
+        fn name(&self) -> &'static str {
+            "custom/dummy"
+        }
+        fn run(&self, _ctx: &mut LintContext<'_>) {}
+    }
+
+    #[test]
+    fn remove_disabled_rules_also_drops_custom_rules() {
+        let mut lint = Linter::recommended();
+        lint = lint.with_custom_rules(vec![Box::new(DummyCustomRule)]);
+        assert!(lint.rules().iter().any(|r| r.name() == "custom/dummy"));
+        let config =
+            crate::config::OxvelteConfig::parse("{\"rules\":{\"custom/dummy\":\"off\"}}").unwrap();
+        lint.remove_disabled_rules(&config);
+        assert!(
+            !lint.rules().iter().any(|r| r.name() == "custom/dummy"),
+            "a custom rule set to off in the config must be removed"
+        );
     }
 }
