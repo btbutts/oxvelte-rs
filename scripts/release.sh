@@ -47,7 +47,7 @@ cargo test --lib
 
 # Commit and tag
 git add Cargo.toml Cargo.lock
-git commit -m "release: v${NEW}"
+git commit -m "release: v${NEW}" || true
 git tag -a "v${NEW}" -m "v${NEW}"
 
 echo ""
