@@ -3751,13 +3751,10 @@ impl<'a> TemplateParser<'a> {
             };
             let intro = matches!(current, "transition" | "in");
             let outro = matches!(current, "transition" | "out");
-            let existing = if intro {
-                in_transition
-            } else if outro {
-                out_transition
-            } else {
-                None
-            };
+            // Vendor: (intro && in_transition) || (outro && out_transition) —
+            // a `transition:` directive conflicts with a stored `out:` too.
+            let existing = (if intro { in_transition } else { None })
+                .or(if outro { out_transition } else { None });
 
             if let Some(existing) = existing {
                 if existing == current {
@@ -4309,7 +4306,7 @@ impl<'a> TemplateParser<'a> {
                     span: Span::new(start, self.pos as u32),
                 });
                 attribute_meta.push(AttributeMeta {
-                    name_span: Span::new(start + 2, start + 9),
+                    name_span: Span::new(start + 2, start + 8),
                     directive_subject_span: None,
                     value_span: Some(expression_span),
                     value_full_span: Some(Span::new(start, self.pos as u32)),
@@ -8363,6 +8360,32 @@ mod tests {
     }
 
     #[test]
+    fn test_attach_name_span_covers_exactly_the_keyword() {
+        // "attach" is 6 bytes: the span must end at start + 8, not swallow
+        // the byte after the keyword.
+        let source = "<div {@attach value}></div>";
+        let alloc = oxc::allocator::Allocator::default();
+        let result = parse_fragment(source, &alloc).unwrap();
+        match &result.nodes[0] {
+            TemplateNode::Element(el) => {
+                let idx = el
+                    .attributes
+                    .iter()
+                    .position(|a| {
+                        matches!(a, Attribute::NormalAttribute { name, .. } if name == "@attach")
+                    })
+                    .expect("an @attach attribute");
+                let meta = &el.attribute_meta[idx];
+                assert_eq!(
+                    &source[meta.name_span.start as usize..meta.name_span.end as usize],
+                    "attach"
+                );
+            }
+            other => panic!("expected Element, got {other:?}"),
+        }
+    }
+
+    #[test]
     fn test_duplicate_attribute_reports_diagnostic() {
         let source = r#"<div id="a" id="b"></div><p>after</p>"#;
         let alloc = oxc::allocator::Allocator::default();
@@ -9810,6 +9833,22 @@ mod tests {
             })
             .count();
         assert_eq!(transition_conflicts, 1, "{errors:?}");
+
+        // Vendor falls back to the stored `out:` directive when a
+        // `transition:` attribute finds no stored `in:` — the conflict must
+        // still be reported.
+        let source = r#"<div out:fade transition:fly></div>"#;
+        let alloc = oxc::allocator::Allocator::default();
+        let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
+        let out_transition_conflicts = errors
+            .iter()
+            .filter(|error| {
+                error
+                    .to_string()
+                    .contains("Cannot use `out:` alongside existing `transition:` directive")
+            })
+            .count();
+        assert_eq!(out_transition_conflicts, 1, "{errors:?}");
     }
 
     #[test]

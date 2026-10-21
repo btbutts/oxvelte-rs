@@ -239,7 +239,18 @@ fn cmd_lint(
     let mut file_results: Vec<FileResult> = files
         .par_iter()
         .filter_map(|path| {
-            let mut source = std::fs::read_to_string(path).ok()?;
+            let mut source = match std::fs::read_to_string(path) {
+                Ok(source) => source,
+                // A file that vanished between collection and linting was
+                // moved, renamed, or deleted mid-run — skip it quietly.
+                // Anything else (permissions, invalid UTF-8, …) means a real
+                // file went unlinted, which is worth surfacing.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+                Err(e) => {
+                    eprintln!("oxvelte: could not read {}: {e}", path.display());
+                    return None;
+                }
+            };
             let path_str = path.to_string_lossy();
             let is_svelte = path.extension().is_some_and(|e| e == "svelte");
             let is_svelte_module =
@@ -960,6 +971,20 @@ mod tests {
         // 1..2 splits the é, so only the boundary-safe fix applies.
         assert_eq!(apply_fixes(source, &refs), "aéZ");
     }
+
+    #[test]
+    fn collect_lint_files_dedupes_overlapping_inputs() {
+        let dir = std::env::temp_dir().join(format!("oxvelte-dedup-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("App.svelte");
+        std::fs::write(&file, "<div></div>").unwrap();
+        // A directory and a file inside it must not lint the file twice...
+        assert_eq!(collect_lint_files(&[dir.clone(), file.clone()]).len(), 1);
+        // ...and neither must two different spellings of the same file.
+        let spelled = dir.join("./App.svelte");
+        assert_eq!(collect_lint_files(&[file, spelled]).len(), 1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
 }
 
 fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
@@ -981,13 +1006,19 @@ fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
 
 fn collect_lint_files(paths: &[PathBuf]) -> Vec<PathBuf> {
     let mut files = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     let extensions = ["svelte", "js", "ts", "mjs", "mts"];
     let mut stack: Vec<PathBuf> = paths.to_vec();
     while let Some(path) = stack.pop() {
         if path.is_file() {
             if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
                 if extensions.contains(&ext) {
-                    files.push(path);
+                    // Overlapping inputs (`lint src src/App.svelte`, or the
+                    // same file spelled differently) must not lint twice.
+                    let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                    if seen.insert(key) {
+                        files.push(path);
+                    }
                 }
             }
         } else if path.is_dir() {

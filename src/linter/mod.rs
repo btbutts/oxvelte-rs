@@ -1070,7 +1070,14 @@ fn parse_directives(source: &str) -> Vec<Directive> {
     let mut directives = Vec::new();
     let mut line_start = 0usize;
 
-    for (line_idx, line) in source.lines().enumerate() {
+    for (line_idx, raw_line) in source.split_inclusive('\n').enumerate() {
+        // Match `str::lines()` semantics (one trailing `\n`, then one `\r`,
+        // stripped) while keeping the terminator in `raw_line`, so byte
+        // offsets stay exact on CRLF files.
+        let line = match raw_line.strip_suffix('\n') {
+            Some(l) => l.strip_suffix('\r').unwrap_or(l),
+            None => raw_line,
+        };
         let trimmed = line.trim();
         let trimmed_start = line.len() - line.trim_start().len();
         let trimmed_abs_start = line_start + trimmed_start;
@@ -1092,7 +1099,7 @@ fn parse_directives(source: &str) -> Vec<Directive> {
                         svelte_ignore: true,
                     });
                 }
-                line_start += line.len() + 1;
+                line_start += raw_line.len();
                 continue;
             }
 
@@ -1144,7 +1151,7 @@ fn parse_directives(source: &str) -> Vec<Directive> {
                     }
                 }
             }
-            line_start += line.len() + 1;
+            line_start += raw_line.len();
             continue;
         }
 
@@ -1163,7 +1170,7 @@ fn parse_directives(source: &str) -> Vec<Directive> {
                         svelte_ignore: true,
                     });
                 }
-                line_start += line.len() + 1;
+                line_start += raw_line.len();
                 continue;
             }
 
@@ -1220,7 +1227,7 @@ fn parse_directives(source: &str) -> Vec<Directive> {
                 }
             }
         }
-        line_start += line.len() + 1;
+        line_start += raw_line.len();
     }
 
     directives
@@ -1676,6 +1683,24 @@ mod suppression_tests {
         // Escaped quotes do not end the string early.
         let escaped = "<script>let s = \"a \\\" b // eslint-disable-next-line\";\nlet t = 1;</script>\n";
         assert!(parse_directives(escaped).is_empty());
+    }
+
+    #[test]
+    fn crlf_directive_spans_stay_on_the_comment() {
+        // Two CRLF lines before the directive: with `\n`-only arithmetic the
+        // span would start two bytes early.
+        let source = "<a></a>\r\n<b></b>\r\n<!-- svelte-ignore some-rule -->\r\n{@html x}\r\n";
+        let directives = parse_directives(source);
+        let Directive::DisableNextLine { span, .. } = &directives[0] else {
+            panic!("expected a DisableNextLine directive, got {directives:?}");
+        };
+        let comment = "<!-- svelte-ignore some-rule -->";
+        assert_eq!(
+            &source[span.start as usize..span.end as usize],
+            comment,
+            "directive span must cover exactly the comment on CRLF sources"
+        );
+        assert_eq!(span.start as usize, source.find(comment).unwrap());
     }
 
     #[test]

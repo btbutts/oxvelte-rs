@@ -194,6 +194,19 @@ impl OxvelteConfig {
             obj.insert("settings".to_string(), settings.clone());
         }
 
+        if !self.custom_rules.is_empty() {
+            obj.insert(
+                "customRules".to_string(),
+                Value::Array(
+                    self.custom_rules
+                        .iter()
+                        .cloned()
+                        .map(Value::String)
+                        .collect(),
+                ),
+            );
+        }
+
         serde_json::to_string_pretty(&Value::Object(obj)).unwrap_or_default()
     }
 }
@@ -324,6 +337,20 @@ mod tests {
         let json = r#"{ "rules": { "svelte/no-inline-styles": "off" } }"#;
         let config = OxvelteConfig::parse(json).unwrap();
         assert!(config.is_rule_off("svelte/no-inline-styles"));
+    }
+
+    #[test]
+    fn test_to_json_round_trips_custom_rules() {
+        let json =
+            r#"{ "rules": { "custom/a": "error" }, "customRules": ["./rules/a.js", "./rules/*.js"] }"#;
+        let config = OxvelteConfig::parse(json).unwrap();
+        let serialized = config.to_json();
+        let reparsed = OxvelteConfig::parse(&serialized).unwrap();
+        assert_eq!(
+            reparsed.custom_rules,
+            vec!["./rules/a.js".to_string(), "./rules/*.js".to_string()],
+            "customRules must survive a parse/serialize round-trip: {serialized}"
+        );
     }
 
     #[test]
