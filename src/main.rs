@@ -215,12 +215,39 @@ fn cmd_lint(
                 match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let alloc = oxc::allocator::Allocator::default();
                     let result = parser::parse_for_lint(&source, &alloc);
-                    lint.lint_with_project_config_and_path(
+                    // Surface template parse errors as error-severity
+                    // diagnostics — a malformed file must never lint clean.
+                    let mut diags: Vec<linter::LintDiagnostic> = result
+                        .errors
+                        .iter()
+                        .map(|error| {
+                            let span = error
+                                .labels
+                                .as_ref()
+                                .and_then(|labels| labels.first())
+                                .map(|label| {
+                                    oxc::span::Span::new(
+                                        label.offset() as u32,
+                                        (label.offset() + label.len()) as u32,
+                                    )
+                                })
+                                .unwrap_or_else(|| oxc::span::Span::new(0, 0));
+                            linter::LintDiagnostic {
+                                rule_name: "oxvelte/parse-error",
+                                message: error.to_string(),
+                                span,
+                                fix: None,
+                                suggestions: Vec::new(),
+                            }
+                        })
+                        .collect();
+                    diags.extend(lint.lint_with_project_config_and_path(
                         &result.ast,
                         &source,
                         &config,
                         &file_path_owned,
-                    )
+                    ));
+                    diags
                 })) {
                     Ok(d) => d,
                     Err(_) => {
@@ -327,6 +354,11 @@ fn diagnostic_severity(
     config: &oxvelte::config::OxvelteConfig,
     rule_name: &str,
 ) -> DiagnosticSeverity {
+    // Template parse errors are always errors (like ESLint's fatal parse
+    // failures); they are not configurable.
+    if rule_name == "oxvelte/parse-error" {
+        return DiagnosticSeverity::Error;
+    }
     let Some(entry) = config.rules.get(rule_name) else {
         return DiagnosticSeverity::Warning;
     };
