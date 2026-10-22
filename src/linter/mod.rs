@@ -698,12 +698,17 @@ impl Linter {
             ctx.config = config.for_rule(rule.name());
             rule.run(&mut ctx);
         }
-        filter_suppressed(
+        let mut diagnostics = filter_suppressed(
             ctx.into_diagnostics(),
             source,
             report_unused_svelte_ignore,
             &active_rule_names,
-        )
+        );
+        // ESLint sorts messages by position before reporting; rules that emit
+        // out of source order (multi-pass rules like mustache-spacing or
+        // infinite-reactive-loop) must still produce sorted output.
+        diagnostics.sort_by_key(|d| (d.span.start, d.span.end));
+        diagnostics
     }
 }
 
