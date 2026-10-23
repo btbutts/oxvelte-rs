@@ -12,7 +12,7 @@ However, no single upstream catalogue contains every property in our manually ma
 Rather than manually maintaining a json list of these props, via the upstream's `src/linter/rules/known_css_properties_0_37_0.json`, this is something we can generate programatically.
 In fact, we shouldn't need to create this file at all, as we can leverage a `build.rs` explicitly defined in our `Cargo.toml` that when triggered via our standard `cargo build --release` will:
 1. Look for a previously generated, cached copy of `known_css_properties.json` in a staging dir we maintain (see 'Cache / staging dir' below). If found, copy it into cargo's `OUT_DIR` and stop.
-2. Otherwise, commence generation immediately: download each of the six source repo tarballs from GitHub at their pinned commits into a throwaway `tmp/` dir, extract only the json file(s) we care about from each, merge, dedupe, strip dead `-ms-*` entries, sort, and write the resulting `known_css_properties.json` to **both** `resources/css/` (the cache) and `$OUT_DIR/`.
+2. Otherwise, commence generation immediately: download each of the six source repo tarballs from GitHub at their pinned commits into a throwaway `tmp/` dir, extract only the json file(s) we care about from each, merge, dedupe, sort, and write the resulting `known_css_properties.json` to **both** `resources/css/` (the cache) and `$OUT_DIR/`.
 
 The generated json keeps the exact schema of today's vendored file — `{ "properties": ["accent-color", ...] }` — so `src/linter/rules/no_unknown_style_directive_property.rs`'s `KnownCssProperties` struct does not change; only its `include_str!` path changes from the vendored copy to the generated one:
 
@@ -41,14 +41,14 @@ Six repositories, fetched at generation time and merged with dedup. Schemas veri
 | 1 | `known-css/known-css-properties` | `data/all.json` | `{ "properties": ["-epub-...", ...] }` | single file. Origin of our current vendored file; the only source carrying legacy prefixes (`-khtml-*`, `-epub-*`, `-wap-*`). Our output schema matches this file's. |
 | 2 | `mdn/browser-compat-data` | `css/properties/*.json` | one file per property; the **filename** (minus `.json`) is the property name | **no extraction needed** — stream the tarball's entry list and collect member names matching `css/properties/*.json`. |
 | 3 | `csstree/csstree` | `data/patch.json` | root `properties` key is an **object keyed by property name** (85 entries, mostly `-moz-*` patches) | single file; ignore sibling `atrules` / `types` keys. |
-| 4 | `mdn/data` | `css/properties.json` | single object whose **top-level keys** are property names (800+) | single file; skip the `"--*"` custom-property wildcard. Carries many `-ms-*` props — strip per merge rules. May be superseded by #6 long-term. |
+| 4 | `mdn/data` | `css/properties.json` | single object whose **top-level keys** are property names (800+) | single file; skip the `"--*"` custom-property wildcard. Carries many `-ms-*` props — kept per the merge rules. May be superseded by #6 long-term. |
 | 5 | `WebKit/WebKit` | `Source/WebCore/css/CSSProperties.json` | root `properties` key is an **object keyed by property name** (632 entries; 69 `-webkit-*`) | ⚠️ **tarball unavailable — see exception below.** Skip meta keys (`instructions`, `descriptors`, `categories`, `shared-grammar-rules`). |
 | 6 | `w3c/webref` | `ed/css/*.json` | per-spec files, each `{ "spec": {...}, "properties": [ { "name": "margin-top", ... } ] }` — names live at `properties[].name`, **not** as keys | extract all members matching `ed/css/*.json` (per-spec layout verified 23OCT2026: `ed/css/CSS.json` alone covers only CSS Level 2). |
 
 **WebKit exception (verified 23OCT2026):** GitHub refuses on-demand archive generation for `WebKit/WebKit` — both `https://github.com/WebKit/WebKit/archive/<ref>.tar.gz` and the `codeload.github.com` equivalent return **HTTP 422** for branch names and commit hashes alike (repo too large). The other five repos return 200. Source #5 is therefore fetched as a **single raw-file GET** at the pinned commit: `https://raw.githubusercontent.com/WebKit/WebKit/${COMMIT}/Source/WebCore/css/CSSProperties.json` (verified working). The per-source entry in `css_prop_sources` (see 'build.rs architecture') carries a fetch-strategy marker — `Tarball` vs `RawFile(path)` — and WebKit is the only `RawFile` source today.
 
 Merge rules:
-- **Strip `-ms-*` prefixed properties unconditionally**, regardless of source — they target dead Internet Explorer and pre-Chromium Edge.
+- **Keep `-ms-*` prefixed properties.** The original plan stripped them (dead IE / pre-Chromium Edge), but drop-in parity with the legacy tooling users migrate from matters more — old templates still carry `-ms-*` props, and flagging them would be false alarms. Reversal decided 23OCT2026; the filter can be reinstated later if we ever want it.
 - Keep other vendor prefixes (`-webkit-*`, `-moz-*`, `-khtml-*`, `-epub-*`, `-wap-*`, `-o-*`): the rule already unprefixed-matches via `vendor_prefix()` in `no_unknown_style_directive_property.rs`, and legacy-prefixed content still appears in real templates.
 - Skip non-property meta entries (`--*`, `instructions`, etc.).
 - Dedupe case-insensitively (CSS property names are ASCII case-insensitive), emit lowercase, sort alphabetically.
@@ -69,6 +69,11 @@ OXVELTE_CSS_SRC_CSSTREE_COMMIT = "f8980154f79110833bf56c391cd45fe5f9205752"     
 OXVELTE_CSS_SRC_MDN_DATA_COMMIT = "fc60c55f5018ea399516a84ea2c64adf7731da82"                # 2026-10-15
 OXVELTE_CSS_SRC_WEBKIT_COMMIT = "21bb1f66c37c7a8380cf7597d647eecb87f55ebd"                  # 2026-10-23
 OXVELTE_CSS_SRC_W3C_WEBREF_COMMIT = "64111c5ac4fccf60f45bc266a322ea3fad8098f4"              # 2026-10-23
+
+# Success chatter gate: when "true", build.rs also reports per-source
+# fetch/dedup stats and the final count as cargo warnings during generation.
+# When "false" (default), warnings are strictly for failures.
+OXVELTE_BUILD_SHOW_CSS_PROP_GEN_STATS = "false"
 ```
 
 (Hashes above are each repo's HEAD as of 23OCT2026 — refresh them at implementation time.) `build.rs` should also emit `cargo:rerun-if-env-changed=<VAR>` for each of the six so that bumping a hash re-triggers the build script.
@@ -105,7 +110,7 @@ css_prop_sources = {
 
 **3. A single `for` loop drives the main sequence.** For each entry in `css_prop_sources`: populate its commit hash from the env var → call `fetch_github_repo(...)` (or the raw-file GET for the WebKit entry) → run that source's extraction rule against the archive in `tmp/` (single-file read, member-name listing, or multi-file glob per the table) → parse per its schema and feed the property names into one shared deduping set (e.g. a `BTreeSet<String>`, which also gives us sorted output for free) → delete the source's archive from `tmp/` and move to the next source. One source is fully processed before the next begins, deduping as we go — no intermediate per-source lists, keeping the logic minimal.
 
-**4. After the loop:** apply the merge rules (strip `-ms-*`, lowercase, meta-key skips — cheap to do per-insert or as a final filter), serialize `{ "properties": [...] }`, and write it to **both** `resources/css/known_css_properties.json` (cache; create the dir on demand) and `$OUT_DIR/known_css_properties.json`.
+**4. After the loop:** apply the merge rules (lowercase, meta-key skips — cheap to do per-insert or as a final filter; `-ms-*` is **kept** — see the merge rules), serialize `{ "properties": [...] }`, and write it to **both** `resources/css/known_css_properties.json` (cache; create the dir on demand) and `$OUT_DIR/known_css_properties.json`.
 
 **5. Error policy (per user direction, 23OCT2026):**
 - **Download failure of any single source → warn and continue.** Emit `cargo::warning=...` naming the source and the likely reason (timeout, HTTP 404/422 for a bad or unavailable commit, DNS/network, etc.), with a catch-all warning for anything else — then proceed with the remaining sources. The merged list is deliberately redundant across sources, so a partial fetch still yields excellent coverage.

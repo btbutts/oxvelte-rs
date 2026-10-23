@@ -9,3 +9,20 @@
 # unless `force` is set), so CI and ad-hoc overrides still win.
 [env]
 OXVELTE_COMPILER_RUNTIME = { value = "scripts/compiler-runtime", relative = true }
+
+# Pinned upstream snapshots for build.rs's CSS property list generation
+# (see docs/research/css/property-awareness-lib.md). Bump a hash to pull a
+# newer snapshot of that source, then delete
+# resources/css/known_css_properties.json to regenerate on the next build.
+# Hashes below are each repo's HEAD as of 23OCT2026.
+OXVELTE_CSS_SRC_KNOWN_CSS_PROPERTIES_COMMIT = "d8007804a12fa5431a2d8e3b55252052442e51d0"
+OXVELTE_CSS_SRC_MDN_BROWSER_COMPAT_DATA_COMMIT = "6ced300dbd4cb9dbca68b2c2dffb8627d2aac82f"
+OXVELTE_CSS_SRC_CSSTREE_COMMIT = "f8980154f79110833bf56c391cd45fe5f9205752"
+OXVELTE_CSS_SRC_MDN_DATA_COMMIT = "fc60c55f5018ea399516a84ea2c64adf7731da82"
+OXVELTE_CSS_SRC_WEBKIT_COMMIT = "21bb1f66c37c7a8380cf7597d647eecb87f55ebd"
+OXVELTE_CSS_SRC_W3C_WEBREF_COMMIT = "64111c5ac4fccf60f45bc266a322ea3fad8098f4"
+
+# When "true", build.rs also reports per-source fetch/dedup stats and the
+# final property count as cargo warnings while generating the CSS property
+# list. When "false" (default), only genuine failures are warned about.
+OXVELTE_BUILD_SHOW_CSS_PROP_GEN_STATS = "false"

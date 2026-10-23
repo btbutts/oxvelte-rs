@@ -85,6 +85,18 @@ jobs:
             echo "PRERELEASE=$prerelease"
           } >> "$GITHUB_ENV"
 
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable   # same action as ci.yml; also drives the generator below
+
+      - name: Generate known_css_properties.json
+        run: |
+          set -euo pipefail
+          # build.rs fetches the pinned CSS sources (commits in .cargo/config.toml)
+          # and writes the gitignored cache to resources/css/ — see
+          # docs/research/css/property-awareness-lib.md.
+          cargo build --release
+          test -f resources/css/known_css_properties.json
+
       - name: Build the tarball
         run: |
           set -euo pipefail
@@ -98,6 +110,12 @@ jobs:
           # from the tagged commit (not the working tree), so nothing
           # untracked can get in.
           git archive --format=tar --prefix="${name}/" "$TAG" -- "${paths[@]}" | tar -x -C "$stage"
+
+          # known_css_properties.json is gitignored, so git archive cannot
+          # emit it — inject the copy generated above into the staged tree.
+          mkdir -p "${stage}/${name}/resources/css"
+          cp resources/css/known_css_properties.json "${stage}/${name}/resources/css/"
+
           tar -czf "${name}.tar.gz" -C "$stage" "${name}"
 
           # The manifest, the committed lockfile, the pinned toolchain, the
@@ -105,6 +123,7 @@ jobs:
           # src/compiler.rs embeds with include_str! are non-negotiable.
           tar -tzf "${name}.tar.gz" | sed "s|^${name}/||" | grep -v -e '/$' -e '^$' | sort > shipped.txt
           for path in Cargo.toml Cargo.lock rust-toolchain.toml src/main.rs src/lib.rs \
+            build.rs .cargo/config.toml resources/css/known_css_properties.json \
             scripts/compiler-runtime/bridge.cjs \
             scripts/compiler-runtime/typescript-conditions.cjs \
             scripts/compiler-runtime/typescript-service.cjs \
@@ -123,9 +142,6 @@ jobs:
 
           echo "NAME=${name}" >> "$GITHUB_ENV"
           ls -l "${name}.tar.gz"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable   # same action as ci.yml
 
       - name: Smoke-test the tarball
         run: |
