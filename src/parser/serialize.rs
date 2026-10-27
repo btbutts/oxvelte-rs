@@ -470,7 +470,7 @@ fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value 
         let alloc = Allocator::default();
         let parse_result = Parser::new(&alloc, &wrapper, SourceType::mjs()).parse();
 
-        if !parse_result.program.body.is_empty() && parse_result.errors.is_empty() {
+        if !parse_result.program.body.is_empty() && parse_result.diagnostics.is_empty() {
             if let Some(oxc::ast::ast::Statement::ExpressionStatement(es)) =
                 parse_result.program.body.first()
             {
@@ -669,6 +669,7 @@ fn attach_expression_comments(
 /// Convert an oxc Expression AST node to estree JSON.
 fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) -> Value {
     use oxc::ast::ast::Expression;
+    use oxc::span::GetSpan;
     match expr {
         Expression::Identifier(ident) => {
             let start = offset + ident.span.start;
@@ -689,7 +690,7 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                 "start": start,
                 "end": end,
                 "loc": loc_json(source, start, end),
-                "value": lit.value.as_str(),
+                "value": lit.value.display().to_string(),
                 "raw": &source[start as usize..end as usize]
             })
         }
@@ -878,7 +879,7 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                         "loc": loc_json(source, q_start, q_end),
                         "value": {
                             "raw": q.value.raw.as_str(),
-                            "cooked": q.value.cooked.as_ref().map(|c| c.as_str())
+                            "cooked": q.value.cooked.as_ref().map(|c| c.display().to_string())
                         },
                         "tail": q.tail
                     })
@@ -985,24 +986,20 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                 .iter()
                 .map(|p| estree_binding_pattern(p, source, offset))
                 .collect();
-            let body = if arrow.expression {
-                let stmts = &arrow.body.statements;
-                if let Some(stmt) = stmts.first() {
-                    if let oxc::ast::ast::Statement::ExpressionStatement(es) = stmt {
-                        estree_expr(&es.expression, source, offset)
-                    } else {
-                        json!(null)
-                    }
+            let body = if arrow.body.is_expression() {
+                if let Some(expression) = arrow.body.as_expression() {
+                    estree_expr(expression, source, offset)
                 } else {
                     json!(null)
                 }
             } else {
-                let body_start = offset + arrow.body.span.start;
-                let body_end = offset + arrow.body.span.end;
+                let body_start = offset + arrow.body.span().start;
+                let body_end = offset + arrow.body.span().end;
                 let stmts: Vec<Value> = arrow
                     .body
-                    .statements
-                    .iter()
+                    .as_function_body()
+                    .into_iter()
+                    .flat_map(|body| body.statements.iter())
                     .map(|s| serialize_statement_legacy(s, source, offset))
                     .collect();
                 json!({
@@ -1019,7 +1016,7 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                 "end": end,
                 "loc": loc_json(source, start, end),
                 "id": null,
-                "expression": arrow.expression,
+                "expression": arrow.body.is_expression(),
                 "generator": false,
                 "async": arrow.r#async,
                 "params": params,
@@ -1146,7 +1143,7 @@ fn estree_expr(expr: &oxc::ast::ast::Expression<'_>, source: &str, offset: u32) 
                         "loc": loc_json(source, q_start, q_end),
                         "value": {
                             "raw": q.value.raw.as_str(),
-                            "cooked": q.value.cooked.as_ref().map(|c| c.as_str())
+                            "cooked": q.value.cooked.as_ref().map(|c| c.display().to_string())
                         },
                         "tail": q.tail
                     })
@@ -1466,7 +1463,7 @@ fn estree_ts_literal(
                 "start": start,
                 "end": end,
                 "loc": loc_json(source, start, end),
-                "value": lit.value.as_str(),
+                "value": lit.value.display().to_string(),
                 "raw": &source[start as usize..end as usize]
             })
         }
@@ -1530,7 +1527,7 @@ fn estree_property_key(key: &oxc::ast::ast::PropertyKey<'_>, source: &str, offse
                 "start": start,
                 "end": end,
                 "loc": loc_json(source, start, end),
-                "value": lit.value.as_str(),
+                "value": lit.value.display().to_string(),
                 "raw": &source[start as usize..end as usize]
             })
         }
@@ -3989,7 +3986,7 @@ fn serialize_statement_legacy(
                             let imported_name = match &s.imported {
                                 oxc::ast::ast::ModuleExportName::IdentifierName(id) => id.name.as_str(),
                                 oxc::ast::ast::ModuleExportName::IdentifierReference(id) => id.name.as_str(),
-                                oxc::ast::ast::ModuleExportName::StringLiteral(s) => s.value.as_str(),
+                                oxc::ast::ast::ModuleExportName::StringLiteral(s) => s.value.as_str().unwrap_or(""),
                             };
                             json!({
                                 "type": "ImportSpecifier",
@@ -4054,7 +4051,7 @@ fn serialize_statement_legacy(
                 "start": s_start,
                 "end": s_end,
                 "loc": loc_json(source, s_start, s_end),
-                "value": imp.source.value.as_str(),
+                "value": imp.source.value.display().to_string(),
                 "raw": &source[s_start as usize..s_end as usize]
             });
 
@@ -4068,13 +4065,11 @@ fn serialize_statement_legacy(
                 "attributes": []
             })
         }
-        Statement::ExportNamedDeclaration(exp) => {
+        Statement::ExportDeclaration(exp) => {
             let start = offset + exp.span.start;
             let end = offset + exp.span.end;
-            let declaration = exp
-                .declaration
-                .as_ref()
-                .map(|d| serialize_statement_legacy_from_decl(d, source, offset));
+            let declaration =
+                Some(serialize_statement_legacy_from_decl(&exp.declaration, source, offset));
             json!({
                 "type": "ExportNamedDeclaration",
                 "start": start,

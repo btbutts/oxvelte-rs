@@ -30364,7 +30364,12 @@
           "message": "Do not use `addEventListener`. Use the `on` function from `svelte/events` instead.",
           "line": 4,
           "column": 2,
-          "suggestions": null
+          "suggestions": [
+            {
+              "desc": "Use `on` from `svelte/events` instead",
+              "output": "<script module>\n\tfunction handle() {}\n\n\ton(window, 'message', handle);\n</script>\n"
+            }
+          ]
         }
       ],
       "output": null
@@ -51153,7 +51158,7 @@
           "suggestions": null
         }
       ],
-      "output": "<script>\n\tlet disabled = false;\n</script>\n\n<button {disabled}>...</button>\n"
+      "output": "<script>\n\tlet disabled = false;\n</script>\n\n<button {disabled /* keep */}>...</button>\n"
     },
     {
       "id": "shorthand-attribute/invalid/never/test01-input.svelte",
@@ -55863,7 +55868,7 @@
     "local/infinite-reactive-loop/invalid/setTimeout/test05-errors.yaml": "758f152afa46acdfa149ce995d9a9f2ab4d8f4a2b8a7582019c9e10a2eef961e",
     "local/infinite-reactive-loop/invalid/setTimeout/test05-input.svelte": "e1968b67fbde2985eb9a8c4b685b601cd5eb7fcfb1e73412ed592edeb34fc351",
     "local/infinite-reactive-loop/valid/test09-input.svelte": "c5fccf0f5abe13426acd52cc4d4c98e0ef60ee4b96b7a12629a04b0adba3e701",
-    "local/no-add-event-listener/invalid/module-script-errors.yaml": "fb7b55b36700cb47901a275017445dcfe731f91cc2b54da40743d7403624985b",
+    "local/no-add-event-listener/invalid/module-script-errors.yaml": "73bbd69dc77f9ab682c032ce2b0d00d99c198f28ca5a5b607d4ae065cae0d14b",
     "local/no-add-event-listener/invalid/module-script-input.svelte": "0866eb3d2ffea67cc014eb3033c1f3cf403424204a89bbf839039ec55a95bb1b",
     "local/no-add-event-listener/valid/svelte4/package.json": "600910652f2c53f7801a5011cf20fa4107f798e0f38911b2f6ddacbcfa1c754e",
     "local/no-add-event-listener/valid/svelte4/test01-input.svelte": "8dc34e56146c0b5c83c2f049e8883e54d81f04ead236e02031b3aabca393c511",
@@ -55929,7 +55934,7 @@
     "local/require-stores-init/invalid/namespace-input.svelte": "7dadf1b67b03be259576cf4f825f30cd55daf5fb43832fc883b539003fc26cbf",
     "local/shorthand-attribute/invalid/comment-expression/test01-errors.yaml": "14c8a25085e37d3a00344edf1843db2571137c4237ee2a1d641fef549f36b68a",
     "local/shorthand-attribute/invalid/comment-expression/test01-input.svelte": "94735e1d9ef61aed53db98f72d01fed851819e01b6e900c229c911e7fe97f607",
-    "local/shorthand-attribute/invalid/comment-expression/test01-output.svelte": "460bcb19e71e397096458348e2d8f2610f53ff02bf2f297083798b1d0057bc77",
+    "local/shorthand-attribute/invalid/comment-expression/test01-output.svelte": "1e2788f163c5d52e84fb113fe5b57490c6ae60d12d8f1b7f43b77e532435aaf6",
     "local/shorthand-directive/invalid/comment-expression/test01-errors.yaml": "5813a4a23cfe6b8a286e667628a8befac6453a6a6bca885c67c4318d34b12e26",
     "local/shorthand-directive/invalid/comment-expression/test01-input.svelte": "7b02458b0c9e175a9257f858510b898c204a4de958644a7cba845040684fe3a4",
     "local/shorthand-directive/invalid/comment-expression/test01-output.svelte": "1c7a320725c1fc1e74b0c73c1920ffd953b8f39adc35bc043671419ae97d41b5",

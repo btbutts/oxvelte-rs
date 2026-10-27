@@ -11,6 +11,16 @@ const baseCorpus = path.join(root, 'fixtures/linter');
 const profilesRoot = path.join(root, 'scripts/version-matrix');
 const outputRoot = path.join(root, 'reports/version-matrix');
 export const profiles = ['modern', 'svelte4', 'legacyparser', 'svelte3'];
+
+// These two local cases depend on a second rule's diagnostics — the ignore
+// comment's "used" status is defined by whether svelte/no-at-html-tags would
+// fire — which the runner's isolated single-rule evaluation cannot
+// reproduce. They run in `cargo test --lib` (all rules active) and in the
+// primary parity suite's baseline; the matrix skips exactly these two cases.
+const matrixExcludedCases = new Set([
+  'no-unused-svelte-ignore/invalid/local-rule-unused-input.svelte',
+  'no-unused-svelte-ignore/valid/local-rule-used-input.svelte',
+]);
 const versionNames = ['svelte', 'eslint', 'typescript', '@typescript-eslint/parser', 'svelte-eslint-parser'];
 
 export function verifiedFiles(corpus, manifest) {
@@ -47,6 +57,15 @@ export function prepareProfile(name) {
   // gates; expectations and fixability carry over from the import unchanged.
   const manifest = recomputeEligibility(original, versions);
   manifest.files = { ...manifest.files, 'package.json': digest(signal) };
+  manifest.cases = manifest.cases.filter((kase) => !matrixExcludedCases.has(kase.id));
+  manifest.rule_count = new Set(manifest.cases.map((kase) => kase.rule)).size;
+  for (const id of matrixExcludedCases) {
+    const input = `local/${id}`;
+    for (const name of [input, input.replace('-input.svelte', '-errors.yaml')]) {
+      files.delete(name);
+      delete manifest.files[name];
+    }
+  }
   const corpus = path.join(outputRoot, name, 'corpus');
   // Clear first: stale files from earlier corpus layouts must not survive.
   rmSync(corpus, { recursive: true, force: true });

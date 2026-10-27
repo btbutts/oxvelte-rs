@@ -42,7 +42,7 @@ fn collect_store_factory_locals<'a>(semantic: &Semantic<'a>) -> StoreFactoryLoca
                     let imported = match &s.imported {
                         ModuleExportName::IdentifierName(n) => n.name.as_str(),
                         ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                        ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                        ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                     };
                     if is_store_factory_name(imported) {
                         named.push(s.local.name.to_string());

@@ -99,7 +99,7 @@ fn collect_store_factory_locals(semantic: &oxc::semantic::Semantic<'_>) -> Store
                     let imported = match &s.imported {
                         ModuleExportName::IdentifierName(n) => n.name.as_str(),
                         ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                        ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                        ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                     };
                     let original = match imported {
                         "writable" => "writable",

@@ -22,6 +22,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: scripts/compiler-runtime
       - run: cargo test --lib
+      - run: cargo test --test parser_lint_contract
       - run: cargo build --release
 
   upstream-parity:

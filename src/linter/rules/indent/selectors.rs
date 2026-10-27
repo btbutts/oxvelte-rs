@@ -108,7 +108,7 @@ mod tests {
     fn node_type_and_ancestry_selectors() {
         let a = Allocator::default();
         let p = Parser::new(&a, "const x = f(g());", SourceType::ts()).parse();
-        let s = SemanticBuilder::new().build(&p.program).semantic;
+        let s = SemanticBuilder::new().with_build_nodes(true).build(&p.program).semantic;
         let n = s
             .nodes()
             .iter()
@@ -142,7 +142,7 @@ mod tests {
         ));
         let a = Allocator::default();
         let p = Parser::new(&a, "function f(x) {}", SourceType::ts()).parse();
-        let s = SemanticBuilder::new().build(&p.program).semantic;
+        let s = SemanticBuilder::new().with_build_nodes(true).build(&p.program).semantic;
         let n = s
             .nodes()
             .iter()

@@ -56,7 +56,7 @@ impl Rule for NoUnusedProps {
                 object
                     .properties
                     .iter()
-                    .filter_map(|p| p.key.static_name().map(|s| s.to_string()))
+                    .filter_map(|p| p.key.static_name().map(|s| s.display().to_string()))
                     .collect::<HashSet<_>>(),
                 object.rest.is_some(),
                 true,
@@ -363,7 +363,7 @@ fn property_is_consumed_whole(ctx: &LintContext<'_>, property: &str) -> bool {
     let Some(binding) = object
         .properties
         .iter()
-        .find(|p| p.key.static_name().as_deref() == Some(property))
+        .find(|p| p.key.static_name().as_ref().and_then(|n| n.as_str()) == Some(property))
     else {
         return false;
     };
@@ -647,7 +647,7 @@ fn parse_type_block(content: &str, brace_start: usize) -> (Vec<(String, usize)>,
         };
         if let Some(name) = key.static_name() {
             let offset = brace_start + key.span().start as usize - PREFIX.len();
-            properties.push((name.to_string(), offset));
+            properties.push((name.display().to_string(), offset));
         }
     }
     (properties, index_signature)

@@ -312,7 +312,7 @@ pub(super) fn apply_node(
                 }
             }
             params(l, &n.params, base, first);
-            let body = s(n.body.span);
+            let body = s(n.body.span());
             if let Some(bf) = l.first(body) {
                 if let Some(arrow) = find_before(l, bf, "=>") {
                     l.set(arrow, 1, first);
@@ -528,8 +528,18 @@ pub(super) fn apply_node(
                 l.set(pf, 1, first);
             }
         }
-        AstKind::MetaProperty(n) => {
-            if let Some(pf) = l.first(s(n.property.span)) {
+        AstKind::ImportMeta(n) => {
+            let property = Span::new(n.span.end - 4, n.span.end);
+            if let Some(pf) = l.first(s(property)) {
+                if let Some(dot) = l.before(pf) {
+                    l.set(dot, 1, first);
+                }
+                l.set(pf, 1, first);
+            }
+        }
+        AstKind::NewTarget(n) => {
+            let property = Span::new(n.span.end - 6, n.span.end);
+            if let Some(pf) = l.first(s(property)) {
                 if let Some(dot) = l.before(pf) {
                     l.set(dot, 1, first);
                 }
@@ -787,7 +797,7 @@ pub(super) fn apply_node(
             if let Some(id) = &n.id {
                 set_first(l, s(id.span), 1, first);
             }
-            if let Some(superclass) = &n.super_class {
+            if let Some(superclass) = n.heritage_expression() {
                 if let Some(sf) = l.first(s(superclass.span())) {
                     if let Some(ext) = l.before(sf) {
                         l.set(ext, 1, first);
@@ -858,18 +868,26 @@ pub(super) fn apply_node(
                 .unwrap_or_default(),
             false,
         ),
+        AstKind::ExportDeclaration(n) => {
+            set_first(l, s(n.declaration.span()), 1, first);
+        }
         AstKind::ExportNamedDeclaration(n) => {
-            if let Some(d) = &n.declaration {
-                set_first(l, s(d.span()), 1, first);
-            } else {
-                import_export(
-                    l,
-                    span,
-                    n.source.as_ref().map(|x| s(x.span)),
-                    n.specifiers.iter().map(|x| s(x.span)).collect(),
-                    true,
-                );
-            }
+            import_export(
+                l,
+                span,
+                None,
+                n.specifiers.iter().map(|x| s(x.span)).collect(),
+                true,
+            );
+        }
+        AstKind::ExportFromDeclaration(n) => {
+            import_export(
+                l,
+                span,
+                Some(s(n.source.span)),
+                n.specifiers.iter().map(|x| s(x.span)).collect(),
+                true,
+            );
         }
         AstKind::ExportAllDeclaration(n) => {
             import_export(l, span, Some(s(n.source.span)), Vec::new(), true)
@@ -984,7 +1002,8 @@ fn is_expression(kind: AstKind<'_>) -> bool {
             | AstKind::PrivateFieldExpression(_)
             | AstKind::CallExpression(_)
             | AstKind::NewExpression(_)
-            | AstKind::MetaProperty(_)
+            | AstKind::ImportMeta(_)
+            | AstKind::NewTarget(_)
             | AstKind::UpdateExpression(_)
             | AstKind::UnaryExpression(_)
             | AstKind::BinaryExpression(_)

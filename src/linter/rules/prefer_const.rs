@@ -258,20 +258,19 @@ fn collect<'a>(
 fn is_inside_export_named_decl(nodes: &AstNodes, node_id: NodeId) -> bool {
     nodes
         .ancestor_ids(node_id)
-        .any(|ancestor| matches!(nodes.kind(ancestor), AstKind::ExportNamedDeclaration(_)))
+        .any(|ancestor| matches!(nodes.kind(ancestor), AstKind::ExportNamedDeclaration(_) | AstKind::ExportDeclaration(_) | AstKind::ExportFromDeclaration(_)))
 }
 
 fn collect_exported_specifier_symbols<'a>(semantic: &'a Semantic<'a>) -> HashSet<SymbolId> {
     let scoping = semantic.scoping();
     let mut exported = HashSet::new();
     for node in semantic.nodes().iter() {
-        let AstKind::ExportNamedDeclaration(exp) = node.kind() else {
-            continue;
+        let specifiers = match node.kind() {
+            AstKind::ExportNamedDeclaration(exp) => &exp.specifiers,
+            AstKind::ExportFromDeclaration(exp) => &exp.specifiers,
+            _ => continue,
         };
-        if exp.declaration.is_some() {
-            continue;
-        }
-        for spec in &exp.specifiers {
+        for spec in specifiers {
             let ModuleExportName::IdentifierReference(local) = &spec.local else {
                 continue;
             };
@@ -318,10 +317,10 @@ fn collect_expression_findings(
     let alloc = Allocator::default();
     let wrapper = format!("({});", text);
     let parsed = Parser::new(&alloc, &wrapper, SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
     collect(
         &semantic,
         text_start.saturating_sub(1),
@@ -467,10 +466,10 @@ fn collect_expression_writes(text: &str, writes: &mut HashSet<String>) {
     let alloc = Allocator::default();
     let wrapper = format!("({});", text);
     let parsed = Parser::new(&alloc, &wrapper, SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
     let scoping = semantic.scoping();
 
     for node in semantic.nodes().iter() {

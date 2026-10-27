@@ -170,7 +170,7 @@ fn check_signature(
 fn key_name_and_span<'a>(key: &'a PropertyKey<'a>) -> Option<(&'a str, Span)> {
     match key {
         PropertyKey::StaticIdentifier(id) => Some((id.name.as_str(), id.span)),
-        PropertyKey::StringLiteral(l) => Some((l.value.as_str(), l.span)),
+        PropertyKey::StringLiteral(l) => Some((l.value.as_str()?, l.span)),
         _ => None,
     }
 }

@@ -105,7 +105,7 @@ fn collect_task_scheduler_call_spans<'a>(semantic: &'a Semantic<'a>) -> Vec<Span
                             let imported = match &s.imported {
                                 ModuleExportName::IdentifierName(n) => n.name.as_str(),
                                 ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                                ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                                ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                             };
                             if imported == "tick" {
                                 names.insert(s.local.name.as_str());
@@ -636,7 +636,7 @@ impl<'a, 'ctx> MicrotaskVisitor<'a, 'ctx> {
 
         match body.body {
             CallableBodyKind::Block(b) => self.visit_function_body(b),
-            CallableBodyKind::Function(fb) => self.visit_function_body(fb),
+            CallableBodyKind::Function(fb) => self.visit_arrow_function_body(fb),
         }
 
         // Restore — truncate stack in case any visit_* method left dangling pushes (shouldn't).
@@ -659,7 +659,7 @@ struct CallableBody<'a> {
 
 enum CallableBodyKind<'a> {
     Block(&'a FunctionBody<'a>),
-    Function(&'a FunctionBody<'a>),
+    Function(&'a ArrowFunctionBody<'a>),
 }
 
 impl<'a, 'ctx> Visit<'a> for MicrotaskVisitor<'a, 'ctx> {

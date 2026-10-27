@@ -177,7 +177,7 @@ pub fn script_parse_errors(source: &str, is_ts: bool) -> Vec<String> {
     )
     .parse();
     result
-        .errors
+        .diagnostics
         .iter()
         .filter(|error| {
             !(is_ts

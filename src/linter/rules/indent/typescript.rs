@@ -317,7 +317,7 @@ pub(super) fn apply_node(
                 ts.iter().find(|&&i| layout.text(i) == "["),
                 ts.iter().find(|&&i| layout.text(i) == "]"),
             ) {
-                let ps: Vec<_> = n.parameters.iter().map(|p| shifted(p.span, base)).collect();
+                let ps: Vec<_> = vec![shifted(n.parameter.span, base)];
                 layout.list(
                     &ps,
                     layout.tokens[left].span,
@@ -504,11 +504,17 @@ pub(super) fn apply_node(
             shifted(n.id.span, base),
             Some(shifted(n.body.span, base)),
         ),
-        AstKind::TSModuleDeclaration(n) => declaration(
+        AstKind::TSExternalModuleDeclaration(n) => declaration(
             layout,
             span,
-            shifted(n.id.span(), base),
-            n.body.as_ref().map(|b| shifted(b.span(), base)),
+            shifted(n.id.span, base),
+            n.body.as_ref().map(|b| shifted(b.span, base)),
+        ),
+        AstKind::TSNamespaceDeclaration(n) => declaration(
+            layout,
+            span,
+            shifted(n.id.span, base),
+            Some(shifted(n.body.span(), base)),
         ),
         AstKind::TSGlobalDeclaration(n) => child(layout, shifted(n.body.span, base), 0, first),
         AstKind::TSEnumMember(n) => property(
@@ -694,9 +700,12 @@ pub(super) fn apply_node(
                         .unwrap_or(first);
                 child(layout, shifted(tp.span, base), 1, anchor);
             }
-            if let (Some(tp), Some(superclass)) = (&n.super_type_arguments, &n.super_class) {
-                if let Some(anchor) = layout.first(shifted(superclass.span(), base)) {
-                    child(layout, shifted(tp.span, base), 1, anchor);
+            if let Some(heritage) = &n.heritage {
+                if let Some(tp) = &heritage.type_arguments {
+                    if let Some(anchor) = layout.first(shifted(heritage.expression.span(), base))
+                    {
+                        child(layout, shifted(tp.span, base), 1, anchor);
+                    }
                 }
             }
             if let Some(imp) = n

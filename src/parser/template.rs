@@ -2490,7 +2490,7 @@ impl<'a> TemplateParser<'a> {
                 oxc::parser::Parser::new(self.allocator, wrapped, oxc::span::SourceType::ts())
                     .parse();
             self.extend_expression_syntax_errors(
-                parsed.errors,
+                parsed.diagnostics.into_vec(),
                 declaration_span,
                 kind.keyword().len() + 1,
             );
@@ -2712,7 +2712,7 @@ impl<'a> TemplateParser<'a> {
     fn validate_expression_syntax(&mut self, expression: &str, span: Span) {
         let parsed =
             crate::parser::expression::parse_template_expression(expression, self.allocator);
-        self.extend_expression_syntax_errors(parsed.errors, span, 6);
+        self.extend_expression_syntax_errors(parsed.diagnostics.into_vec(), span, 6);
     }
 
     fn extend_expression_syntax_errors(
@@ -2722,25 +2722,23 @@ impl<'a> TemplateParser<'a> {
         wrapper_prefix: usize,
     ) {
         for mut error in errors {
-            if let Some(labels) = error.labels.take() {
-                error.labels = Some(
-                    labels
-                        .into_iter()
-                        .map(|label| {
-                            let relative = label
-                                .offset()
-                                .saturating_sub(wrapper_prefix)
-                                .min((span.end - span.start) as usize);
-                            let length =
-                                label.len().min((span.end - span.start) as usize - relative);
-                            oxc_diagnostics::LabeledSpan::new(
-                                label.label().map(str::to_owned),
-                                span.start as usize + relative,
-                                length,
-                            )
-                        })
-                        .collect(),
-                );
+            if !error.labels.is_empty() {
+                let labels = std::mem::take(&mut error.labels);
+                error.labels = labels
+                    .into_iter()
+                    .map(|label| {
+                        let relative = (label.offset() as usize)
+                            .saturating_sub(wrapper_prefix)
+                            .min((span.end - span.start) as usize);
+                        let length =
+                            (label.len() as usize).min((span.end - span.start) as usize - relative);
+                        oxc_diagnostics::LabeledSpan::new(
+                            label.label().map(str::to_owned),
+                            span.start + relative as u32,
+                            length as u32,
+                        )
+                    })
+                    .collect();
             }
             self.errors.push(error);
         }
@@ -2761,7 +2759,7 @@ impl<'a> TemplateParser<'a> {
                         &format!("[{name}]"),
                         self.allocator,
                     );
-                    self.extend_expression_syntax_errors(parsed.errors, expression_span, 7);
+                    self.extend_expression_syntax_errors(parsed.diagnostics.into_vec(), expression_span, 7);
                     continue;
                 }
                 Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => {
@@ -4107,7 +4105,7 @@ impl<'a> TemplateParser<'a> {
             self.report_error(custom_element_invalid_message());
             return;
         };
-        if !parsed.errors.is_empty() {
+        if !parsed.diagnostics.is_empty() {
             self.report_error(custom_element_invalid_message());
             return;
         }
@@ -4180,7 +4178,7 @@ impl<'a> TemplateParser<'a> {
                         )
                         .parse();
                         self.extend_expression_syntax_errors(
-                            parsed.errors,
+                            parsed.diagnostics.into_vec(),
                             tag.declaration_span,
                             tag.kind.keyword().len() + 1,
                         );
@@ -5392,7 +5390,7 @@ fn debug_tag_has_invalid_arguments(raw_identifiers: &str, allocator: &Allocator)
     }
 
     let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return false;
     }
     let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
@@ -5425,7 +5423,7 @@ fn render_tag_expression_diagnostics(
     }
 
     let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
     let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
@@ -5617,7 +5615,7 @@ fn parse_expr_into<'a>(
     // with the rest discarded, producing false positives in rules that
     // treat the result as the full expression).
     let result = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    if !result.errors.is_empty() {
+    if !result.diagnostics.is_empty() {
         return None;
     }
     let expr = crate::parser::expression::unwrap_template_expression(&result)?;
@@ -7124,12 +7122,12 @@ fn expression_contains_await_outside_functions(expression: &oxc::ast::ast::Expre
 }
 
 fn function_body_contains_await_outside_nested_functions(
-    body: &oxc::ast::ast::FunctionBody<'_>,
+    body: &oxc::ast::ast::ArrowFunctionBody<'_>,
 ) -> bool {
     use oxc::ast_visit::Visit;
 
     let mut visitor = AwaitExpressionVisitor { found: false };
-    visitor.visit_function_body(body);
+    visitor.visit_arrow_function_body(body);
     visitor.found
 }
 
@@ -7605,7 +7603,7 @@ fn custom_element_object_error(
     if let Some(shadow) = shadow {
         match strip_parentheses(shadow) {
             oxc::ast::ast::Expression::StringLiteral(literal)
-                if matches!(literal.value.as_str(), "open" | "none") => {}
+                if matches!(literal.value.as_str().unwrap_or(""), "open" | "none") => {}
             oxc::ast::ast::Expression::ObjectExpression(_) => {}
             _ => return Some(custom_element_shadow_invalid_message()),
         }
@@ -7674,7 +7672,7 @@ fn expression_string_literal_value<'a>(
     expression: &'a oxc::ast::ast::Expression<'a>,
 ) -> Option<&'a str> {
     match expression {
-        oxc::ast::ast::Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        oxc::ast::ast::Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
     }
 }

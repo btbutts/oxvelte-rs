@@ -270,12 +270,11 @@ fn cmd_lint(
                             .map(|error| {
                                 let span = error
                                     .labels
-                                    .as_ref()
-                                    .and_then(|labels| labels.first())
+                                    .first()
                                     .map(|label| {
                                         oxc::span::Span::new(
-                                            label.offset() as u32,
-                                            (label.offset() + label.len()) as u32,
+                                            label.offset(),
+                                            label.offset() + label.len(),
                                         )
                                     })
                                     .unwrap_or_else(|| oxc::span::Span::new(0, 0));

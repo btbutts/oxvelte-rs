@@ -117,7 +117,7 @@ fn link_exempt(expression: &Expression<'_>, fragment: bool) -> bool {
         }
     };
     match expression.get_inner_expression() {
-        Expression::StringLiteral(l) => check(l.value.as_str()),
+        Expression::StringLiteral(l) => check(l.value.as_str().unwrap_or("")),
         Expression::BinaryExpression(b) => {
             link_exempt(&b.left, fragment) || (!fragment && link_exempt(&b.right, false))
         }
@@ -219,7 +219,7 @@ fn binding_names(pattern: &str) -> HashSet<String> {
     let allocator = oxc::allocator::Allocator::default();
     let source = format!("({pattern}) => {{}}");
     let parsed = oxc::parser::Parser::new(&allocator, &source, SourceType::ts()).parse();
-    let semantic = oxc::semantic::SemanticBuilder::new()
+    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     semantic

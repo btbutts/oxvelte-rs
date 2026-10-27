@@ -555,10 +555,10 @@ fn check_template_expression<'a>(
     // wrapper offset 1.
     let wrapper = format!("({});", text);
     let parsed = Parser::new(&alloc, &wrapper, SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
     let nodes = semantic.nodes();
 
     const MUTATING_NAMES: &[&str] = &[
@@ -737,33 +737,31 @@ fn collect_reactive_and_declared(semantic: &Semantic<'_>) -> (HashSet<String>, H
                     declared.insert(name.to_string());
                 }
             }
-            Statement::ExportNamedDeclaration(exp) => {
-                if let Some(decl) = &exp.declaration {
-                    match decl {
-                        Declaration::VariableDeclaration(vd) => {
-                            collect_var_names(vd, &mut declared)
-                        }
-                        Declaration::FunctionDeclaration(f) => {
-                            if let Some(id) = &f.id {
-                                declared.insert(id.name.to_string());
-                            }
-                        }
-                        Declaration::ClassDeclaration(c) => {
-                            if let Some(id) = &c.id {
-                                declared.insert(id.name.to_string());
-                            }
-                        }
-                        Declaration::TSTypeAliasDeclaration(t) => {
-                            declared.insert(t.id.name.to_string());
-                        }
-                        Declaration::TSInterfaceDeclaration(i) => {
-                            declared.insert(i.id.name.to_string());
-                        }
-                        Declaration::TSEnumDeclaration(e) => {
-                            declared.insert(e.id.name.to_string());
-                        }
-                        _ => {}
+            Statement::ExportDeclaration(exp) => {
+                match &exp.declaration {
+                    Declaration::VariableDeclaration(vd) => {
+                        collect_var_names(vd, &mut declared)
                     }
+                    Declaration::FunctionDeclaration(f) => {
+                        if let Some(id) = &f.id {
+                            declared.insert(id.name.to_string());
+                        }
+                    }
+                    Declaration::ClassDeclaration(c) => {
+                        if let Some(id) = &c.id {
+                            declared.insert(id.name.to_string());
+                        }
+                    }
+                    Declaration::TSTypeAliasDeclaration(t) => {
+                        declared.insert(t.id.name.to_string());
+                    }
+                    Declaration::TSInterfaceDeclaration(i) => {
+                        declared.insert(i.id.name.to_string());
+                    }
+                    Declaration::TSEnumDeclaration(e) => {
+                        declared.insert(e.id.name.to_string());
+                    }
+                    _ => {}
                 }
             }
             _ => {}

@@ -178,31 +178,42 @@ fn quote_end(text: &str, start: usize) -> usize {
 
 pub(super) fn expression_end(text: &str, start: usize) -> usize {
     let allocator = oxc::allocator::Allocator::default();
-    if let Ok(expression) =
-        oxc::parser::Parser::new(&allocator, &text[start + 1..], SourceType::ts())
-            .parse_expression()
-    {
-        let mut end = start + 1 + expression.span().end as usize;
-        loop {
-            while text
-                .as_bytes()
-                .get(end)
-                .is_some_and(u8::is_ascii_whitespace)
-            {
-                end += 1;
+    // `Parser::parse_expression` requires the input to be one complete
+    // expression, so find the longest prefix that parses — equivalent to a
+    // prefix parse that stops before the closing `}` and any trailing CSS.
+    let mut candidate = text.len();
+    while candidate > start + 1 {
+        if let Ok(expression) =
+            oxc::parser::Parser::new(&allocator, &text[start + 1..candidate], SourceType::ts())
+                .parse_expression()
+        {
+            let mut end = start + 1 + expression.span().end as usize;
+            loop {
+                while text
+                    .as_bytes()
+                    .get(end)
+                    .is_some_and(u8::is_ascii_whitespace)
+                {
+                    end += 1;
+                }
+                if text.as_bytes()[end..].starts_with(b"/*") {
+                    end = text[end + 2..]
+                        .find("*/")
+                        .map_or(text.len(), |n| end + n + 4);
+                } else if text.as_bytes()[end..].starts_with(b"//") {
+                    end = text[end..].find('\n').map_or(text.len(), |n| end + n);
+                } else {
+                    break;
+                }
             }
-            if text.as_bytes()[end..].starts_with(b"/*") {
-                end = text[end + 2..]
-                    .find("*/")
-                    .map_or(text.len(), |n| end + n + 4);
-            } else if text.as_bytes()[end..].starts_with(b"//") {
-                end = text[end..].find('\n').map_or(text.len(), |n| end + n);
-            } else {
-                break;
+            if text.as_bytes().get(end) == Some(&b'}') {
+                return end + 1;
             }
+            break;
         }
-        if text.as_bytes().get(end) == Some(&b'}') {
-            return end + 1;
+        candidate -= 1;
+        while !text.is_char_boundary(candidate) {
+            candidate -= 1;
         }
     }
     let mut depth = 1;

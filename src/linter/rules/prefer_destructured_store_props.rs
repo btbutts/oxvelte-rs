@@ -82,7 +82,7 @@ impl Rule for PreferDestructuredStoreProps {
                                             Some(id.name.to_string())
                                         }
                                         PropertyKey::StringLiteral(lit) => {
-                                            Some(lit.value.to_string())
+                                            Some(lit.value.display().to_string())
                                         }
                                         _ => None,
                                     };
@@ -182,8 +182,8 @@ impl Rule for PreferDestructuredStoreProps {
                 let parsed =
                     oxc::parser::Parser::new(&allocator, &declaration, oxc::span::SourceType::ts())
                         .parse();
-                if parsed.errors.is_empty() {
-                    let semantic = oxc::semantic::SemanticBuilder::new()
+                if parsed.diagnostics.is_empty() {
+                    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
                         .build(&parsed.program)
                         .semantic;
                     let names = semantic
@@ -201,10 +201,10 @@ impl Rule for PreferDestructuredStoreProps {
             let wrapper = format!("({text});");
             let parsed =
                 oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
-            if !parsed.errors.is_empty() {
+            if !parsed.diagnostics.is_empty() {
                 return;
             }
-            let semantic = oxc::semantic::SemanticBuilder::new()
+            let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
                 .build(&parsed.program)
                 .semantic;
             let nodes = semantic.nodes();
@@ -448,10 +448,10 @@ fn binding_names(pattern: &str) -> Vec<String> {
     let wrapper = format!("({pattern})=>0");
     let parsed =
         oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let semantic = oxc::semantic::SemanticBuilder::new()
+    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     semantic

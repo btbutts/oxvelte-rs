@@ -148,10 +148,10 @@ fn fn_arg_block_body<'a>(arg: &'a Argument<'a>) -> Option<&'a [Statement<'a>]> {
             if !a.params.items.is_empty() || a.params.rest.is_some() {
                 return None;
             }
-            if a.expression {
+            if a.body.is_expression() {
                 return None;
             }
-            Some(a.body.statements.as_slice())
+            Some(a.body.as_function_body()?.statements.as_slice())
         }
         Argument::FunctionExpression(f) => {
             if !f.params.items.is_empty() || f.params.rest.is_some() {

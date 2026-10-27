@@ -54,7 +54,7 @@ impl Rule for RequireEventDispatcherTypes {
                         let imported = match &s.imported {
                             ModuleExportName::IdentifierName(n) => n.name.as_str(),
                             ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                            ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                            ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                         };
                         if imported == "createEventDispatcher" {
                             names.push(s.local.name.to_string());

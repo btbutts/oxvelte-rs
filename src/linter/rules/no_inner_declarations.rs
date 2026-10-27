@@ -71,6 +71,7 @@ fn is_root_scope_kind(kind: AstKind) -> bool {
             | AstKind::FunctionBody(_)
             | AstKind::StaticBlock(_)
             | AstKind::ExportNamedDeclaration(_)
+            | AstKind::ExportDeclaration(_)
             | AstKind::ExportDefaultDeclaration(_)
     )
 }

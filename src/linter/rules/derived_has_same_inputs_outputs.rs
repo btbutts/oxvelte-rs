@@ -46,7 +46,7 @@ impl Rule for DerivedHasSameInputsOutputs {
                         let name = match &specifier.imported {
                             ModuleExportName::IdentifierName(id) => id.name.as_str(),
                             ModuleExportName::IdentifierReference(id) => id.name.as_str(),
-                            ModuleExportName::StringLiteral(value) => value.value.as_str(),
+                            ModuleExportName::StringLiteral(value) => value.value.as_str().unwrap_or(""),
                         };
                         if name == "derived" {
                             imports.push(specifier.local.symbol_id());

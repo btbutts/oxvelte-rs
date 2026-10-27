@@ -1,8 +1,10 @@
 # Proposal: pinned rule fixtures — one home, one automated update pipeline
 
-Status: proposal. Stage 1 (parser-fixture pipeline) landed 27OCT2026; Stage 2
-(eslint rule fixtures) is in progress. This document is meant to be readable
-on its own, without knowing the codebase first.
+Status: landed. Stage 1 (parser-fixture pipeline) and Stage 2 (eslint rule
+fixtures) both landed 27OCT2026; follow-up corrections in
+`docs/research/test/oxc-upgrade-and-fixtures-corrections_27OCT2026.md` landed
+the same day. This document is meant to be readable on its own,
+without knowing the codebase first.
 
 ## Background: why we have two fixture collections today
 
@@ -392,12 +394,16 @@ by the `cargo test --lib` harnesses in `src/lib.rs` unchanged.
   against `fixtures/linter/manifest.json`. No separate flow for hand-built
   vs. imported rules.
 - `scripts/version-matrix/run.mjs` — just a repoint: read the base manifest
-  and fixture files from `fixtures/linter/` instead of
-  `fixtures/upstream/eslint-plugin-svelte/`. Its per-profile behavior is
-  unchanged: it still stamps a fresh synthetic `package.json` (signaling the
-  profile's Svelte major to the linter under test) into each copied corpus —
-  the base `fixtures/linter/package.json` is only the modern/Svelte-5 default
-  that ships with the corpus.
+  and fixture files from `fixtures/linter/` instead of the old corpus. Its
+  per-profile behavior is unchanged: it still stamps a fresh synthetic
+  `package.json` (signaling the profile's Svelte major to the linter under
+  test) into each copied corpus — the base `fixtures/linter/package.json` is
+  only the modern/Svelte-5 default that ships with the corpus. (Landed in
+  Stage 2: eligibility recomputation per profile uses the manifest's
+  machine-readable `gates` field instead of upstream's TypeScript sources.)
+  Open → decided 27OCT2026: the two cross-rule `local/` cases are excluded
+  from the matrix via a named, commented skip list in `run.mjs` — see
+  `oxc-upgrade-and-fixtures-corrections_27OCT2026.md`, Workstream B.
 - `tests/upstream-parity-baseline.json` — regenerate once after the migration
   (`--update-baseline`), since manifest hash and case identifiers move.
 

@@ -108,14 +108,14 @@ fn static_string<'a>(
         span,
     );
     match expression.without_parentheses() {
-        Expression::StringLiteral(literal) => Some(literal.value.to_string()),
+        Expression::StringLiteral(literal) => Some(literal.value.display().to_string()),
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
             .quasis
             .first()?
             .value
             .cooked
             .as_ref()
-            .map(ToString::to_string),
+            .map(|c| c.display().to_string()),
         Expression::BinaryExpression(binary)
             if binary.operator == oxc::syntax::operator::BinaryOperator::Addition =>
         {

@@ -2,4 +2,4 @@
 	let disabled = false;
 </script>
 
-<button {disabled}>...</button>
+<button {disabled /* keep */}>...</button>

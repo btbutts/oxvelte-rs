@@ -78,8 +78,8 @@ fn lint_expression_errors_use_original_source_positions() {
     let alloc = Allocator::default();
     let parsed = parser::parse_for_lint(source, &alloc);
     assert!(!parsed.errors.is_empty());
-    let labels = parsed.errors[0].labels.as_ref().unwrap();
-    assert_eq!(labels[0].offset(), source.find('}').unwrap());
+    let labels = &parsed.errors[0].labels;
+    assert_eq!(labels[0].offset() as usize, source.find('}').unwrap());
 }
 
 #[test]

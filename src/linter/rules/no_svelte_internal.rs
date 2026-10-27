@@ -40,26 +40,26 @@ impl Rule for NoSvelteInternal {
             for stmt in &sem.nodes().program().body {
                 let source_span = match stmt {
                     Statement::ImportDeclaration(imp) => {
-                        if is_svelte_internal(imp.source.value.as_str()) {
+                        if is_svelte_internal(imp.source.value.as_str().unwrap_or("")) {
                             Some(imp.span)
                         } else {
                             None
                         }
                     }
                     Statement::ExportAllDeclaration(exp) => {
-                        if is_svelte_internal(exp.source.value.as_str()) {
+                        if is_svelte_internal(exp.source.value.as_str().unwrap_or("")) {
                             Some(exp.span)
                         } else {
                             None
                         }
                     }
-                    Statement::ExportNamedDeclaration(exp) => exp.source.as_ref().and_then(|s| {
-                        if is_svelte_internal(s.value.as_str()) {
+                    Statement::ExportFromDeclaration(exp) => {
+                        if is_svelte_internal(exp.source.value.as_str().unwrap_or("")) {
                             Some(exp.span)
                         } else {
                             None
                         }
-                    }),
+                    }
                     _ => None,
                 };
                 if let Some(span) = source_span {
@@ -79,7 +79,7 @@ impl Rule for NoSvelteInternal {
                 let Expression::StringLiteral(lit) = &import_expr.source else {
                     continue;
                 };
-                if !is_svelte_internal(lit.value.as_str()) {
+                if !is_svelte_internal(lit.value.as_str().unwrap_or("")) {
                     continue;
                 }
                 let s = offset + import_expr.span.start;

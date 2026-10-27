@@ -300,7 +300,7 @@ fn compute_mutability<'a>(
                     declaration = Some(vd);
                 }
             }
-            AstKind::ExportNamedDeclaration(_) => exported = true,
+            AstKind::ExportNamedDeclaration(_) | AstKind::ExportDeclaration(_) => exported = true,
             AstKind::Program(_) | AstKind::BlockStatement(_) => break,
             _ => {}
         }

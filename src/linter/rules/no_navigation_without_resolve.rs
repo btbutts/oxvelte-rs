@@ -61,7 +61,7 @@ impl Rule for NoNavigationWithoutResolve {
                 let Statement::ImportDeclaration(imp) = stmt else {
                     continue;
                 };
-                let src = imp.source.value.as_str();
+                let src = imp.source.value.as_str().unwrap_or("");
                 let is_nav_mod = src == "$app/navigation";
                 let is_paths_mod = src == "$app/paths";
                 let Some(specifiers) = &imp.specifiers else {
@@ -73,7 +73,7 @@ impl Rule for NoNavigationWithoutResolve {
                             let imported = match &s.imported {
                                 ModuleExportName::IdentifierName(n) => n.name.as_str(),
                                 ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                                ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                                ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                             };
                             if is_nav_mod {
                                 if let Some(nav) = NAV_FUNCTIONS.iter().find(|f| **f == imported) {
@@ -401,7 +401,7 @@ fn is_absolute_url(s: &str) -> bool {
 /// dynamic expressions whose leading bytes aren't statically known.
 fn static_string_prefix(expr: &Expression<'_>) -> Option<String> {
     match expr {
-        Expression::StringLiteral(l) => Some(l.value.to_string()),
+        Expression::StringLiteral(l) => Some(l.value.display().to_string()),
         Expression::TemplateLiteral(t) => {
             // Upstream treats a scheme in any quasi as an absolute URL.
             if let Some(quasi) = t
@@ -415,7 +415,8 @@ fn static_string_prefix(expr: &Expression<'_>) -> Option<String> {
             let prefix = first
                 .value
                 .cooked
-                .as_deref()
+                .as_ref()
+                .and_then(|c| c.as_str())
                 .unwrap_or(first.value.raw.as_str())
                 .to_string();
             // An empty leading quasi says nothing about an interpolated value.
@@ -465,10 +466,14 @@ fn expr_contains_literal<'a>(
         seen: &mut FxHashSet<String>,
     ) -> bool {
         match expr {
-            Expression::StringLiteral(l) => token_match(l.value.as_str(), needle),
+            Expression::StringLiteral(l) => token_match(l.value.as_str().unwrap_or(""), needle),
             Expression::TemplateLiteral(t) => t.quasis.iter().any(|q| {
                 token_match(
-                    q.value.cooked.as_deref().unwrap_or(q.value.raw.as_str()),
+                    q.value
+                        .cooked
+                        .as_ref()
+                        .and_then(|c| c.as_str())
+                        .unwrap_or(q.value.raw.as_str()),
                     needle,
                 )
             }),
@@ -723,7 +728,7 @@ fn symbol_type<'a>(
         let TSSignature::TSPropertySignature(p) = member else {
             return None;
         };
-        if p.key.static_name().as_deref() != Some(name.as_ref()) {
+        if p.key.static_name().as_ref() != Some(&name) {
             return None;
         }
         Some((&p.type_annotation.as_ref()?.type_annotation, p.optional))

@@ -3,7 +3,7 @@
 //! ⭐ Recommended
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{BindingPattern, Declaration, ExportNamedDeclaration, Expression, Statement};
+use oxc::ast::ast::{BindingPattern, Declaration, ExportDeclaration, Expression, Statement};
 use oxc::span::{GetSpan, Span};
 
 const PAGE_PROPS: &[&str] = &["data", "form", "params", "snapshot"];
@@ -60,7 +60,7 @@ impl Rule for ValidPropNamesInKitPages {
         for stmt in &semantic.nodes().program().body {
             match stmt {
                 // `export let name;` / `export let name = init;` — Svelte 3/4 props.
-                Statement::ExportNamedDeclaration(exp) => {
+                Statement::ExportDeclaration(exp) => {
                     check_export_named(ctx, content_offset, exp);
                 }
                 // `let { ... } = $props();` — Svelte 5 props.
@@ -87,10 +87,9 @@ impl Rule for ValidPropNamesInKitPages {
 fn check_export_named<'a>(
     ctx: &mut LintContext<'_>,
     content_offset: u32,
-    exp: &'a ExportNamedDeclaration<'a>,
+    exp: &'a ExportDeclaration<'a>,
 ) {
-    let Some(decl) = &exp.declaration else { return };
-    let Declaration::VariableDeclaration(vd) = decl else {
+    let Declaration::VariableDeclaration(vd) = &exp.declaration else {
         return;
     };
     for d in &vd.declarations {

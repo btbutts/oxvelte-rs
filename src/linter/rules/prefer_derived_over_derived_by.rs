@@ -78,10 +78,10 @@ impl Rule for PreferDerivedOverDerivedBy {
                 &ctx.source[span.start as usize..span.end as usize],
                 &allocator,
             );
-            if !parsed.errors.is_empty() {
+            if !parsed.diagnostics.is_empty() {
                 continue;
             }
-            let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+            let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
             for node in semantic.nodes().iter() {
                 if let AstKind::CallExpression(call) = node.kind() {
                     check_call(call, i64::from(span.start) - 6, ctx);
@@ -96,10 +96,10 @@ impl Rule for PreferDerivedOverDerivedBy {
             );
             let parsed =
                 oxc::parser::Parser::new(&allocator, &source, oxc::span::SourceType::ts()).parse();
-            if !parsed.errors.is_empty() {
+            if !parsed.diagnostics.is_empty() {
                 continue;
             }
-            let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+            let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
             for node in semantic.nodes().iter() {
                 if let AstKind::CallExpression(call) = node.kind() {
                     check_call(call, i64::from(span.start) - 6, ctx);
@@ -128,18 +128,19 @@ fn check_call(call: &CallExpression<'_>, offset: i64, ctx: &mut LintContext<'_>)
                 && function.params.items.is_empty()
                 && function.params.rest.is_none() =>
         {
-            if function.expression {
-                let Some(Statement::ExpressionStatement(statement)) =
-                    function.body.statements.first()
-                else {
+            if function.body.is_expression() {
+                let Some(expression) = function.body.as_expression() else {
                     return;
                 };
-                &statement.expression
+                expression
             } else {
-                if !function.body.directives.is_empty() {
+                let Some(body) = function.body.as_function_body() else {
+                    return;
+                };
+                if !body.directives.is_empty() {
                     return;
                 }
-                let Some(expression) = single_return(&function.body.statements) else {
+                let Some(expression) = single_return(&body.statements) else {
                     return;
                 };
                 expression

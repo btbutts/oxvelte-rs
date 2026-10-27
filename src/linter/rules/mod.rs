@@ -146,7 +146,7 @@ fn canonical_js_expression(source: &str) -> String {
     let parsed = oxc::parser::Parser::new(&allocator, &wrapped, oxc::span::SourceType::ts())
         .with_config(oxc::parser::config::TokensParserConfig)
         .parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return format!("unparsed:{source}");
     }
     let mut out = String::new();

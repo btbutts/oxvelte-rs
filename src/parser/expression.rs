@@ -56,7 +56,7 @@ mod tests {
     fn parses_string_literal() {
         let alloc = Allocator::default();
         let r = parse_template_expression("'foo'", &alloc);
-        assert!(r.errors.is_empty());
+        assert!(r.diagnostics.is_empty());
         let expr = unwrap_template_expression(&r).unwrap();
         assert!(matches!(expr, Expression::StringLiteral(_)));
     }
@@ -81,6 +81,6 @@ mod tests {
         let alloc = Allocator::default();
         let r = parse_template_expression("{{{", &alloc);
         // Parser will report errors; helper still returns a result.
-        assert!(!r.errors.is_empty() || unwrap_template_expression(&r).is_none());
+        assert!(!r.diagnostics.is_empty() || unwrap_template_expression(&r).is_none());
     }
 }

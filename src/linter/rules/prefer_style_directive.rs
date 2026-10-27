@@ -277,7 +277,9 @@ fn inline(expr: &str, start: usize) -> (Option<String>, (usize, usize)) {
     }
     let positive = f.value.is_empty();
     let literal = if positive { t } else { f };
-    let css = literal.value.as_str();
+    let Some(css) = literal.value.as_str() else {
+        return (None, diagnostic);
+    };
     let Some(decl) = declaration(css, 0, css.len(), &[]) else {
         return (None, diagnostic);
     };

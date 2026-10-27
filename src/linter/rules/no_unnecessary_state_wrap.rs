@@ -75,7 +75,7 @@ impl Rule for NoUnnecessaryStateWrap {
             let Statement::ImportDeclaration(imp) = stmt else {
                 continue;
             };
-            let src = imp.source.value.as_str();
+            let src = imp.source.value.as_str().unwrap_or("");
             let is_svelte = src == "svelte/reactivity";
             let Some(specifiers) = &imp.specifiers else {
                 continue;
@@ -92,7 +92,7 @@ impl Rule for NoUnnecessaryStateWrap {
                 let imported = match &s.imported {
                     ModuleExportName::IdentifierName(n) => n.name.as_str(),
                     ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                    ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                    ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                 };
                 if is_svelte && REACTIVE_CLASSES.contains(&imported) {
                     imports.push((s.local.symbol_id(), imported.to_string()));

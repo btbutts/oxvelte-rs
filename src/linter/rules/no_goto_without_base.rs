@@ -47,7 +47,7 @@ impl Rule for NoGotoWithoutBase {
                 };
                 let safe = argument.as_expression().is_some_and(|expression| {
                     match expression.get_inner_expression() {
-                        Expression::StringLiteral(literal) => absolute_uri(literal.value.as_str()),
+                        Expression::StringLiteral(literal) => absolute_uri(literal.value.as_str().unwrap_or("")),
                         Expression::BinaryExpression(binary) => {
                             matches!(&binary.left, Expression::Identifier(_))
                                 && import_reference(

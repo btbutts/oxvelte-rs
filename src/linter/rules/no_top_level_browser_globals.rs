@@ -100,7 +100,7 @@ fn collect_guard_ctx(sem: &Semantic<'_>) -> GuardCtx {
         let Statement::ImportDeclaration(imp) = stmt else {
             continue;
         };
-        let src = imp.source.value.as_str();
+        let src = imp.source.value.as_str().unwrap_or("");
         let is_app = src == "$app/environment" || src == "$app/env";
         let is_esm = src == "esm-env";
         if !is_app && !is_esm {
@@ -115,7 +115,7 @@ fn collect_guard_ctx(sem: &Semantic<'_>) -> GuardCtx {
                     let imported = match &s.imported {
                         ModuleExportName::IdentifierName(n) => n.name.as_str(),
                         ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                        ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                        ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
                     };
                     if (is_app && imported == "browser") || (is_esm && imported == "BROWSER") {
                         ctx.env_names.insert(s.local.name.as_str().to_string());
@@ -209,10 +209,8 @@ fn analyze_member_test(
     if prop == "SSR" {
         if let Expression::StaticMemberExpression(m) = object {
             if m.property.name == "env" {
-                if let Expression::MetaProperty(mp) = &m.object {
-                    if mp.meta.name == "import" && mp.property.name == "meta" {
-                        return (vec![], vec![Protect::All]);
-                    }
+                if let Expression::ImportMeta(_) = &m.object {
+                    return (vec![], vec![Protect::All]);
                 }
             }
         }
@@ -241,7 +239,7 @@ fn analyze_binary_test(
     let Expression::StringLiteral(sl) = other else {
         return (vec![], vec![]);
     };
-    let val = sl.value.as_str();
+    let val = sl.value.as_str().unwrap_or("");
     let positive_when_truthy = match (&b.operator, val) {
         (BinaryOperator::Inequality, "undefined")
         | (BinaryOperator::StrictInequality, "undefined") => true,

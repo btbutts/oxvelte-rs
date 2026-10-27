@@ -143,6 +143,11 @@ mod linter_fixture_tests {
             if let Some(svelte_config) = parser_options.get("svelteConfig") {
                 settings["compiler"]["svelteConfig"] = svelte_config.clone();
             }
+            if parser_options.pointer("/ecmaFeatures/globalReturn") == Some(&serde_json::json!(true))
+            {
+                settings["parserOptions"] =
+                    serde_json::json!({"ecmaFeatures": {"globalReturn": true}});
+            }
         }
         RuleConfig { options, settings }
     }

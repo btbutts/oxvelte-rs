@@ -98,7 +98,7 @@ impl Rule for Indent {
                     }
                 }
             }
-            let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+            let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
             for node in semantic.nodes().iter() {
                 let kind = node.kind();
                 let s = kind.span();

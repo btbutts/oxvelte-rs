@@ -276,7 +276,9 @@ struct Construction {
 fn is_inside_export_decl(nodes: &AstNodes, node_id: NodeId) -> bool {
     for ancestor in nodes.ancestor_ids(node_id) {
         match nodes.kind(ancestor) {
-            AstKind::ExportNamedDeclaration(_) | AstKind::ExportDefaultDeclaration(_) => {
+            AstKind::ExportNamedDeclaration(_)
+            | AstKind::ExportDeclaration(_)
+            | AstKind::ExportDefaultDeclaration(_) => {
                 return true;
             }
             _ => {}
@@ -301,13 +303,12 @@ fn collect_exported_reference_symbols<'a>(sem: &'a Semantic<'a>) -> HashSet<Symb
                 }
             }
         }
-        let AstKind::ExportNamedDeclaration(end) = node.kind() else {
-            continue;
+        let specifiers = match node.kind() {
+            AstKind::ExportNamedDeclaration(end) => &end.specifiers,
+            AstKind::ExportFromDeclaration(end) => &end.specifiers,
+            _ => continue,
         };
-        if end.declaration.is_some() {
-            continue;
-        }
-        for spec in &end.specifiers {
+        for spec in specifiers {
             // `spec.local` is a `ModuleExportName`. For specifier-only
             // exports it's almost always an `IdentifierReference` whose
             // `reference_id` resolves to a local binding.
@@ -618,10 +619,10 @@ fn scan_template_expression_semantic(
     let alloc = Allocator::default();
     let wrapper = format!("({});", text);
     let parsed = Parser::new(&alloc, &wrapper, SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
     let mut template_targets: HashMap<&'static str, HashSet<String>> = HashMap::new();
     for b in BUILTIN_CLASSES {
         template_targets.insert(b.name, HashSet::new());
@@ -738,10 +739,19 @@ fn collect_template_mutations_expr<'a>(
 }
 
 fn collect_template_mutations_function_body<'a>(
-    body: &'a oxc::ast::ast::FunctionBody<'a>,
+    body: &'a oxc::ast::ast::ArrowFunctionBody<'a>,
     mutations: &mut TemplateMutationMap,
 ) {
-    collect_template_mutations_statements(&body.statements, mutations);
+    match body {
+        oxc::ast::ast::ArrowFunctionBody::FunctionBody(body) => {
+            collect_template_mutations_statements(&body.statements, mutations);
+        }
+        expression => {
+            if let Some(expression) = expression.as_expression() {
+                collect_template_mutations_expr(expression, mutations);
+            }
+        }
+    }
 }
 
 fn collect_template_mutations_statements<'a>(

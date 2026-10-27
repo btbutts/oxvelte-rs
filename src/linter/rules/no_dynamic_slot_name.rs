@@ -103,11 +103,11 @@ fn report<'a>(
 // interpolation and string addition. It does not stringify numbers or booleans.
 fn static_text(expr: &Expression<'_>) -> Option<String> {
     match expr {
-        Expression::StringLiteral(value) => Some(value.value.to_string()),
+        Expression::StringLiteral(value) => Some(value.value.display().to_string()),
         Expression::TemplateLiteral(template) => {
             let mut text = String::new();
             for (index, quasi) in template.quasis.iter().enumerate() {
-                text.push_str(quasi.value.cooked.as_ref().map_or("null", |s| s.as_str()));
+                text.push_str(quasi.value.cooked.as_ref().map_or("null", |s| s.as_str().unwrap_or("null")));
                 if let Some(expression) = template.expressions.get(index) {
                     text.push_str(&static_text(expression)?);
                 }

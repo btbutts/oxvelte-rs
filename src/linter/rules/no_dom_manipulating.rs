@@ -297,7 +297,7 @@ fn assignment_target_tail<'a>(
 
 fn computed_property_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
     match expr {
-        Expression::StringLiteral(lit) => Some(lit.value.as_str()),
+        Expression::StringLiteral(lit) => lit.value.as_str(),
         _ => None,
     }
 }

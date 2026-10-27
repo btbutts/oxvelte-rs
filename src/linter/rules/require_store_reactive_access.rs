@@ -47,8 +47,8 @@ impl Rule for RequireStoreReactiveAccess {
                 Statement::VariableDeclaration(decl) => {
                     collect_store_vars_from_decl(decl, &factory_names, &mut stores)
                 }
-                Statement::ExportNamedDeclaration(export) => {
-                    if let Some(Declaration::VariableDeclaration(decl)) = &export.declaration {
+                Statement::ExportDeclaration(export) => {
+                    if let Declaration::VariableDeclaration(decl) = &export.declaration {
                         collect_store_vars_from_decl(decl, &factory_names, &mut stores);
                     }
                 }
@@ -290,8 +290,8 @@ impl Rule for RequireStoreReactiveAccess {
                 let parsed =
                     oxc::parser::Parser::new(&allocator, &declaration, oxc::span::SourceType::ts())
                         .parse();
-                if parsed.errors.is_empty() {
-                    let semantic = oxc::semantic::SemanticBuilder::new()
+                if parsed.diagnostics.is_empty() {
+                    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
                         .build(&parsed.program)
                         .semantic;
                     let names = semantic
@@ -484,7 +484,7 @@ fn expression_name(expression: &Expression<'_>) -> Option<String> {
                 Some(format!(
                     "{}.{}",
                     expression_name(&member.object)?,
-                    property.value
+                    property.value.display()
                 ))
             } else {
                 None
@@ -582,10 +582,10 @@ fn check_template(
     let wrapper = format!("({text});");
     let parsed =
         oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = oxc::semantic::SemanticBuilder::new()
+    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     let offset = expression_span.start - 1;
@@ -862,7 +862,7 @@ fn collect_imports(body: &[Statement<'_>]) -> Vec<(String, String, String)> {
         let Statement::ImportDeclaration(imp) = stmt else {
             continue;
         };
-        let source = imp.source.value.as_str().to_string();
+        let source = imp.source.value.as_str().unwrap_or("").to_string();
         let Some(specs) = &imp.specifiers else {
             continue;
         };
@@ -872,7 +872,7 @@ fn collect_imports(body: &[Statement<'_>]) -> Vec<(String, String, String)> {
                     let imported = match &s.imported {
                         ModuleExportName::IdentifierName(n) => n.name.as_str().to_string(),
                         ModuleExportName::IdentifierReference(n) => n.name.as_str().to_string(),
-                        ModuleExportName::StringLiteral(l) => l.value.as_str().to_string(),
+                        ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or("").to_string(),
                     };
                     out.push((s.local.name.as_str().to_string(), imported, source.clone()));
                 }
@@ -931,7 +931,7 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
             let imported = match &s.imported {
                 ModuleExportName::IdentifierName(n) => n.name.as_str(),
                 ModuleExportName::IdentifierReference(n) => n.name.as_str(),
-                ModuleExportName::StringLiteral(l) => l.value.as_str(),
+                ModuleExportName::StringLiteral(l) => l.value.as_str().unwrap_or(""),
             };
             let local = s.local.name.as_str().to_string();
             if STORE_FACTORIES.contains(&imported) {
@@ -949,7 +949,7 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
     for stmt in body {
         if let Statement::TSInterfaceDeclaration(iface) = stmt {
             let extends_store = iface.extends.iter().any(|h| {
-                let Expression::Identifier(id) = &h.expression else {
+                let TSTypeName::IdentifierReference(id) = &h.type_name else {
                     return false;
                 };
                 matches!(id.name.as_str(), "Writable" | "Readable" | "Derived")
@@ -968,10 +968,10 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
     // Each entry is (declarator, is_const) so pass 2 can propagate is_const.
     let mut exported_decls: Vec<(&oxc::ast::ast::VariableDeclarator, bool)> = Vec::new();
     for stmt in body {
-        let Statement::ExportNamedDeclaration(exp) = stmt else {
+        let Statement::ExportDeclaration(exp) = stmt else {
             continue;
         };
-        let Some(Declaration::VariableDeclaration(vd)) = &exp.declaration else {
+        let Declaration::VariableDeclaration(vd) = &exp.declaration else {
             continue;
         };
         let is_const = matches!(
@@ -1042,7 +1042,7 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
                             Some(key.name.to_string())
                         }
                         oxc::ast::ast::PropertyKey::StringLiteral(key) => {
-                            Some(key.value.to_string())
+                            Some(key.value.display().to_string())
                         }
                         _ => None,
                     };
@@ -1089,10 +1089,10 @@ fn binding_names(pattern: &str) -> Vec<String> {
     let wrapper = format!("({pattern})=>0");
     let parsed =
         oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let semantic = oxc::semantic::SemanticBuilder::new()
+    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     semantic

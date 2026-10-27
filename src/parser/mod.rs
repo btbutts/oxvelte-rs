@@ -118,7 +118,7 @@ fn populate_attribute_expression_asts<'a>(
             return None;
         }
         let result = crate::parser::expression::parse_template_expression(trimmed, allocator);
-        if !result.errors.is_empty() {
+        if !result.diagnostics.is_empty() {
             return None;
         }
         let expr = crate::parser::expression::unwrap_template_expression(&result)?;

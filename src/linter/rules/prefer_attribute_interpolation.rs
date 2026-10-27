@@ -34,7 +34,7 @@ impl Rule for PreferAttributeInterpolation {
                 let Some(span) = span else { continue };
                 let allocator = Allocator::default();
                 let parsed = parse_template_expression(text, &allocator);
-                if !parsed.errors.is_empty() || !parsed.program.comments.is_empty() {
+                if !parsed.diagnostics.is_empty() || !parsed.program.comments.is_empty() {
                     continue;
                 }
                 let Some(Expression::TemplateLiteral(template)) =

@@ -167,7 +167,7 @@ fn script_parse_errors_distinguish_modifier_checks_from_syntax_errors() {
     let parsed = Parser::new(&allocator, source, SourceType::ts()).parse();
     assert_eq!(parsed.program.body.len(), 1);
     assert!(parsed
-        .errors
+        .diagnostics
         .iter()
         .any(|error| error.code.scope.as_deref() == Some("TS")
             && error.code.number.as_deref() == Some("1029")));

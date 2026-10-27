@@ -594,11 +594,23 @@ impl Linter {
         is_svelte_module: bool,
     ) -> Vec<LintDiagnostic> {
         use oxc::allocator::Allocator;
-        use oxc::parser::Parser;
+        use oxc::parser::{ParseOptions, Parser};
         use oxc::semantic::SemanticBuilder;
         use oxc::span::SourceType;
 
         let alloc = Allocator::default();
+
+        // espree's `ecmaFeatures.globalReturn` permits top-level `return` in a
+        // script; forward it to the parser when the case config sets it.
+        let allow_return_outside_function = match &config {
+            RuleConfigSource::Fixed(config) => config
+                .settings
+                .as_ref()
+                .and_then(|settings| settings.pointer("/parserOptions/ecmaFeatures/globalReturn"))
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false),
+            RuleConfigSource::Project(_) => false,
+        };
 
         // Compute content offsets first (don't depend on parse success).
         let instance_offset = ast
@@ -629,8 +641,13 @@ impl Linter {
             } else {
                 SourceType::mjs()
             };
-            let r = Parser::new(&alloc, &s.content, st).parse();
-            if !r.errors.is_empty() {
+            let r = Parser::new(&alloc, &s.content, st)
+                .with_options(ParseOptions {
+                    allow_return_outside_function,
+                    ..ParseOptions::default()
+                })
+                .parse();
+            if !r.diagnostics.is_empty() {
                 None
             } else {
                 Some(r)
@@ -645,8 +662,13 @@ impl Linter {
             } else {
                 SourceType::mjs()
             };
-            let r = Parser::new(&alloc, &s.content, st).parse();
-            if !r.errors.is_empty() {
+            let r = Parser::new(&alloc, &s.content, st)
+                .with_options(ParseOptions {
+                    allow_return_outside_function,
+                    ..ParseOptions::default()
+                })
+                .parse();
+            if !r.diagnostics.is_empty() {
                 None
             } else {
                 Some(r)
@@ -654,10 +676,10 @@ impl Linter {
         });
         let instance_semantic = instance_parse
             .as_ref()
-            .map(|p| SemanticBuilder::new().build(&p.program).semantic);
+            .map(|p| SemanticBuilder::new().with_build_nodes(true).build(&p.program).semantic);
         let module_semantic = module_parse
             .as_ref()
-            .map(|p| SemanticBuilder::new().build(&p.program).semantic);
+            .map(|p| SemanticBuilder::new().with_build_nodes(true).build(&p.program).semantic);
 
         let runes_option = detect_runes_option(&ast.html);
         let is_runes = runes_option == Some(true)

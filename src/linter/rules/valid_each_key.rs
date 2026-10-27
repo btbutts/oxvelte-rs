@@ -45,10 +45,10 @@ fn extract_iter_vars(context: &str) -> Vec<String> {
     let alloc = Allocator::default();
     let source = format!("let {context} = value;");
     let parsed = oxc::parser::Parser::new(&alloc, &source, oxc::span::SourceType::ts()).parse();
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
     semantic
         .nodes()
         .iter()
@@ -66,10 +66,10 @@ fn key_references_each_var(key: &str, vars: &[String]) -> bool {
 
     let alloc = Allocator::default();
     let parsed = parse_template_expression(key, &alloc);
-    if !parsed.errors.is_empty() {
+    if !parsed.diagnostics.is_empty() {
         return false;
     }
-    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
     let references_each_var = semantic.nodes().iter().any(|node| {
         let AstKind::IdentifierReference(id) = node.kind() else {
             return false;

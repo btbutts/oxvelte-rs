@@ -414,9 +414,12 @@ fn classify(semantic: &Semantic<'_>, symbol: SymbolId, options: &Options) -> Opt
             | AstKind::TSCallSignatureDeclaration(_)
             | AstKind::TSConstructSignatureDeclaration(_)
             | AstKind::TSIndexSignature(_)
-            | AstKind::TSModuleDeclaration(_)
+            | AstKind::TSExternalModuleDeclaration(_)
+            | AstKind::TSNamespaceDeclaration(_)
             | AstKind::TSGlobalDeclaration(_) => return None,
             AstKind::ExportNamedDeclaration(_)
+            | AstKind::ExportDeclaration(_)
+            | AstKind::ExportFromDeclaration(_)
             | AstKind::ExportDefaultDeclaration(_)
             | AstKind::ExportAllDeclaration(_) => return None,
             AstKind::StaticBlock(_) | AstKind::Program(_) => break,

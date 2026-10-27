@@ -201,9 +201,9 @@ fn text<'a>(source: &'a str, expr: &Expression<'_>) -> &'a str {
 }
 fn constant(expr: &Expression<'_>) -> Option<String> {
     match expr.without_parentheses() {
-        Expression::StringLiteral(s) => Some(s.value.to_string()),
+        Expression::StringLiteral(s) => Some(s.value.display().to_string()),
         Expression::TemplateLiteral(t) if t.expressions.is_empty() => {
-            Some(t.quasis.first()?.value.cooked.as_ref()?.to_string())
+            Some(t.quasis.first()?.value.cooked.as_ref()?.display().to_string())
         }
         _ => None,
     }

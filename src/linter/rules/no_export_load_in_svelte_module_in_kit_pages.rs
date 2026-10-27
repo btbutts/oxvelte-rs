@@ -51,12 +51,10 @@ impl Rule for NoExportLoadInSvelteModuleInKitPages {
                 script.content_span.start
             });
         for stmt in &module_sem.nodes().program().body {
-            let Statement::ExportNamedDeclaration(exp) = stmt else {
+            let Statement::ExportDeclaration(exp) = stmt else {
                 continue;
             };
-            let Some(decl) = &exp.declaration else {
-                continue;
-            };
+            let decl = &exp.declaration;
             let load_span = match decl {
                 Declaration::FunctionDeclaration(f) => {
                     if f.id.as_ref().map_or(false, |id| id.name == "load") {

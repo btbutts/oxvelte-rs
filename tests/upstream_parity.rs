@@ -150,7 +150,14 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
         None
     };
     let config = parity::rewrite_fixture_paths(&case.config, root, &case.filename);
-    let settings = parity::fixture_settings(&config, executable_path.as_deref(), root, &case.rule);
+    let mut settings =
+        parity::fixture_settings(&config, executable_path.as_deref(), root, &case.rule);
+    if config.pointer("/languageOptions/parserOptions/ecmaFeatures/globalReturn")
+        == Some(&json!(true))
+    {
+        let settings = settings.get_or_insert_with(|| json!({}));
+        settings["parserOptions"] = json!({"ecmaFeatures": {"globalReturn": true}});
+    }
     if let Some(language) = config.get("languageOptions") {
         if let Some(parser_options) = language.get("parserOptions") {
             if let Some(svelte_config) = parser_options.get("svelteConfig") {
@@ -165,6 +172,7 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
             if parser_options.as_object().is_none_or(|o| {
                 o.iter().any(|(key, value)| {
                     key != "svelteConfig"
+                        && !(key == "ecmaFeatures" && value == &json!({"globalReturn": true}))
                         && !(compiler_rule && key == "parser" && value == "@babel/eslint-parser")
                         && !(case.rule == "@typescript-eslint/no-unnecessary-condition"
                             && key == "project")

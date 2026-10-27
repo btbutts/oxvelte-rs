@@ -327,7 +327,7 @@ fn binds(pattern: &str, name: &str) -> bool {
     let allocator = oxc::allocator::Allocator::default();
     let source = format!("({pattern}) => {{}}");
     let parsed = oxc::parser::Parser::new(&allocator, &source, SourceType::ts()).parse();
-    let semantic = oxc::semantic::SemanticBuilder::new()
+    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     let found = semantic

@@ -38,7 +38,7 @@ impl Rule for NoAtConstTags {
             let parsed =
                 oxc::parser::Parser::new(&allocator, &declaration, SourceType::ts()).parse();
             let message = "Use `{const ...}` declaration tag instead of legacy `{@const ...}`.";
-            if !parsed.errors.is_empty() {
+            if !parsed.diagnostics.is_empty() {
                 ctx.diagnostic(message, tag.span);
                 return;
             }

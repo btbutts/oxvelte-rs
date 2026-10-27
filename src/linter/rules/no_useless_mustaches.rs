@@ -123,7 +123,7 @@ fn check_expression(
 ) {
     let alloc = Allocator::default();
     let result = parse_template_expression(expr_text, &alloc);
-    if !result.errors.is_empty() {
+    if !result.diagnostics.is_empty() {
         return;
     }
     let Some(expr) = unwrap_template_expression(&result) else {
