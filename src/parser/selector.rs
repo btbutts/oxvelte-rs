@@ -14,7 +14,7 @@
 //! We never match selectors against a DOM — no matching code, no visitor
 //! hooks. `NonTSPseudoClass::is_active_or_hover` and friends return `false`.
 
-use cssparser::{CowRcStr, Parser as CssParser, ParserInput, SourceLocation, ToCss};
+use cssparser::{CowRcStr, Parser as CssParser, ToCss};
 use selectors::parser::{
     Component as SelComponent, NonTSPseudoClass, ParseRelative, Parser as SelParser, PseudoElement, Selector,
     SelectorImpl, SelectorList, SelectorParseErrorKind,
@@ -97,7 +97,6 @@ impl ToCss for OxPseudoClass {
 }
 
 impl NonTSPseudoClass for OxPseudoClass {
-    type Impl = OxSelector;
     fn is_active_or_hover(&self) -> bool {
         false
     }
@@ -116,9 +115,7 @@ impl ToCss for OxPseudoElement {
     }
 }
 
-impl PseudoElement for OxPseudoElement {
-    type Impl = OxSelector;
-}
+impl PseudoElement for OxPseudoElement {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OxSelector;
@@ -140,7 +137,7 @@ pub struct OxSelectorParser;
 
 impl<'i> SelParser<'i> for OxSelectorParser {
     type Impl = OxSelector;
-    type Error = SelectorParseErrorKind<'i>;
+    type Error = SelectorParseErrorKind;
 
     fn parse_is_and_where(&self) -> bool {
         true
@@ -163,18 +160,17 @@ impl<'i> SelParser<'i> for OxSelectorParser {
 
     fn parse_non_ts_pseudo_class(
         &self,
-        _location: SourceLocation,
         name: CowRcStr<'i>,
-    ) -> Result<OxPseudoClass, cssparser::ParseError<'i, Self::Error>> {
+    ) -> Result<OxPseudoClass, cssparser::ParseError<Self::Error>> {
         Ok(OxPseudoClass::Other(OxAtom::new(&name)))
     }
 
-    fn parse_non_ts_functional_pseudo_class<'t>(
+    fn parse_non_ts_functional_pseudo_class(
         &self,
         name: CowRcStr<'i>,
-        parser: &mut CssParser<'i, 't>,
+        parser: &mut CssParser<'i>,
         _after_part: bool,
-    ) -> Result<OxPseudoClass, cssparser::ParseError<'i, Self::Error>> {
+    ) -> Result<OxPseudoClass, cssparser::ParseError<Self::Error>> {
         if name.eq_ignore_ascii_case("global") {
             let list = SelectorList::parse(self, parser, ParseRelative::No)?;
             Ok(OxPseudoClass::Global(list))
@@ -185,30 +181,26 @@ impl<'i> SelParser<'i> for OxSelectorParser {
                 while !p.is_exhausted() {
                     p.next()?;
                 }
-                Ok::<_, cssparser::ParseError<'i, Self::Error>>(())
+                Ok::<_, cssparser::ParseError<Self::Error>>(())
             });
             Ok(OxPseudoClass::Other(OxAtom::new(&name)))
         }
     }
 
-    fn parse_pseudo_element(
-        &self,
-        _location: SourceLocation,
-        name: CowRcStr<'i>,
-    ) -> Result<OxPseudoElement, cssparser::ParseError<'i, Self::Error>> {
+    fn parse_pseudo_element(&self, name: CowRcStr<'i>) -> Result<OxPseudoElement, cssparser::ParseError<Self::Error>> {
         Ok(OxPseudoElement(OxAtom::new(&name)))
     }
 
-    fn parse_functional_pseudo_element<'t>(
+    fn parse_functional_pseudo_element(
         &self,
         name: CowRcStr<'i>,
-        arguments: &mut CssParser<'i, 't>,
-    ) -> Result<OxPseudoElement, cssparser::ParseError<'i, Self::Error>> {
+        arguments: &mut CssParser<'i>,
+    ) -> Result<OxPseudoElement, cssparser::ParseError<Self::Error>> {
         let _ = arguments.parse_entirely(|p| {
             while !p.is_exhausted() {
                 p.next()?;
             }
-            Ok::<_, cssparser::ParseError<'i, Self::Error>>(())
+            Ok::<_, cssparser::ParseError<Self::Error>>(())
         });
         Ok(OxPseudoElement(OxAtom::new(&name)))
     }
@@ -219,8 +211,7 @@ impl<'i> SelParser<'i> for OxSelectorParser {
 /// unparseable CSS (vendor behaves the same way: unparseable rules are just
 /// skipped).
 pub fn parse_selector_list(text: &str) -> Option<SelectorList<OxSelector>> {
-    let mut input = ParserInput::new(text);
-    let mut parser = CssParser::new(&mut input);
+    let mut parser = CssParser::new(text);
     SelectorList::parse(&OxSelectorParser, &mut parser, ParseRelative::No).ok()
 }
 
@@ -240,8 +231,7 @@ pub fn for_each_rule_prelude<F>(css: &str, css_start_in_source: u32, mut f: F)
 where
     F: FnMut(&str, u32, bool),
 {
-    let mut input = ParserInput::new(css);
-    let mut parser = CssParser::new(&mut input);
+    let mut parser = CssParser::new(css);
     let mut walker = RuleWalker {
         f: &mut f,
         source_offset: css_start_in_source,
@@ -257,7 +247,7 @@ struct RuleWalker<'cb, F: FnMut(&str, u32, bool)> {
     inside_global: bool,
 }
 
-type WalkError<'i> = cssparser::ParseError<'i, ()>;
+type WalkError = cssparser::ParseError<()>;
 
 impl<'i, F> cssparser::QualifiedRuleParser<'i> for RuleWalker<'_, F>
 where
@@ -267,7 +257,7 @@ where
     type QualifiedRule = ();
     type Error = ();
 
-    fn parse_prelude<'t>(&mut self, input: &mut CssParser<'i, 't>) -> Result<Self::Prelude, WalkError<'i>> {
+    fn parse_prelude(&mut self, input: &mut CssParser<'i>) -> Result<Self::Prelude, WalkError> {
         let start = input.position();
         // `input` is already delimited to stop at the upcoming `{` — the
         // `next_including_whitespace` loop just drains to the end of that
@@ -278,12 +268,12 @@ where
         Ok((text, self.source_offset + start.byte_index() as u32))
     }
 
-    fn parse_block<'t>(
+    fn parse_block(
         &mut self,
         prelude: Self::Prelude,
         _start: &cssparser::ParserState,
-        input: &mut CssParser<'i, 't>,
-    ) -> Result<Self::QualifiedRule, WalkError<'i>> {
+        input: &mut CssParser<'i>,
+    ) -> Result<Self::QualifiedRule, WalkError> {
         let (text, start_byte) = prelude;
         if text.trim() == ":global" {
             let prev = std::mem::replace(&mut self.inside_global, true);
@@ -305,21 +295,21 @@ where
     type AtRule = ();
     type Error = ();
 
-    fn parse_prelude<'t>(
+    fn parse_prelude(
         &mut self,
         _name: cssparser::CowRcStr<'i>,
-        input: &mut CssParser<'i, 't>,
-    ) -> Result<Self::Prelude, WalkError<'i>> {
+        input: &mut CssParser<'i>,
+    ) -> Result<Self::Prelude, WalkError> {
         while input.next_including_whitespace().is_ok() {}
         Ok(())
     }
 
-    fn parse_block<'t>(
+    fn parse_block(
         &mut self,
         _prelude: Self::Prelude,
         _start: &cssparser::ParserState,
-        input: &mut CssParser<'i, 't>,
-    ) -> Result<Self::AtRule, WalkError<'i>> {
+        input: &mut CssParser<'i>,
+    ) -> Result<Self::AtRule, WalkError> {
         let mut nested = cssparser::StyleSheetParser::new(input, self);
         while nested.next().is_some() {}
         Ok(())

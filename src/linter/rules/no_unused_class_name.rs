@@ -104,8 +104,7 @@ impl Rule for NoUnusedClassName {
 /// even malformed CSS bodies are all picked up — matching the lenient
 /// behavior the old byte scanner provided for the invalid-style fixture.
 fn collect_css_classes(css: &str, out: &mut HashSet<String>) {
-    let mut input = cssparser::ParserInput::new(css);
-    let mut parser = cssparser::Parser::new(&mut input);
+    let mut parser = cssparser::Parser::new(css);
     walk_tokens(&mut parser, &mut |tok, prev_is_dot| {
         if prev_is_dot {
             if let cssparser::Token::Ident(name) = tok {
@@ -115,7 +114,7 @@ fn collect_css_classes(css: &str, out: &mut HashSet<String>) {
     });
 }
 
-fn walk_tokens<F>(parser: &mut cssparser::Parser<'_, '_>, f: &mut F)
+fn walk_tokens<F>(parser: &mut cssparser::Parser<'_>, f: &mut F)
 where
     F: FnMut(&cssparser::Token<'_>, bool),
 {
@@ -132,7 +131,7 @@ where
             | cssparser::Token::ParenthesisBlock
             | cssparser::Token::CurlyBracketBlock
             | cssparser::Token::SquareBracketBlock => {
-                let _ = parser.parse_nested_block(|inner| -> Result<(), cssparser::ParseError<'_, ()>> {
+                let _ = parser.parse_nested_block(|inner| -> Result<(), cssparser::ParseError<()>> {
                     walk_tokens(inner, f);
                     Ok(())
                 });

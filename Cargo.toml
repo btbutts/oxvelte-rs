@@ -42,9 +42,9 @@ rayon = "1"
 atty = "0.2"
 regex = "1"
 boa_engine = { version = "0.22.0", optional = true }
-selectors = "0.37.0"
+selectors = "0.41.0"
 precomputed-hash = "0.1.1"
-cssparser = "0.36"
+cssparser = "0.38.0"
 
 [dev-dependencies]
 insta = { version = "1", features = ["json"] }
