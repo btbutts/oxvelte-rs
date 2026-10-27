@@ -7,9 +7,9 @@
 > [!NOTE]
 > **This is a fork of [tolgaouz/oxvelte](https://github.com/tolgaouz/oxvelte).** oxvelte was created by [@tolgaouz](https://github.com/tolgaouz), and all credit for the original design and implementation goes to him. The original repository looks to be no longer actively developed, so this fork ([billpeet/oxvelte](https://github.com/billpeet/oxvelte)) continues the work. It is not affiliated with or endorsed by the original author.
 
-A Svelte linter with native Rust rules and optional Node.js compiler and type checks. All 1,232 eligible fixtures in the pinned [eslint-plugin-svelte](https://github.com/sveltejs/eslint-plugin-svelte) suite match. See the [parity report](docs/research/upstream-parity-seventh-wave.md) for scope and runtime requirements.
+A Svelte linter with native Rust rules and optional bun/Node.js compiler and type checks. All 1,293 eligible fixtures in the pinned [eslint-plugin-svelte](https://github.com/sveltejs/eslint-plugin-svelte) suite match. See the [parity report](docs/research/upstream-parity-seventh-wave.md) for scope and runtime requirements.
 
-All 1,299 imported cases pass across the [pinned version matrix](docs/research/upstream-parity-version-matrix.md), including the 67 cases skipped in the primary environment.
+All 1,362 imported cases pass across the [pinned version matrix](docs/research/upstream-parity-version-matrix.md), including the 67 cases skipped in the primary environment.
 
 <p align="center">
   <img src="assets/compare.gif" alt="Side-by-side benchmark linting shadcn-svelte (1,603 files): eslint-plugin-svelte takes ~15s while oxvelte completes the same lint hundreds of times in the same window" width="900">
@@ -47,7 +47,7 @@ npm install -D oxlint @billpeet/oxvelte
 
 That's it. Both tools work out of the box with zero config and sensible defaults.
 
-Compiler diagnostics and unused `svelte-ignore` checks use Node.js and the project's installed Svelte compiler. `svelte/valid-compile` is opt-in; the recommended unused-ignore rule starts the compiler when it needs to check warning codes. TypeScript, Babel and stylesheet transformations use the project's corresponding packages. The compiler process is reused, and compiler results are shared between rules within each lint run. See [compiler setup and parity testing](docs/upstream-parity.md) for the pinned test runtime.
+Compiler diagnostics and unused `svelte-ignore` checks use a JavaScript runtime — **bun when available, otherwise Node.js** — and the project's installed Svelte compiler. `svelte/valid-compile` is opt-in; the recommended unused-ignore rule starts the compiler when it needs to check warning codes. TypeScript, Babel and stylesheet transformations use the project's corresponding packages. The compiler process is reused, and compiler results are shared between rules within each lint run. Runtime selection can be pinned via `settings["js-runtime"]` (see Configuration) or the `OXVELTE_NODE` environment variable. See [compiler setup and parity testing](docs/upstream-parity.md) for the pinned test runtime.
 
 The opt-in `@typescript-eslint/no-unnecessary-condition` rule uses the project's TypeScript checker to report redundant conditions and optional chains while respecting Svelte reactive variables. It runs when the config sets it to `warn` or `error`, or with `--all-rules`; `settings.typescript.project` can select one tsconfig path relative to the component. See the [seventh-wave report](docs/research/upstream-parity-seventh-wave.md) for template scope limits and current test coverage.
 
@@ -243,6 +243,28 @@ Create `oxvelte.config.json` in your project root:
 
 **Settings** configure framework-specific behavior. The `svelte.kit.files.routes` setting tells SvelteKit-aware rules where your route files live.
 
+**JavaScript runtime.** Compiler-backed and type-aware rules launch a JavaScript runtime for the embedded compiler bridge. By default oxvelte prefers `bun` and falls back to `node` from your PATH. Pin one with `settings["js-runtime"]`:
+
+```json
+{
+  "settings": {
+    "js-runtime": "node"
+  }
+}
+```
+
+...which forces that runtime (resolved from PATH), or pin an exact binary with the name-plus-path form (the name tells oxvelte which runtime the path is):
+
+```json
+{
+  "settings": {
+    "js-runtime": ["bun", { "path": "/opt/homebrew/bin/bun" }]
+  }
+}
+```
+
+The `OXVELTE_NODE` environment variable overrides both when set (a name or absolute path). If neither `bun` nor `node` is found, oxvelte tells you to install one or set an override.
+
 Without a config file, oxvelte runs the **recommended** ruleset (same as eslint-plugin-svelte's `flat/recommended`).
 
 ## Custom rules
@@ -281,9 +303,9 @@ Full reference — AST shape, `ctx` API, auto-fix, limitations — in [`docs/cus
 
 Upstream compatibility is tracked separately with a pinned fixture suite and exact expectations. See [upstream parity](docs/upstream-parity.md) for current gaps and how to run it.
 
-- **Svelte lint rules** implemented in Rust, with Node.js for compiler and type checks
+- **Svelte lint rules** implemented in Rust, with bun/Node.js for compiler and type checks
 - **Full Svelte 4 + Svelte 5** template parser (106/106 parser fixture tests)
-- **1,232 upstream rule fixtures match**, with 67 version skips
+- **1,293 upstream rule fixtures match**, with 67 version skips
 - **Parallel file processing** via rayon
 - **eslint-disable** / **svelte-ignore** comment directives
 - **Auto-fix** support for fixable rules (`--fix`)
@@ -296,7 +318,7 @@ Compiler-backed and formatting rules are supported:
 - `no-unused-svelte-ignore` is recommended and invokes the compiler when it needs to check warning codes.
 - `indent` is opt-in, matching upstream. Avoid enabling it alongside a formatter that uses different indentation settings.
 
-Compiler checks require Node.js and the relevant project packages. The [parity report](docs/research/upstream-parity-seventh-wave.md) records fixture coverage and implementation limits.
+Compiler checks require a JavaScript runtime (bun or Node.js) and the relevant project packages. The [parity report](docs/research/upstream-parity-seventh-wave.md) records fixture coverage and implementation limits.
 
 ## Project structure
 

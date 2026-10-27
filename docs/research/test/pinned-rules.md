@@ -476,17 +476,27 @@ by the `cargo test --lib` harnesses in `src/lib.rs` unchanged.
   upstream and our Rust code needs updating" — never "the fixture bookkeeping
   is stale."
 
-## Runtime selection for the embedded bridge (planned)
+## Runtime selection for the embedded bridge (landed 27OCT2026)
 
 The shipped `oxvelte` binary launches the four embedded `.cjs` scripts (see
-`src/compiler.rs`) with a JavaScript runtime found on the user's machine. The
-planned behavior: **prefer `bun` when it is on PATH, fall back to `node`** —
-and `OXVELTE_NODE`-style explicit overrides keep working for users who want to
-pin one. Both runtimes execute the bridge identically; bun (written in Rust
-since 1.4, powered by JavaScriptCore) is the faster engine, and users who only
-have node/npm are never forced into a second ecosystem. This must work on
-macOS, Linux, and Windows. Today the lookup is `OXVELTE_NODE` or `node` on
-PATH only, so the change is: probe for `bun` first, then `node`.
+`src/compiler.rs`) with a JavaScript runtime found on the user's machine.
+Resolution order in `resolve_js_runtime` (`src/compiler.rs`):
+
+1. The `OXVELTE_NODE` environment override (name or absolute path) — the
+   long-standing escape hatch, unchanged.
+2. The project config's `settings["js-runtime"]`: a `"bun"`/`"node"` string
+   forcing that runtime from PATH, or a `["bun"|"node", {"path": "..."}]`
+   pair pinning an explicit binary (the name is required alongside the path
+   so no fragile binary sniffing is involved).
+3. PATH probing: **`bun` first, then `node`**. If neither is found, the
+   error tells the user to install one or set an override.
+
+Both runtimes execute the same bootstrap unchanged (verified:
+`bun --input-type=commonjs -e` runs the eval bootstrap and CommonJS
+`require` identically). bun (written in Rust since 1.4, powered by
+JavaScriptCore) is the faster engine, and users who only have node/npm are
+never forced into a second ecosystem. The full fixture suite, including the
+compiler-backed and type-aware cases, passes under bun.
 
 ## Deferred ideas (recorded 24OCT2026, not part of this plan)
 

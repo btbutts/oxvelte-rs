@@ -96,8 +96,59 @@ impl Drop for Runtime {
         let _ = self.child.wait();
     }
 }
+/// JavaScript runtime for the embedded bridge. Resolution order:
+/// 1. The `OXVELTE_NODE` environment override (a runtime name or absolute
+///    path), matching its long-standing behavior.
+/// 2. The project config's `settings["js-runtime"]`: a `"bun"`/`"node"`
+///    string forcing that runtime from PATH, or a
+///    `["bun"|"node", {"path": "..."}]` pair pinning an explicit binary.
+/// 3. PATH probing, preferring `bun` over `node`.
+fn resolve_js_runtime(settings: Option<&Value>) -> Result<std::ffi::OsString, String> {
+    if let Some(program) = std::env::var_os("OXVELTE_NODE") {
+        return Ok(program);
+    }
+    if let Some(value) = settings.and_then(|settings| settings.get("js-runtime")) {
+        match value {
+            Value::String(name) if name == "bun" || name == "node" => {
+                return Ok(name.as_str().into());
+            }
+            Value::Array(pair) => {
+                if !matches!(pair.first().and_then(Value::as_str), Some("bun" | "node")) {
+                    return Err("settings.js-runtime must name \"bun\" or \"node\" before the options object".into());
+                }
+                let path = pair
+                    .get(1)
+                    .and_then(|options| options.get("path"))
+                    .and_then(Value::as_str)
+                    .ok_or("settings.js-runtime requires a {\"path\": \"...\"} object after the runtime name")?;
+                if !std::path::Path::new(path).is_file() {
+                    return Err(format!("settings.js-runtime path does not exist: {path}"));
+                }
+                return Ok(path.into());
+            }
+            _ => {
+                return Err("settings.js-runtime must be \"bun\", \"node\", or [\"bun\"|\"node\", {\"path\": \"...\"}]".into());
+            }
+        }
+    }
+    for candidate in ["bun", "node"] {
+        if Command::new(candidate)
+            .arg("--version")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+        {
+            return Ok(candidate.into());
+        }
+    }
+    Err("Cannot find a JavaScript runtime for Svelte compiler rules: neither `bun` nor `node` was found on PATH. Install bun or Node.js and ensure it is on PATH, or point oxvelte at a runtime with settings.js-runtime in oxvelte.config.json or the OXVELTE_NODE environment variable.".into())
+}
+
 impl Runtime {
-    fn start() -> Result<Self, String> {
+    fn start(settings: Option<&Value>) -> Result<Self, String> {
         let script = format!(
             "const embeddedSourceMapCodec = (() => {{ const module = {{exports: {{}}}}; const exports = module.exports; {} ; return module.exports; }})();\nconst typescriptService = (() => {{ const module = {{exports: {{}}}}; {} ; return module.exports; }})();\nconst typescriptConditions = (() => {{ const module = {{exports: {{}}}}; {} ; return module.exports; }})();\n{}",
             include_str!("../scripts/compiler-runtime/vendor/sourcemap-codec.cjs"),
@@ -105,10 +156,11 @@ impl Runtime {
             include_str!("../scripts/compiler-runtime/typescript-conditions.cjs"),
             include_str!("../scripts/compiler-runtime/bridge.cjs"),
         );
-        let mut child = Command::new(std::env::var_os("OXVELTE_NODE").unwrap_or_else(|| "node".into()))
+        let program = resolve_js_runtime(settings)?;
+        let mut child = Command::new(&program)
             .args(["--input-type=commonjs", "-e", "const fs=require('node:fs');const b=Buffer.alloc(1);let n='';while(fs.readSync(0,b,0,1,null)&&b[0]!==10)n+=b.toString();const code=Buffer.alloc(Number(n));let offset=0;while(offset<code.length){const count=fs.readSync(0,code,offset,code.length-offset,null);if(!count)throw Error('Incomplete Oxvelte runtime bootstrap');offset+=count;}eval(code.toString('utf8'));"])
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
-            .spawn().map_err(|e| format!("Cannot start Node.js for Svelte compiler rules: {e}. Install Node.js or set OXVELTE_NODE."))?;
+            .spawn().map_err(|e| format!("Cannot start {:?} for Svelte compiler rules: {e}. Install bun or Node.js, or set settings.js-runtime or OXVELTE_NODE.", program))?;
         let mut input = child
             .stdin
             .take()
@@ -259,7 +311,7 @@ pub fn compile(
     filename: Option<&str>,
     settings: Option<&Value>,
 ) -> Result<CompileResult, String> {
-    with_runtime(|runtime| runtime.compile(source, filename, settings))
+    with_runtime(settings, |runtime| runtime.compile(source, filename, settings))
 }
 /// Apply executable Svelte warning hooks only to warnings retained by the
 /// native ignore and rule filters. Callback requests are intentionally uncached.
@@ -272,23 +324,30 @@ pub fn apply_warning_callbacks(
     if warnings.is_empty() {
         return Ok(vec![]);
     }
-    with_runtime(|runtime| runtime.callbacks(source, filename, settings, warnings))
+    with_runtime(settings, |runtime| {
+        runtime.callbacks(source, filename, settings, warnings)
+    })
 }
 /// Run opt-in type-aware checks through the shared Node process. TypeScript
 /// programs are refreshed per request so unsaved source and imports stay current.
 pub(crate) fn typescript_conditions(request: &Value) -> Result<Value, String> {
     let serialized = serde_json::to_string(request).map_err(|error| error.to_string())?;
-    with_runtime(|runtime| runtime.exchange(&serialized))
+    with_runtime(request.get("settings"), |runtime| {
+        runtime.exchange(&serialized)
+    })
 }
 
-fn with_runtime<T>(action: impl FnOnce(&mut Runtime) -> Result<T, String>) -> Result<T, String> {
+fn with_runtime<T>(
+    settings: Option<&Value>,
+    action: impl FnOnce(&mut Runtime) -> Result<T, String>,
+) -> Result<T, String> {
     static RUNTIME: OnceLock<Mutex<Option<Runtime>>> = OnceLock::new();
     let mut state = RUNTIME
         .get_or_init(|| Mutex::new(None))
         .lock()
         .map_err(|_| "Svelte compiler runtime lock is poisoned")?;
     if state.is_none() {
-        *state = Some(Runtime::start()?);
+        *state = Some(Runtime::start(settings)?);
     }
     let result = action(state.as_mut().unwrap());
     if result.as_ref().is_err_and(|message| {
@@ -329,7 +388,7 @@ mod tests {
             .join("Refresh.svelte")
             .to_string_lossy()
             .into_owned();
-        let mut runtime = Runtime::start().unwrap();
+        let mut runtime = Runtime::start(None).unwrap();
         let source = "<script>await new Promise(() => {});</script>";
         assert_eq!(
             runtime
@@ -392,5 +451,30 @@ mod tests {
         assert_eq!(utf16_byte("a🦀é", 1), 1);
         assert_eq!(utf16_byte("a🦀é", 3), 5);
         assert_eq!(utf16_byte("a🦀é", 4), 7);
+    }
+    #[test]
+    fn js_runtime_config_parsing() {
+        use std::ffi::OsString;
+        assert_eq!(
+            resolve_js_runtime(Some(&serde_json::json!({"js-runtime": "bun"}))).unwrap(),
+            OsString::from("bun")
+        );
+        assert_eq!(
+            resolve_js_runtime(Some(
+                &serde_json::json!({"js-runtime": ["node", {"path": "/bin/sh"}]})
+            ))
+            .unwrap(),
+            OsString::from("/bin/sh")
+        );
+        assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": "deno"}))).is_err());
+        assert!(resolve_js_runtime(Some(
+            &serde_json::json!({"js-runtime": ["bun", {"path": "/definitely/not/here"}]})
+        ))
+        .is_err());
+        assert!(resolve_js_runtime(Some(
+            &serde_json::json!({"js-runtime": [{"path": "/bin/sh"}]})
+        ))
+        .is_err());
+        assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["bun"]}))).is_err());
     }
 }
