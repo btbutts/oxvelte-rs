@@ -2,8 +2,8 @@
 //! ⭐ Recommended
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{Expression, Statement};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Expression, Statement};
 use oxc::span::Span;
 
 pub struct NoSvelteInternal;
@@ -104,8 +104,7 @@ mod tests {
         let source = "<!-- é -->\n<script data-x='>'>import /* comment */ x from 'svelte/internal'; import('svelte/internal/foo'); import('svelte/internality');</script>";
         let allocator = oxc::allocator::Allocator::default();
         let parsed = crate::parser::parse_for_lint(source, &allocator);
-        let diagnostics =
-            crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let diagnostics = crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
         let reads: Vec<_> = diagnostics
             .iter()
             .filter(|d| d.rule_name == "svelte/no-svelte-internal")

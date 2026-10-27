@@ -3,7 +3,7 @@
 
 use crate::ast::{Attribute, DirectiveKind, TemplateNode};
 use crate::linter::rules::directive_expression_key;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct NoDupeOnDirectives;
 
@@ -65,8 +65,7 @@ fn line_number(source: &str, offset: usize) -> usize {
     let mut line = 1;
     let mut previous_cr = false;
     for character in source[..offset].chars() {
-        if matches!(character, '\r' | '\u{2028}' | '\u{2029}') || character == '\n' && !previous_cr
-        {
+        if matches!(character, '\r' | '\u{2028}' | '\u{2029}') || character == '\n' && !previous_cr {
             line += 1;
         }
         previous_cr = character == '\r';
@@ -115,8 +114,7 @@ mod tests {
         assert_eq!(
             diagnostics
                 .iter()
-                .map(|diagnostic| &source
-                    [diagnostic.span.start as usize..diagnostic.span.end as usize])
+                .map(|diagnostic| &source[diagnostic.span.start as usize..diagnostic.span.end as usize])
                 .collect::<Vec<_>>(),
             [
                 "on:click|once={handler}",

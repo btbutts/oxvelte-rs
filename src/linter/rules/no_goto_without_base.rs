@@ -1,6 +1,6 @@
 //! `svelte/no-goto-without-base` — the deprecated base-path check for goto.
 use crate::linter::{LintContext, Rule};
-use oxc::ast::{ast::Expression, AstKind};
+use oxc::ast::{AstKind, ast::Expression};
 use oxc::semantic::{Semantic, SymbolId};
 use oxc::span::{GetSpan, Span};
 pub struct NoGotoWithoutBase;
@@ -15,17 +15,11 @@ impl Rule for NoGotoWithoutBase {
         for (semantic, offset) in [
             (
                 ctx.instance_semantic,
-                ctx.ast
-                    .instance
-                    .as_ref()
-                    .map_or(0, |script| script.content_span.start),
+                ctx.ast.instance.as_ref().map_or(0, |script| script.content_span.start),
             ),
             (
                 ctx.module_semantic,
-                ctx.ast
-                    .module
-                    .as_ref()
-                    .map_or(0, |script| script.content_span.start),
+                ctx.ast.module.as_ref().map_or(0, |script| script.content_span.start),
             ),
         ] {
             let Some(semantic) = semantic else { continue };
@@ -33,50 +27,29 @@ impl Rule for NoGotoWithoutBase {
                 let AstKind::CallExpression(call) = node.kind() else {
                     continue;
                 };
-                if !import_reference(
-                    &call.callee,
-                    semantic,
-                    "$app/navigation",
-                    "goto",
-                    &mut Vec::new(),
-                ) {
+                if !import_reference(&call.callee, semantic, "$app/navigation", "goto", &mut Vec::new()) {
                     continue;
                 }
                 let Some(argument) = call.arguments.first() else {
                     continue;
                 };
-                let safe = argument.as_expression().is_some_and(|expression| {
-                    match expression.get_inner_expression() {
+                let safe = argument
+                    .as_expression()
+                    .is_some_and(|expression| match expression.get_inner_expression() {
                         Expression::StringLiteral(literal) => absolute_uri(literal.value.as_str().unwrap_or("")),
                         Expression::BinaryExpression(binary) => {
                             matches!(&binary.left, Expression::Identifier(_))
-                                && import_reference(
-                                    &binary.left,
-                                    semantic,
-                                    "$app/paths",
-                                    "base",
-                                    &mut Vec::new(),
-                                )
+                                && import_reference(&binary.left, semantic, "$app/paths", "base", &mut Vec::new())
                         }
                         Expression::TemplateLiteral(template) => {
-                            template
-                                .quasis
-                                .first()
-                                .is_some_and(|q| q.value.raw.is_empty())
+                            template.quasis.first().is_some_and(|q| q.value.raw.is_empty())
                                 && template.expressions.first().is_some_and(|e| {
                                     matches!(e, Expression::Identifier(_))
-                                        && import_reference(
-                                            e,
-                                            semantic,
-                                            "$app/paths",
-                                            "base",
-                                            &mut Vec::new(),
-                                        )
+                                        && import_reference(e, semantic, "$app/paths", "base", &mut Vec::new())
                                 })
                         }
                         _ => false,
-                    }
-                });
+                    });
                 if !safe {
                     let span = argument.span();
                     ctx.diagnostic(
@@ -89,11 +62,9 @@ impl Rule for NoGotoWithoutBase {
     }
 }
 fn absolute_uri(value: &str) -> bool {
-    value.find(':').is_some_and(|colon| {
-        value[..colon]
-            .bytes()
-            .all(|b| b == b'+' || b.is_ascii_alphabetic())
-    })
+    value
+        .find(':')
+        .is_some_and(|colon| value[..colon].bytes().all(|b| b == b'+' || b.is_ascii_alphabetic()))
 }
 fn import_reference(
     expression: &Expression<'_>,
@@ -104,11 +75,7 @@ fn import_reference(
 ) -> bool {
     match expression.get_inner_expression() {
         Expression::Identifier(id) => {
-            let Some(symbol) = semantic
-                .scoping()
-                .get_reference(id.reference_id())
-                .symbol_id()
-            else {
+            let Some(symbol) = semantic.scoping().get_reference(id.reference_id()).symbol_id() else {
                 return false;
             };
             if seen.contains(&symbol) {
@@ -116,9 +83,7 @@ fn import_reference(
             }
             seen.push(symbol);
             let declaration = semantic.scoping().symbol_declaration(symbol);
-            for node in
-                std::iter::once(declaration).chain(semantic.nodes().ancestor_ids(declaration))
-            {
+            for node in std::iter::once(declaration).chain(semantic.nodes().ancestor_ids(declaration)) {
                 match semantic.nodes().kind(node) {
                     AstKind::ImportDeclaration(import) => return import.source.value == source && import.specifiers.as_ref().is_some_and(|specifiers| specifiers.iter().any(|specifier| matches!(specifier, oxc::ast::ast::ImportDeclarationSpecifier::ImportSpecifier(s) if s.local.symbol_id.get() == Some(symbol) && s.imported.name() == exported))),
                     AstKind::VariableDeclarator(variable) => return variable.init.as_ref().is_some_and(|init| import_reference(init, semantic, source, exported, seen)),
@@ -131,11 +96,7 @@ fn import_reference(
             let Expression::Identifier(id) = member.object.get_inner_expression() else {
                 return false;
             };
-            let Some(symbol) = semantic
-                .scoping()
-                .get_reference(id.reference_id())
-                .symbol_id()
-            else {
+            let Some(symbol) = semantic.scoping().get_reference(id.reference_id()).symbol_id() else {
                 return false;
             };
             let declaration = semantic.scoping().symbol_declaration(symbol);
@@ -152,7 +113,9 @@ mod tests {
     #[test]
     fn argument_spans_use_parsed_script_offsets() {
         for attributes in ["data-note=\">\"", "module data-note=\">\""] {
-            let source = format!("<!-- 😀 -->\n<script {attributes}>\nimport {{ goto }} from '$app/navigation';\ngoto('/route');\n</script>");
+            let source = format!(
+                "<!-- 😀 -->\n<script {attributes}>\nimport {{ goto }} from '$app/navigation';\ngoto('/route');\n</script>"
+            );
             let allocator = Allocator::default();
             let parsed = parser::parse(&source, &allocator);
             assert!(parsed.errors.is_empty());
@@ -193,12 +156,7 @@ navigate(`${'/prefix'}${base}`);
             .collect();
         assert_eq!(
             findings,
-            [
-                "dynamic",
-                "...paths",
-                "base + '/invalid'",
-                "`${'/prefix'}${base}`"
-            ]
+            ["dynamic", "...paths", "base + '/invalid'", "`${'/prefix'}${base}`"]
         );
     }
 }

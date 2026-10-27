@@ -9,12 +9,12 @@
 //!
 //! Legacy-only (vendor condition: `{svelteVersions: ['5'], runes: [false, 'undetermined']}`
 //! + `{svelteVersions: ['3/4']}`). When the file is in Svelte 5 runes mode, `$: ...`
-//! semantics change (the statement re-runs based on explicit dependencies, not mutation),
-//! so the microtask-loop heuristic no longer applies. Gated via `ctx.is_runes`.
+//!   semantics change (the statement re-runs based on explicit dependencies, not mutation),
+//!   so the microtask-loop heuristic no longer applies. Gated via `ctx.is_runes`.
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::*;
 use oxc::ast::AstKind;
+use oxc::ast::ast::*;
 use oxc::ast_visit::Visit;
 use oxc::semantic::{NodeId, Semantic, SymbolId};
 use oxc::span::{GetSpan, Span};
@@ -273,11 +273,7 @@ fn collect_tracked<'a>(
         if is_call_callee {
             continue;
         }
-        if scoping
-            .get_reference(id.reference_id())
-            .symbol_id()
-            .is_some()
-        {
+        if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
             continue;
         }
         let name = id.name.as_str();
@@ -292,9 +288,7 @@ fn collect_tracked<'a>(
         }
         if name.starts_with('$') && name.len() > 1 {
             let base = &name[1..];
-            if scoping.find_binding(root_scope, base.into()).is_some()
-                || module_top_names.contains(base)
-            {
+            if scoping.find_binding(root_scope, base.into()).is_some() || module_top_names.contains(base) {
                 tracked_names_module.insert(name.to_string());
             }
         }
@@ -319,16 +313,9 @@ fn check_reactive_statement<'a>(
     module_top_names: &FxHashSet<String>,
     reactive_declared_names: &FxHashSet<String>,
 ) {
-    let (
-        tracked_symbols,
-        tracked_names_module,
-        tracked_names_reactive_all,
-        tracked_names_reactive_read,
-    ) = collect_tracked(semantic, ls.span, module_top_names, reactive_declared_names);
-    if tracked_symbols.is_empty()
-        && tracked_names_module.is_empty()
-        && tracked_names_reactive_all.is_empty()
-    {
+    let (tracked_symbols, tracked_names_module, tracked_names_reactive_all, tracked_names_reactive_read) =
+        collect_tracked(semantic, ls.span, module_top_names, reactive_declared_names);
+    if tracked_symbols.is_empty() && tracked_names_module.is_empty() && tracked_names_reactive_all.is_empty() {
         return;
     }
 
@@ -454,7 +441,7 @@ impl<'a, 'ctx> MicrotaskVisitor<'a, 'ctx> {
     /// Is the current node positioned such that execution reaches it only after
     /// a microtask boundary relative to the reactive-statement start?
     fn is_microtask_different(&self, _span: Span) -> bool {
-        !self.is_same_microtask || self.frames.last().map_or(false, |f| f.await_seen)
+        !self.is_same_microtask || self.frames.last().is_some_and(|f| f.await_seen)
     }
 
     /// Does `kind` qualify as a "different-microtask boundary marker"? Matches
@@ -464,7 +451,7 @@ impl<'a, 'ctx> MicrotaskVisitor<'a, 'ctx> {
     ///   3. The node's span equals a LHS of `x = await y`.
     fn is_marker_node(&self, kind: AstKind<'a>) -> bool {
         let span = kind.span();
-        if self.promise_cb_spans.iter().any(|s| *s == span) {
+        if self.promise_cb_spans.contains(&span) {
             return true;
         }
         if self
@@ -474,7 +461,7 @@ impl<'a, 'ctx> MicrotaskVisitor<'a, 'ctx> {
         {
             return true;
         }
-        if self.await_lhs_spans.iter().any(|s| *s == span) {
+        if self.await_lhs_spans.contains(&span) {
             return true;
         }
         false
@@ -595,12 +582,10 @@ impl<'a, 'ctx> MicrotaskVisitor<'a, 'ctx> {
                             node_id: ancestor_id,
                             body: CallableBodyKind::Function(&arr.body),
                         }),
-                        Expression::FunctionExpression(f) => {
-                            f.body.as_ref().map(|b| CallableBody {
-                                node_id: ancestor_id,
-                                body: CallableBodyKind::Block(b),
-                            })
-                        }
+                        Expression::FunctionExpression(f) => f.body.as_ref().map(|b| CallableBody {
+                            node_id: ancestor_id,
+                            body: CallableBodyKind::Block(b),
+                        }),
                         _ => None,
                     };
                 }
@@ -610,11 +595,7 @@ impl<'a, 'ctx> MicrotaskVisitor<'a, 'ctx> {
         None
     }
 
-    fn recurse_into_function(
-        &mut self,
-        callee_id: &'a IdentifierReference<'a>,
-        body: CallableBody<'a>,
-    ) {
+    fn recurse_into_function(&mut self, callee_id: &'a IdentifierReference<'a>, body: CallableBody<'a>) {
         if !self.visited_function_bodies.insert(body.node_id) {
             return;
         }

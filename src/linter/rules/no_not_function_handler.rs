@@ -2,9 +2,9 @@
 //! ⭐ Recommended
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
-use oxc::ast::ast::{Expression, VariableDeclarationKind};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Expression, VariableDeclarationKind};
 use oxc::span::{GetSpan, SourceType, Span};
 
 pub struct NoNotFunctionHandler;
@@ -45,43 +45,39 @@ impl Rule for NoNotFunctionHandler {
                     }
                     // `onclick={…}` Svelte-5 / HTML on-attribute. Restricted to
                     // names matching the curated `is_event_name` test.
-                    Attribute::NormalAttribute { name, value, .. } if is_event_name(name) => {
-                        match value {
-                            AttributeValue::Expression(_) => {
-                                let Some(expr) = el.attribute_expression_ast(idx) else {
+                    Attribute::NormalAttribute { name, value, .. } if is_event_name(name) => match value {
+                        AttributeValue::Expression(_) => {
+                            let Some(expr) = el.attribute_expression_ast(idx) else {
+                                continue;
+                            };
+                            check_handler(
+                                expr,
+                                ctx,
+                                &mut findings,
+                                el.attribute_meta[idx]
+                                    .expression_span
+                                    .unwrap_or_else(|| attr_value_span(attr)),
+                            );
+                        }
+                        AttributeValue::Concat(parts) => {
+                            for (part_idx, part) in parts.iter().enumerate() {
+                                if !matches!(part, AttributeValuePart::Expression(_)) {
+                                    continue;
+                                }
+                                let Some(expr) = el.attribute_part_expression_ast(idx, part_idx) else {
                                     continue;
                                 };
-                                check_handler(
-                                    expr,
-                                    ctx,
-                                    &mut findings,
-                                    el.attribute_meta[idx]
-                                        .expression_span
-                                        .unwrap_or_else(|| attr_value_span(attr)),
-                                );
+                                let span = el
+                                    .attribute_meta
+                                    .get(idx)
+                                    .and_then(|m| m.parts.get(part_idx))
+                                    .and_then(|p| p.expression_span)
+                                    .unwrap_or_else(|| attr_value_span(attr));
+                                check_handler(expr, ctx, &mut findings, span);
                             }
-                            AttributeValue::Concat(parts) => {
-                                for (part_idx, part) in parts.iter().enumerate() {
-                                    if !matches!(part, AttributeValuePart::Expression(_)) {
-                                        continue;
-                                    }
-                                    let Some(expr) =
-                                        el.attribute_part_expression_ast(idx, part_idx)
-                                    else {
-                                        continue;
-                                    };
-                                    let span = el
-                                        .attribute_meta
-                                        .get(idx)
-                                        .and_then(|m| m.parts.get(part_idx))
-                                        .and_then(|p| p.expression_span)
-                                        .unwrap_or_else(|| attr_value_span(attr));
-                                    check_handler(expr, ctx, &mut findings, span);
-                                }
-                            }
-                            _ => {}
                         }
-                    }
+                        _ => {}
+                    },
                     _ => {}
                 }
             }
@@ -223,12 +219,7 @@ fn attr_value_span(attr: &Attribute) -> Span {
     }
 }
 
-fn check_handler<'a>(
-    expr: &'a Expression<'a>,
-    ctx: &LintContext<'a>,
-    findings: &mut Vec<(String, Span)>,
-    span: Span,
-) {
+fn check_handler<'a>(expr: &'a Expression<'a>, ctx: &LintContext<'a>, findings: &mut Vec<(String, Span)>, span: Span) {
     let raw = &ctx.source[span.start as usize..span.end as usize];
     let offset = span.start + (raw.len() - raw.trim_start().len()) as u32;
     let local = expr.span();
@@ -285,10 +276,7 @@ pub(super) fn resolve_handler_expression<'a>(
     else {
         return expr;
     };
-    let Some(mut sid) = sem
-        .scoping()
-        .find_binding(sem.scoping().root_scope_id(), id.name)
-    else {
+    let Some(mut sid) = sem.scoping().find_binding(sem.scoping().root_scope_id(), id.name) else {
         return expr;
     };
     let mut seen = Vec::new();
@@ -327,7 +315,8 @@ fn binds(pattern: &str, name: &str) -> bool {
     let allocator = oxc::allocator::Allocator::default();
     let source = format!("({pattern}) => {{}}");
     let parsed = oxc::parser::Parser::new(&allocator, &source, SourceType::ts()).parse();
-    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+    let semantic = oxc::semantic::SemanticBuilder::new()
+        .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     let found = semantic
@@ -376,8 +365,7 @@ fn template_shadows(nodes: &[TemplateNode<'_>], span: Span, name: &str) -> bool 
             }) || template_shadows(&el.children, span, name)
         }
         TemplateNode::EachBlock(block) => {
-            (contains(&block.body.nodes)
-                && (binds(&block.context, name) || block.index.as_deref() == Some(name)))
+            (contains(&block.body.nodes) && (binds(&block.context, name) || block.index.as_deref() == Some(name)))
                 || template_shadows(&block.body.nodes, span, name)
                 || block
                     .fallback
@@ -393,8 +381,7 @@ fn template_shadows(nodes: &[TemplateNode<'_>], span: Span, name: &str) -> bool 
         .any(|(fragment, binding)| {
             fragment.is_some_and(|f| {
                 contains(&f.nodes)
-                    && (binding.is_some_and(|p| binds(p, name))
-                        || template_shadows(&f.nodes, span, name))
+                    && (binding.is_some_and(|p| binds(p, name)) || template_shadows(&f.nodes, span, name))
             })
         }),
         TemplateNode::SnippetBlock(block) => {
@@ -403,9 +390,10 @@ fn template_shadows(nodes: &[TemplateNode<'_>], span: Span, name: &str) -> bool 
         }
         TemplateNode::IfBlock(block) => {
             template_shadows(&block.consequent.nodes, span, name)
-                || block.alternate.as_ref().is_some_and(|node| {
-                    template_shadows(std::slice::from_ref(node.as_ref()), span, name)
-                })
+                || block
+                    .alternate
+                    .as_ref()
+                    .is_some_and(|node| template_shadows(std::slice::from_ref(node.as_ref()), span, name))
         }
         TemplateNode::KeyBlock(block) => template_shadows(&block.body.nodes, span, name),
         _ => false,
@@ -459,12 +447,14 @@ mod tests {
     }
     #[test]
     fn aliases_resolve_symbols_and_cycles_stop_without_false_findings() {
-        assert_eq!(lint("<script>const value = []; const handler = value;</script><button on:click={handler}/>").len(), 1);
-        assert!(lint("<script>const first = second; const second = first;</script><button on:click={first}/>").is_empty());
-        assert!(lint(
-            "<script>const value = []; let handler = value;</script><button on:click={handler}/>"
-        )
-        .is_empty());
+        assert_eq!(
+            lint("<script>const value = []; const handler = value;</script><button on:click={handler}/>").len(),
+            1
+        );
+        assert!(
+            lint("<script>const first = second; const second = first;</script><button on:click={first}/>").is_empty()
+        );
+        assert!(lint("<script>const value = []; let handler = value;</script><button on:click={handler}/>").is_empty());
         assert_eq!(
             lint("<script module>const handler = [];</script><button on:click={handler}/>").len(),
             1

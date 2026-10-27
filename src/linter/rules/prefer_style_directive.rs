@@ -1,6 +1,6 @@
 //! Prefer style directives for convertible CSS declarations.
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::{
     allocator::Allocator,
     ast::ast::Expression,
@@ -43,11 +43,7 @@ impl Rule for PreferStyleDirective {
                 let raw = &ctx.source[span.start as usize..span.end as usize];
                 let Some(eq) = raw.find('=') else { continue };
                 let mut begin = eq + 1;
-                while raw
-                    .as_bytes()
-                    .get(begin)
-                    .is_some_and(u8::is_ascii_whitespace)
-                {
+                while raw.as_bytes().get(begin).is_some_and(u8::is_ascii_whitespace) {
                     begin += 1;
                 }
                 let quoted = matches!(raw.as_bytes().get(begin), Some(b'\'' | b'"'));
@@ -59,9 +55,7 @@ impl Rule for PreferStyleDirective {
                 let mut interpolations = Vec::new();
                 match value {
                     AttributeValue::Expression(expr) => {
-                        if let (Some(mustache), Some(expression)) =
-                            (meta.mustache_span, meta.expression_span)
-                        {
+                        if let (Some(mustache), Some(expression)) = (meta.mustache_span, meta.expression_span) {
                             interpolations.push((
                                 (mustache.start - span.start) as usize,
                                 (mustache.end - span.start) as usize,
@@ -72,11 +66,8 @@ impl Rule for PreferStyleDirective {
                     }
                     AttributeValue::Concat(parts) => {
                         for (part, metadata) in parts.iter().zip(&meta.parts) {
-                            if let (
-                                AttributeValuePart::Expression(expr),
-                                Some(mustache),
-                                Some(expression),
-                            ) = (part, metadata.mustache_span, metadata.expression_span)
+                            if let (AttributeValuePart::Expression(expr), Some(mustache), Some(expression)) =
+                                (part, metadata.mustache_span, metadata.expression_span)
                             {
                                 interpolations.push((
                                     (mustache.start - span.start) as usize,
@@ -107,9 +98,7 @@ impl Rule for PreferStyleDirective {
                         i += close + 4;
                         continue;
                     }
-                    if let Some((_, close, expr_start, expr)) =
-                        interpolations.iter().find(|p| p.0 == i)
-                    {
+                    if let Some((_, close, expr_start, expr)) = interpolations.iter().find(|p| p.0 == i) {
                         if raw[start..i].trim().is_empty() {
                             let (directive, diagnostic) = inline(expr, *expr_start);
                             items.push(Item {
@@ -141,8 +130,7 @@ impl Rule for PreferStyleDirective {
                             b'(' => parens += 1,
                             b')' => parens -= 1,
                             b';' if parens == 0 => {
-                                if let Some(item) = declaration(raw, start, i + 1, &interpolations)
-                                {
+                                if let Some(item) = declaration(raw, start, i + 1, &interpolations) {
                                     items.push(item)
                                 }
                                 start = i + 1;
@@ -159,13 +147,12 @@ impl Rule for PreferStyleDirective {
                     let Some(directive) = &item.directive else {
                         continue;
                     };
-                    let prop = directive
-                        .strip_prefix("style:")
-                        .unwrap()
-                        .split('=')
-                        .next()
-                        .unwrap();
-                    if el.attributes.iter().any(|a| matches!(a,Attribute::Directive {kind:DirectiveKind::StyleDirective,name,..} if name==prop)) {continue}
+                    let prop = directive.strip_prefix("style:").unwrap().split('=').next().unwrap();
+                    if el.attributes.iter().any(
+                        |a| matches!(a,Attribute::Directive {kind:DirectiveKind::StyleDirective,name,..} if name==prop),
+                    ) {
+                        continue;
+                    }
                     let (fix_span, replacement) = if items.len() == 1 {
                         (*span, directive.clone())
                     } else {
@@ -202,12 +189,7 @@ impl Rule for PreferStyleDirective {
         });
     }
 }
-fn declaration(
-    raw: &str,
-    start: usize,
-    end: usize,
-    interpolations: &[(usize, usize, usize, &str)],
-) -> Option<Item> {
+fn declaration(raw: &str, start: usize, end: usize, interpolations: &[(usize, usize, usize, &str)]) -> Option<Item> {
     let text = &raw[start..end];
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -217,32 +199,24 @@ fn declaration(
     let end = start + trimmed.len();
     let directive = (|| {
         let colon = raw[start..end].find(':')? + start;
-        if interpolations
-            .iter()
-            .any(|(s, e, ..)| *s < colon && *e > start)
-        {
+        if interpolations.iter().any(|(s, e, ..)| *s < colon && *e > start) {
             return None;
         }
         let prop = raw[start..colon].trim();
-        if prop.is_empty()
-            || !prop
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-        {
+        if prop.is_empty() || !prop.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
             return None;
         }
         let value = raw[colon + 1..end].trim_end_matches(';').trim();
         if value.is_empty() || value.to_ascii_lowercase().contains("!important") {
             return None;
         }
-        let value_start =
-            colon + 1 + (raw[colon + 1..end].len() - raw[colon + 1..end].trim_start().len());
+        let value_start = colon + 1 + (raw[colon + 1..end].len() - raw[colon + 1..end].trim_start().len());
         let mut escaped = String::new();
         for (offset, c) in value.char_indices() {
             if c == '"'
-                && !interpolations.iter().any(|(start, end, ..)| {
-                    value_start + offset >= *start && value_start + offset < *end
-                })
+                && !interpolations
+                    .iter()
+                    .any(|(start, end, ..)| value_start + offset >= *start && value_start + offset < *end)
             {
                 escaped.push_str("&quot;")
             } else {
@@ -267,9 +241,7 @@ fn inline(expr: &str, start: usize) -> (Option<String>, (usize, usize)) {
         return (None, (start, start + expr.len()));
     };
     let diagnostic = (start + c.span.start as usize, start + c.span.end as usize);
-    let (Expression::StringLiteral(t), Expression::StringLiteral(f)) =
-        (&c.consequent, &c.alternate)
-    else {
+    let (Expression::StringLiteral(t), Expression::StringLiteral(f)) = (&c.consequent, &c.alternate) else {
         return (None, diagnostic);
     };
     if !t.value.is_empty() && !f.value.is_empty() {
@@ -345,10 +317,7 @@ mod tests {
             .into_iter()
             .find(|d| d.rule_name == "svelte/prefer-style-directive")
             .unwrap();
-        assert_eq!(
-            d.fix.unwrap().replacement,
-            "style:font-family=\"&quot;Arial&quot;\""
-        );
+        assert_eq!(d.fix.unwrap().replacement, "style:font-family=\"&quot;Arial&quot;\"");
         let source = r#"<div style={ok ? 'content: "a\'b"' : ''} />"#;
         let parsed = parser::parse_for_lint(source, &allocator);
         let d = Linter::all()
@@ -364,13 +333,11 @@ mod tests {
             fix.replacement,
             &source[fix.span.end as usize..]
         );
-        assert!(parser::parse_for_lint(&output, &allocator)
-            .errors
-            .is_empty());
+        assert!(parser::parse_for_lint(&output, &allocator).errors.is_empty());
     }
     #[test]
     fn style_ranges_preserve_css_functions_unicode_and_unsupported_values() {
-        let source="<!-- 😀 --><div style=\"background: url('x;y'); color: red!important; width: {size}px\" style:width={width} />";
+        let source = "<!-- 😀 --><div style=\"background: url('x;y'); color: red!important; width: {size}px\" style:width={width} />";
         let allocator = Allocator::default();
         let parsed = parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
@@ -391,8 +358,7 @@ mod tests {
     }
     #[test]
     fn unicode_css_and_braces_in_interpolations_keep_source_boundaries() {
-        let source =
-            "<!-- 😀 --><div style=\"content: 'é'; color: {color /* } */}; width: 2px\" />";
+        let source = "<!-- 😀 --><div style=\"content: 'é'; color: {color /* } */}; width: 2px\" />";
         let allocator = Allocator::default();
         let parsed = parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
@@ -409,11 +375,10 @@ mod tests {
             .iter()
             .all(|d| source.is_char_boundary(d.span.start as usize)
                 && source.is_char_boundary(d.span.end as usize)));
-        assert!(diagnostics.iter().any(|d| d
-            .fix
-            .as_ref()
-            .unwrap()
-            .replacement
-            .contains("{color /* } */}")));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.fix.as_ref().unwrap().replacement.contains("{color /* } */}"))
+        );
     }
 }

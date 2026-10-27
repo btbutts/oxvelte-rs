@@ -127,14 +127,11 @@ impl<'a> Iterator for SvelteScanner<'a> {
             let self_closing = attrs.trim_end().ends_with('/');
             let name = &self.source[name_start..name_end];
 
-            if !self_closing
-                && (name.eq_ignore_ascii_case("script") || name.eq_ignore_ascii_case("style"))
-            {
+            if !self_closing && (name.eq_ignore_ascii_case("script") || name.eq_ignore_ascii_case("style")) {
                 let content_start = (tag_end + 1).min(self.source.len());
-                let (content_end, block_end, closed) =
-                    find_close_tag(self.source, name, content_start)
-                        .map(|(content_end, block_end)| (content_end, block_end, true))
-                        .unwrap_or((self.source.len(), self.source.len(), false));
+                let (content_end, block_end, closed) = find_close_tag(self.source, name, content_start)
+                    .map(|(content_end, block_end)| (content_end, block_end, true))
+                    .unwrap_or((self.source.len(), self.source.len(), false));
                 self.pos = block_end;
                 return Some(SvelteToken {
                     kind: TokenKind::RawRegion {
@@ -175,14 +172,8 @@ impl<'a> Iterator for SvelteScanner<'a> {
                 let expression = &self.source[expression_start..expression_end];
                 self.pos = (expression_end + 1).min(self.source.len());
                 match self.source.as_bytes()[start + 1] {
-                    b'#' | b'@' => TokenKind::BlockStart {
-                        keyword,
-                        expression,
-                    },
-                    b':' => TokenKind::BlockContinuation {
-                        keyword,
-                        expression,
-                    },
+                    b'#' | b'@' => TokenKind::BlockStart { keyword, expression },
+                    b':' => TokenKind::BlockContinuation { keyword, expression },
                     b'/' => TokenKind::BlockEnd { keyword },
                     _ => unreachable!(),
                 }
@@ -275,9 +266,7 @@ pub(crate) fn find_expression_end(source: &str, mut pos: usize) -> usize {
             b'/' if pos + 1 < source.len() => match bytes[pos + 1] {
                 b'/' => pos = skip_line_comment(source, pos),
                 b'*' => pos = skip_block_comment(source, pos),
-                _ if slash_starts_regex(source, start, pos) => {
-                    pos = skip_regex_literal(source, pos)
-                }
+                _ if slash_starts_regex(source, start, pos) => pos = skip_regex_literal(source, pos),
                 _ => pos += 1,
             },
             _ => pos += utf8_char_len(bytes[pos]),
@@ -318,10 +307,7 @@ pub(crate) fn find_top_level_spaced_word(source: &str, word: &str) -> Option<usi
             _ => {}
         }
 
-        if depth == 0
-            && source[pos..].starts_with(word)
-            && has_spaced_word_boundary(source, pos, word.len())
-        {
+        if depth == 0 && source[pos..].starts_with(word) && has_spaced_word_boundary(source, pos, word.len()) {
             return Some(pos);
         }
 
@@ -480,23 +466,16 @@ pub(crate) fn starts_with_ascii_case_insensitive(haystack: &str, needle: &str) -
 
 pub(crate) fn is_html_void_element(name: &str) -> bool {
     const VOID_ELEMENTS: &[&str] = &[
-        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param",
-        "source", "track", "wbr",
+        "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr",
     ];
 
-    VOID_ELEMENTS
-        .iter()
-        .any(|void| name.eq_ignore_ascii_case(void))
+    VOID_ELEMENTS.iter().any(|void| name.eq_ignore_ascii_case(void))
 }
 
 fn has_spaced_word_boundary(source: &str, start: usize, word_len: usize) -> bool {
     let before_ok = start > 0 && source.as_bytes()[start - 1].is_ascii_whitespace();
     let after = start + word_len;
-    let after_ok = after == source.len()
-        || source
-            .as_bytes()
-            .get(after)
-            .is_some_and(|ch| ch.is_ascii_whitespace());
+    let after_ok = after == source.len() || source.as_bytes().get(after).is_some_and(|ch| ch.is_ascii_whitespace());
     before_ok && after_ok
 }
 
@@ -508,11 +487,7 @@ fn skip_string_literal(source: &str, mut pos: usize, quote: u8) -> usize {
             pos = (pos + 2).min(source.len());
             continue;
         }
-        if quote == b'`'
-            && ch == b'$'
-            && pos + 1 < source.len()
-            && source.as_bytes()[pos + 1] == b'{'
-        {
+        if quote == b'`' && ch == b'$' && pos + 1 < source.len() && source.as_bytes()[pos + 1] == b'{' {
             let end = find_expression_end(source, pos + 2);
             pos = (end + 1).min(source.len());
             continue;

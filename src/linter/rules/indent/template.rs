@@ -92,17 +92,11 @@ pub(super) fn collect(ctx: &LintContext<'_>, layout: &mut Layout<'_>) {
         markup(layout, tag.span);
     }
     for script in ctx.ast.instance.iter().chain(ctx.ast.module.iter()) {
-        markup(
-            layout,
-            Span::new(script.span.start, script.content_span.start),
-        );
+        markup(layout, Span::new(script.span.start, script.content_span.start));
         markup(layout, Span::new(script.content_span.end, script.span.end));
     }
     if let Some(style) = &ctx.ast.css {
-        markup(
-            layout,
-            Span::new(style.span.start, style.content_span.start),
-        );
+        markup(layout, Span::new(style.span.start, style.content_span.start));
         text_tokens(layout, style.content_span);
         markup(layout, Span::new(style.content_span.end, style.span.end));
     }
@@ -161,10 +155,7 @@ fn collect_nodes(nodes: &[TemplateNode<'_>], layout: &mut Layout<'_>) {
             }
             TemplateNode::EachBlock(n) => {
                 region(layout, n.context_span, RegionKind::Binding);
-                for s in [Some(n.expression_span), n.index_span]
-                    .into_iter()
-                    .flatten()
-                {
+                for s in [Some(n.expression_span), n.index_span].into_iter().flatten() {
                     region(layout, s, RegionKind::Expression);
                 }
                 if let Some(key) = n.key_span {
@@ -189,10 +180,7 @@ fn collect_nodes(nodes: &[TemplateNode<'_>], layout: &mut Layout<'_>) {
             }
             TemplateNode::AwaitBlock(n) => {
                 region(layout, n.expression_span, RegionKind::Expression);
-                for s in [n.then_binding_span, n.catch_binding_span]
-                    .into_iter()
-                    .flatten()
-                {
+                for s in [n.then_binding_span, n.catch_binding_span].into_iter().flatten() {
                     region(layout, s, RegionKind::Binding);
                 }
                 for f in [&n.pending, &n.then, &n.catch].into_iter().flatten() {
@@ -220,13 +208,7 @@ pub(super) fn apply(ctx: &LintContext<'_>, layout: &mut Layout<'_>) {
         .nodes
         .iter()
         .map(span)
-        .chain(
-            ctx.ast
-                .instance
-                .iter()
-                .chain(ctx.ast.module.iter())
-                .map(|s| s.span),
-        )
+        .chain(ctx.ast.instance.iter().chain(ctx.ast.module.iter()).map(|s| s.span))
         .chain(ctx.ast.css.iter().map(|s| s.span))
         .collect();
     for s in roots {
@@ -280,13 +262,7 @@ fn apply_start_tag(layout: &mut Layout<'_>, s: Span, attrs: &[Span]) {
 }
 fn apply_end_tag(layout: &mut Layout<'_>, s: Span) {
     if let (Some(open), Some(close)) = (layout.first(s), layout.last(s)) {
-        layout.list(
-            &[],
-            layout.tokens[open].span,
-            Some(layout.tokens[close].span),
-            1,
-            false,
-        );
+        layout.list(&[], layout.tokens[open].span, Some(layout.tokens[close].span), 1, false);
     }
 }
 
@@ -320,7 +296,12 @@ fn apply_nodes(nodes: &[TemplateNode<'_>], layout: &mut Layout<'_>) {
                             layout.set(t, 0, open);
                         }
                         if !matches!(n.name.as_str(), "pre" | "textarea" | "template" | "style") {
-                            let ns: Vec<_> = n.children.iter().filter(|n| !matches!(n, TemplateNode::Text(t) if t.data.trim().is_empty())).map(span).collect();
+                            let ns: Vec<_> = n
+                                .children
+                                .iter()
+                                .filter(|n| !matches!(n, TemplateNode::Text(t) if t.data.trim().is_empty()))
+                                .map(span)
+                                .collect();
                             layout.list(&ns, start, Some(end), 1, false);
                         }
                     }
@@ -430,13 +411,9 @@ fn apply_nodes(nodes: &[TemplateNode<'_>], layout: &mut Layout<'_>) {
                                 .iter()
                                 .enumerate()
                                 .find(|(_, t)| {
-                                    t.span.start
-                                        >= n.params_span
-                                            .map_or(layout.tokens[left].span.end, |s| s.end)
+                                    t.span.start >= n.params_span.map_or(layout.tokens[left].span.end, |s| s.end)
                                         && t.span.end <= header.end
-                                        && &layout.source
-                                            [t.span.start as usize..t.span.end as usize]
-                                            == ")"
+                                        && &layout.source[t.span.start as usize..t.span.end as usize] == ")"
                                 })
                                 .map(|(i, _)| i);
                             if let Some(right) = right {
@@ -515,13 +492,7 @@ fn apply_attributes(n: &crate::ast::Element<'_>, layout: &mut Layout<'_>) {
         };
         if let (Some(open), Some(close)) = (layout.first(s), layout.last(s)) {
             if layout.text(open) == "{" {
-                layout.list(
-                    &[],
-                    layout.tokens[open].span,
-                    Some(layout.tokens[close].span),
-                    1,
-                    false,
-                );
+                layout.list(&[], layout.tokens[open].span, Some(layout.tokens[close].span), 1, false);
                 continue;
             }
             if let Some(eq_span) = meta.equals_span {
@@ -645,10 +616,7 @@ fn branch(layout: &mut Layout<'_>, f: &Fragment<'_>, parent: usize, binding: Opt
         .first(f.span)
         .filter(|&i| layout.tokens[i].span.start == f.span.start && layout.text(i) == "{");
     let open = direct.or_else(|| {
-        let last = layout
-            .tokens
-            .iter()
-            .rposition(|t| t.span.end <= f.span.start)?;
+        let last = layout.tokens.iter().rposition(|t| t.span.end <= f.span.start)?;
         let mut depth = 0;
         for cursor in (0..=last).rev() {
             match layout.text(cursor) {
@@ -731,18 +699,11 @@ mod tests {
         let mut ctx = LintContext::new(&parsed.ast, source);
         ctx.file_path = Some("Component.svelte".into());
         super::super::Indent.run(&mut ctx);
-        let mut fixes: Vec<_> = ctx
-            .into_diagnostics()
-            .into_iter()
-            .filter_map(|d| d.fix)
-            .collect();
+        let mut fixes: Vec<_> = ctx.into_diagnostics().into_iter().filter_map(|d| d.fix).collect();
         fixes.sort_by_key(|f| f.span.start);
         let mut result = source.to_owned();
         for fix in fixes.into_iter().rev() {
-            result.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            result.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         }
         assert_eq!(result, expected);
     }

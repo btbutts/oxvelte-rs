@@ -69,22 +69,11 @@ impl Rule for MaxLinesPerBlock {
             .as_ref()
             .and_then(|v| v.as_array())
             .and_then(|a| a.first());
-        let get_bool = |k| {
-            opts.and_then(|o| o.get(k))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        };
-        let get_limit = |k| {
-            opts.and_then(|o| o.get(k))
-                .and_then(|v| v.as_u64())
-                .map(|v| v as usize)
-        };
+        let get_bool = |k| opts.and_then(|o| o.get(k)).and_then(|v| v.as_bool()).unwrap_or(false);
+        let get_limit = |k| opts.and_then(|o| o.get(k)).and_then(|v| v.as_u64()).map(|v| v as usize);
         let (skip_blank, skip_comments) = (get_bool("skipBlankLines"), get_bool("skipComments"));
-        let (script_limit, style_limit, template_limit) = (
-            get_limit("script"),
-            get_limit("style"),
-            get_limit("template"),
-        );
+        let (script_limit, style_limit, template_limit) =
+            (get_limit("script"), get_limit("style"), get_limit("template"));
 
         let blocks: Vec<(&str, oxc::span::Span, Option<usize>, &str)> = [
             ctx.ast
@@ -108,9 +97,7 @@ impl Rule for MaxLinesPerBlock {
                 let lc = count_lines(content, skip_blank, skip_comments);
                 if lc > max {
                     ctx.diagnostic(
-                        format!(
-                            "<{tag}> block has too many lines ({lc}). Maximum allowed is {max}."
-                        ),
+                        format!("<{tag}> block has too many lines ({lc}). Maximum allowed is {max}."),
                         span,
                     );
                 }
@@ -120,9 +107,16 @@ impl Rule for MaxLinesPerBlock {
             let tc = extract_template_content(ctx.source, ctx);
             let lc = count_template_lines(&tc, skip_blank, skip_comments);
             if lc > max {
-                let Some(span) = ctx.ast.html.nodes.iter()
+                let Some(span) = ctx
+                    .ast
+                    .html
+                    .nodes
+                    .iter()
                     .find(|node| !matches!(node, crate::ast::TemplateNode::Element(el) if el.name == "svelte:options"))
-                    .map(template_span) else { return };
+                    .map(template_span)
+                else {
+                    return;
+                };
 
                 ctx.diagnostic(
                     format!("template block has too many lines ({lc}). Maximum allowed is {max}."),
@@ -153,12 +147,7 @@ fn template_span(node: &crate::ast::TemplateNode<'_>) -> Span {
 }
 
 fn extract_template_content(source: &str, ctx: &LintContext) -> String {
-    let line_at = |offset: u32| {
-        source[..offset as usize]
-            .bytes()
-            .filter(|b| *b == b'\n')
-            .count()
-    };
+    let line_at = |offset: u32| source[..offset as usize].bytes().filter(|b| *b == b'\n').count();
     let mut excluded = std::collections::HashSet::new();
     let mut exclude = |span: Span| {
         for line in line_at(span.start)..=line_at(span.end) {
@@ -248,23 +237,23 @@ mod tests {
         let source = "<style>p { color: red; }</style>\n<p>first</p>\n<script>let value = 1;</script>\n<script module>const shared = 1;</script>\n<p>last</p>\n";
         let diagnostics = lint(source, serde_json::json!([{ "template": 1 }]));
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(
-            diagnostics[0].span.start as usize,
-            source.find("</style>").unwrap() + 8
-        );
+        assert_eq!(diagnostics[0].span.start as usize, source.find("</style>").unwrap() + 8);
     }
 
     #[test]
     fn parity_regression_preserves_source_boundaries() {
-        let source =
-            "<script>\n\nlet value = 1;\n\n</script>\n<svelte:options runes={true} />\n<p>😀</p>\n";
+        let source = "<script>\n\nlet value = 1;\n\n</script>\n<svelte:options runes={true} />\n<p>😀</p>\n";
         let diagnostics = lint(source, serde_json::json!([{"script":1,"template":1}]));
         assert_eq!(diagnostics.len(), 2);
-        assert!(diagnostics
-            .iter()
-            .any(|d| d.message.contains("<script> block has too many lines (3)")));
-        assert!(diagnostics
-            .iter()
-            .any(|d| d.message.contains("template block has too many lines (2)")));
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("<script> block has too many lines (3)"))
+        );
+        assert!(
+            diagnostics
+                .iter()
+                .any(|d| d.message.contains("template block has too many lines (2)"))
+        );
     }
 }

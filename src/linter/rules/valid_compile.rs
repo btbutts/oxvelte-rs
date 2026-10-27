@@ -8,12 +8,7 @@ impl Rule for ValidCompile {
         "svelte/valid-compile"
     }
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
-        if ctx.is_svelte_module
-            || !ctx
-                .file_path
-                .as_ref()
-                .is_some_and(|p| p.ends_with(".svelte"))
-        {
+        if ctx.is_svelte_module || !ctx.file_path.as_ref().is_some_and(|p| p.ends_with(".svelte")) {
             return;
         }
         let ignore_warnings = ctx
@@ -29,17 +24,10 @@ impl Rule for ValidCompile {
             .ast
             .css
             .as_ref()
-            .filter(|s| {
-                has_global_attribute(
-                    &ctx.source[s.attrs_span.start as usize..s.attrs_span.end as usize],
-                )
-            })
+            .filter(|s| has_global_attribute(&ctx.source[s.attrs_span.start as usize..s.attrs_span.end as usize]))
             .map(|s| s.span);
         let diagnostics = match ctx.compiler_result() {
-            Err(error) => vec![(
-                format!("Unable to run Svelte compiler: {error}"),
-                Span::new(0, 0),
-            )],
+            Err(error) => vec![(format!("Unable to run Svelte compiler: {error}"), Span::new(0, 0))],
             Ok(result) => {
                 if ignore_warnings && result.kind == "warn" {
                     return;
@@ -52,9 +40,9 @@ impl Rule for ValidCompile {
                             && !(matches!(
                                 warning.code.as_deref(),
                                 Some("css_unused_selector" | "css-unused-selector")
-                            ) && global_style.zip(warning.span).is_some_and(
-                                |(style, span)| style.start <= span.start && span.end <= style.end,
-                            ))
+                            ) && global_style
+                                .zip(warning.span)
+                                .is_some_and(|(style, span)| style.start <= span.start && span.end <= style.end))
                     })
                     .cloned()
                     .collect();
@@ -69,10 +57,7 @@ impl Rule for ValidCompile {
                     Ok(warnings)
                 };
                 match warnings {
-                    Err(error) => vec![(
-                        format!("Unable to run Svelte compiler: {error}"),
-                        Span::new(0, 0),
-                    )],
+                    Err(error) => vec![(format!("Unable to run Svelte compiler: {error}"), Span::new(0, 0))],
                     Ok(warnings) => warnings
                         .iter()
                         .filter_map(|warning| {
@@ -85,10 +70,7 @@ impl Rule for ValidCompile {
                                 (&warning.message, warning.code.as_deref(), warning.span)
                             };
                             Some((
-                                format!(
-                                    "{message}{}",
-                                    code.map(|c| format!("({c})")).unwrap_or_default()
-                                ),
+                                format!("{message}{}", code.map(|c| format!("({c})")).unwrap_or_default()),
                                 span.unwrap_or_else(|| Span::new(0, 0)),
                             ))
                         })
@@ -111,10 +93,7 @@ fn has_global_attribute(source: &str) -> bool {
             i += 1;
         }
         let start = i;
-        while i < bytes.len()
-            && !bytes[i].is_ascii_whitespace()
-            && !matches!(bytes[i], b'=' | b'>' | b'/')
-        {
+        while i < bytes.len() && !bytes[i].is_ascii_whitespace() && !matches!(bytes[i], b'=' | b'>' | b'/') {
             i += 1;
         }
         if i == start {
@@ -189,8 +168,6 @@ mod tests {
         assert!(has_global_attribute(" lang='scss' global "));
         assert!(has_global_attribute(" lang='css' global={true} "));
         assert!(!has_global_attribute(" note=' global ' class=global "));
-        assert!(!has_global_attribute(
-            " note={ x > 2 ? 'global' : '' } data-global "
-        ));
+        assert!(!has_global_attribute(" note={ x > 2 ? 'global' : '' } data-global "));
     }
 }

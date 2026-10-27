@@ -1,10 +1,8 @@
 //! `svelte/require-store-callbacks-use-set-param` requires store callbacks to name their first parameter `set`.
 
 use crate::linter::{Fix, LintContext, Rule, Suggestion};
-use oxc::ast::ast::{
-    BindingPattern, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement,
-};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{BindingPattern, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::span::{GetSpan, Span};
 
 pub struct RequireStoreCallbacksUseSetParam;
@@ -25,9 +23,7 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                     ctx.ast
                         .instance
                         .as_ref()
-                        .map_or(ctx.instance_content_offset, |script| {
-                            script.content_span.start
-                        }),
+                        .map_or(ctx.instance_content_offset, |script| script.content_span.start),
                 )
             }),
             ctx.module_semantic.map(|s| {
@@ -36,9 +32,7 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                     ctx.ast
                         .module
                         .as_ref()
-                        .map_or(ctx.module_content_offset, |script| {
-                            script.content_span.start
-                        }),
+                        .map_or(ctx.module_content_offset, |script| script.content_span.start),
                 )
             }),
         ]
@@ -94,14 +88,11 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                 if !imported {
                     continue;
                 }
-                let Some(callback) = call.arguments.get(1).and_then(|arg| arg.as_expression())
-                else {
+                let Some(callback) = call.arguments.get(1).and_then(|arg| arg.as_expression()) else {
                     continue;
                 };
                 let (params, callback_span) = match callback {
-                    Expression::ArrowFunctionExpression(function) => {
-                        (&function.params, function.span)
-                    }
+                    Expression::ArrowFunctionExpression(function) => (&function.params, function.span),
                     Expression::FunctionExpression(function) => {
                         if function.body.is_none() {
                             continue;
@@ -130,15 +121,10 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                     let references: Vec<_> = scoping.get_resolved_references(sid).collect();
                     // Avoid both changing which binding a use resolves to and
                     // capturing existing references to the replacement name.
-                    let conflict = scoping
-                        .get_binding(scope, expected.as_str().into())
-                        .is_some()
+                    let conflict = scoping.get_binding(scope, expected.as_str().into()).is_some()
                         || references.iter().any(|reference| {
                             scoping
-                                .find_binding(
-                                    nodes.get_node(reference.node_id()).scope_id(),
-                                    expected.as_str().into(),
-                                )
+                                .find_binding(nodes.get_node(reference.node_id()).scope_id(), expected.as_str().into())
                                 .is_some()
                         })
                         || nodes.iter().any(|other| {
@@ -157,9 +143,7 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                                         // instead become captured by the parameter.
                                         let target_scope = scoping.symbol_scope_id(target);
                                         target_scope != scope
-                                            && scoping
-                                                .scope_ancestors(target_scope)
-                                                .any(|ancestor| ancestor == scope)
+                                            && scoping.scope_ancestors(target_scope).any(|ancestor| ancestor == scope)
                                     })
                         });
 
@@ -172,9 +156,7 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                             // and variable. Expand it so renaming preserves keys.
                             let shorthand = match nodes.parent_kind(node_id) {
                                 AstKind::ObjectProperty(property) => property.shorthand,
-                                AstKind::AssignmentTargetPropertyIdentifier(property) => {
-                                    property.binding.span == span
-                                }
+                                AstKind::AssignmentTargetPropertyIdentifier(property) => property.binding.span == span,
                                 _ => false,
                             };
                             let replacement = if shorthand {
@@ -191,17 +173,12 @@ impl Rule for RequireStoreCallbacksUseSetParam {
                         let mut replacement = String::new();
                         let mut cursor = start;
                         for (span, text) in edits {
-                            replacement.push_str(
-                                &ctx.source[cursor as usize..(offset + span.start) as usize],
-                            );
+                            replacement.push_str(&ctx.source[cursor as usize..(offset + span.start) as usize]);
                             replacement.push_str(&text);
                             cursor = offset + span.end;
                         }
                         suggestions.push(Suggestion {
-                            description: format!(
-                                "Rename parameter from {} to `set`.",
-                                binding.name
-                            ),
+                            description: format!("Rename parameter from {} to `set`.", binding.name),
                             fix: Fix {
                                 span: Span::new(start, end),
                                 replacement,
@@ -263,18 +240,10 @@ mod tests {
         assert_eq!(diagnostics.len(), 2);
         let fix = &diagnostics[0].suggestions[0].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
-        );
-        assert!(output.contains(
-            "make(0, set => { (() => { let value = 1; value; })(); return {value: set}; })"
-        ));
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
+        assert!(output.contains("make(0, set => { (() => { let value = 1; value; })(); return {value: set}; })"));
         assert_eq!(diagnostics[1].suggestions[0].fix.replacement, "set");
-        assert!(
-            lint("<script>import { readable } from 'other'; readable(0, () => 1);</script>")
-                .is_empty()
-        );
+        assert!(lint("<script>import { readable } from 'other'; readable(0, () => 1);</script>").is_empty());
     }
     #[test]
     fn parameter_insertion_skips_comments_and_function_names() {
@@ -284,10 +253,7 @@ mod tests {
         for diagnostic in diagnostics {
             let fix = &diagnostic.suggestions[0].fix;
             let mut output = source.to_string();
-            output.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
             assert!(output.contains("(set)"));
             assert!(output.contains("/* ( comment */"));
         }

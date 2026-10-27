@@ -1,6 +1,6 @@
 //! Disallow unscoped style elements inside the component template.
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct NoNestedStyleTag;
 impl Rule for NoNestedStyleTag {
@@ -11,7 +11,10 @@ impl Rule for NoNestedStyleTag {
         walk_template_nodes(&ctx.ast.html, &mut |node| {
             if let TemplateNode::Element(element) = node {
                 if element.kind().is_html() && element.name == "style" {
-                    ctx.diagnostic("Nested `<style>` elements are not scoped and may lead to unintended styles being applied.", element.span);
+                    ctx.diagnostic(
+                        "Nested `<style>` elements are not scoped and may lead to unintended styles being applied.",
+                        element.span,
+                    );
                 }
             }
         });
@@ -35,10 +38,7 @@ mod tests {
             .collect();
         assert_eq!(
             spans,
-            [
-                "<style>p {color:blue}</style>",
-                "<style>p {color:green}</style>"
-            ]
+            ["<style>p {color:blue}</style>", "<style>p {color:green}</style>"]
         );
     }
 }

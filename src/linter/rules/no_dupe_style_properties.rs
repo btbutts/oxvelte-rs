@@ -1,7 +1,7 @@
 //! Disallow duplicate inline style properties, preserving alternative branches.
 use super::style_declarations::declarations;
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub struct NoDupeStyleProperties;
@@ -25,10 +25,7 @@ impl Rule for NoDupeStyleProperties {
                         if let Some(first) = before.get(prop) {
                             for report in [*first, *span] {
                                 if reported.insert(report) {
-                                    ctx.diagnostic(
-                                        format!("Duplicate property '{}'.", prop),
-                                        report,
-                                    );
+                                    ctx.diagnostic(format!("Duplicate property '{}'.", prop), report);
                                 }
                             }
                         }

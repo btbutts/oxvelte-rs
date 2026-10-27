@@ -1,9 +1,7 @@
 //! `svelte/require-event-prefix` — require event handler props to use the `on` prefix.
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{
-    Expression, PropertyKey, Statement, TSSignature, TSType, TSTypeName, VariableDeclarationKind,
-};
+use oxc::ast::ast::{Expression, PropertyKey, Statement, TSSignature, TSType, TSTypeName, VariableDeclarationKind};
 use oxc::span::Span;
 
 pub struct RequireEventPrefix;
@@ -44,14 +42,12 @@ impl Rule for RequireEventPrefix {
             };
             if !matches!(
                 vd.kind,
-                VariableDeclarationKind::Let
-                    | VariableDeclarationKind::Const
-                    | VariableDeclarationKind::Var
+                VariableDeclarationKind::Let | VariableDeclarationKind::Const | VariableDeclarationKind::Var
             ) {
                 continue;
             }
             for d in &vd.declarations {
-                let is_props_call = d.init.as_ref().map_or(false, |init| match init {
+                let is_props_call = d.init.as_ref().is_some_and(|init| match init {
                     Expression::CallExpression(ce) => matches!(
                         &ce.callee,
                         Expression::Identifier(id) if id.name == "$props"
@@ -64,13 +60,7 @@ impl Rule for RequireEventPrefix {
                 let Some(ann) = d.type_annotation.as_deref() else {
                     continue;
                 };
-                check_props_type(
-                    ctx,
-                    content_offset,
-                    semantic,
-                    &ann.type_annotation,
-                    check_async,
-                );
+                check_props_type(ctx, content_offset, semantic, &ann.type_annotation, check_async);
             }
         }
     }
@@ -103,36 +93,19 @@ fn check_props_type(
                     }
                 } else if let Statement::TSTypeAliasDeclaration(alias) = stmt {
                     if alias.id.name == name {
-                        check_props_type(
-                            ctx,
-                            content_offset,
-                            semantic,
-                            &alias.type_annotation,
-                            check_async,
-                        );
+                        check_props_type(ctx, content_offset, semantic, &alias.type_annotation, check_async);
                     }
                 }
             }
         }
         TSType::TSParenthesizedType(p) => {
-            check_props_type(
-                ctx,
-                content_offset,
-                semantic,
-                &p.type_annotation,
-                check_async,
-            );
+            check_props_type(ctx, content_offset, semantic, &p.type_annotation, check_async);
         }
         _ => {}
     }
 }
 
-fn check_signature(
-    ctx: &mut LintContext<'_>,
-    content_offset: u32,
-    sig: &TSSignature<'_>,
-    check_async: bool,
-) {
+fn check_signature(ctx: &mut LintContext<'_>, content_offset: u32, sig: &TSSignature<'_>, check_async: bool) {
     match sig {
         TSSignature::TSMethodSignature(m) => {
             let Some((name, span)) = key_name_and_span(&m.key) else {
@@ -188,8 +161,5 @@ fn method_returns_promise(m: &oxc::ast::ast::TSMethodSignature<'_>) -> bool {
 fn report(ctx: &mut LintContext<'_>, content_offset: u32, key_span: Span) {
     let s = content_offset + key_span.start;
     let e = content_offset + key_span.end;
-    ctx.diagnostic(
-        "Component event name must start with \"on\".",
-        Span::new(s, e),
-    );
+    ctx.diagnostic("Component event name must start with \"on\".", Span::new(s, e));
 }

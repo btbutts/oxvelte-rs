@@ -1,7 +1,7 @@
 //! `svelte/no-inline-styles` — disallow inline styles on elements.
 
 use crate::ast::{Attribute, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct NoInlineStyles;
 
@@ -48,9 +48,7 @@ impl Rule for NoInlineStyles {
                         kind: DirectiveKind::Transition,
                         span,
                         ..
-                    } if !allow_transitions => {
-                        ctx.diagnostic("Found disallowed transition.", *span)
-                    }
+                    } if !allow_transitions => ctx.diagnostic("Found disallowed transition.", *span),
                     _ => {}
                 }
             }

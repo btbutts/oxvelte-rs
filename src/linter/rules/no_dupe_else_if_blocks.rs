@@ -1,6 +1,6 @@
 //! Detect conditions covered by prior branches of an if/else chain.
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::{
     allocator::Allocator,
     ast::ast::Expression,
@@ -9,7 +9,7 @@ use oxc::{
 };
 use std::collections::HashMap;
 pub struct NoDupeElseIfBlocks;
-const MSG:&str="This branch can never execute. Its condition is a duplicate or covered by previous conditions in the `{#if}` / `{:else if}` chain.";
+const MSG: &str = "This branch can never execute. Its condition is a duplicate or covered by previous conditions in the `{#if}` / `{:else if}` chain.";
 impl Rule for NoDupeElseIfBlocks {
     fn name(&self) -> &'static str {
         "svelte/no-dupe-else-if-blocks"
@@ -23,18 +23,12 @@ impl Rule for NoDupeElseIfBlocks {
             let TemplateNode::IfBlock(block) = node else {
                 return;
             };
-            let mut previous = ancestors
-                .get(&block.span.start)
-                .cloned()
-                .unwrap_or_default();
+            let mut previous = ancestors.get(&block.span.start).cloned().unwrap_or_default();
             if !block.test.is_empty() {
                 if let Some(span) = covered(&block.test, &previous) {
                     ctx.diagnostic(
                         MSG,
-                        Span::new(
-                            block.test_span.start + span.start,
-                            block.test_span.start + span.end,
-                        ),
+                        Span::new(block.test_span.start + span.start, block.test_span.start + span.end),
                     );
                 }
                 previous.push(block.test.clone());
@@ -93,15 +87,13 @@ fn covered(source: &str, previous: &[String]) -> Option<Span> {
         .parse_expression()
         .ok()?;
     let mut conditions = Vec::new();
-    if matches!(expr.without_parentheses(),Expression::LogicalExpression(l) if l.operator.as_str()=="&&")
-    {
+    if matches!(expr.without_parentheses(),Expression::LogicalExpression(l) if l.operator.as_str()=="&&") {
         split(&expr, "&&", &mut conditions);
     }
     conditions.push(expr.without_parentheses());
     let mut remaining: Vec<_> = conditions.iter().map(|e| operands(source, e)).collect();
     for prior in previous.iter().rev() {
-        let Ok(prior_expr) = Parser::new(&allocator, prior, SourceType::ts()).parse_expression()
-        else {
+        let Ok(prior_expr) = Parser::new(&allocator, prior, SourceType::ts()).parse_expression() else {
             continue;
         };
         let prior_operands = operands(prior, &prior_expr);

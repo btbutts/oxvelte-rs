@@ -37,11 +37,7 @@ pub fn parse_for_lint<'a>(source: &'a str, allocator: &'a Allocator) -> ParseRes
     parse_with_mode(source, allocator, template::ValidationMode::Lint)
 }
 
-fn parse_with_mode<'a>(
-    source: &'a str,
-    allocator: &'a Allocator,
-    mode: template::ValidationMode,
-) -> ParseResult<'a> {
+fn parse_with_mode<'a>(source: &'a str, allocator: &'a Allocator, mode: template::ValidationMode) -> ParseResult<'a> {
     // Match Svelte's `Parser` constructor: trailing whitespace on the
     // template is dropped before parsing. Spans are byte offsets into the
     // trimmed view (same byte positions as the original up to the trim
@@ -244,10 +240,7 @@ fn extract_regions<'a>(source: &'a str) -> Regions<'a> {
                 }
             }
             TokenKind::EndTag { name } => {
-                if let Some(idx) = element_stack
-                    .iter()
-                    .rposition(|open| open.eq_ignore_ascii_case(name))
-                {
+                if let Some(idx) = element_stack.iter().rposition(|open| open.eq_ignore_ascii_case(name)) {
                     element_stack.truncate(idx);
                 }
             }
@@ -294,8 +287,7 @@ fn extract_regions<'a>(source: &'a str) -> Regions<'a> {
                         }
                     }
                     let is_module = module_attr == Some(None)
-                        || context_attr
-                            .is_some_and(|value| value.is_some_and(|value| value == "module"));
+                        || context_attr.is_some_and(|value| value.is_some_and(|value| value == "module"));
                     let region = Region {
                         content,
                         lang: extract_attr(attrs, "lang"),
@@ -307,16 +299,16 @@ fn extract_regions<'a>(source: &'a str) -> Regions<'a> {
 
                     if is_module {
                         if regions.module.is_some() {
-                            regions.errors.push(OxcDiagnostic::error(
-                                "Duplicate top-level module script block",
-                            ));
+                            regions
+                                .errors
+                                .push(OxcDiagnostic::error("Duplicate top-level module script block"));
                         } else {
                             regions.module = Some(region);
                         }
                     } else if regions.instance.is_some() {
-                        regions.errors.push(OxcDiagnostic::error(
-                            "Duplicate top-level instance script block",
-                        ));
+                        regions
+                            .errors
+                            .push(OxcDiagnostic::error("Duplicate top-level instance script block"));
                     } else {
                         regions.instance = Some(region);
                     }
@@ -349,19 +341,13 @@ fn extract_regions<'a>(source: &'a str) -> Regions<'a> {
             TokenKind::Mustache { expression } => {
                 let _ = expression;
             }
-            TokenKind::BlockStart {
-                keyword,
-                expression,
-            } => {
+            TokenKind::BlockStart { keyword, expression } => {
                 let _ = (keyword, expression);
                 if element_stack.is_empty() && is_structural_block_keyword(keyword) {
                     block_depth += 1;
                 }
             }
-            TokenKind::BlockContinuation {
-                keyword,
-                expression,
-            } => {
+            TokenKind::BlockContinuation { keyword, expression } => {
                 let _ = (keyword, expression);
             }
             TokenKind::BlockEnd { keyword } => {
@@ -519,10 +505,7 @@ mod tests {
     #[test]
     fn test_module_script_legacy() {
         let alloc = Allocator::default();
-        let r = parse(
-            r#"<script context="module">export const foo = 1;</script>"#,
-            &alloc,
-        );
+        let r = parse(r#"<script context="module">export const foo = 1;</script>"#, &alloc);
         assert!(r.ast.module.is_some());
         assert!(r.ast.instance.is_none());
     }
@@ -537,9 +520,9 @@ mod tests {
         ] {
             let r = parse(source, &alloc);
             assert!(
-                r.errors.iter().any(|error| error
-                    .to_string()
-                    .contains("If the context attribute is supplied")),
+                r.errors
+                    .iter()
+                    .any(|error| error.to_string().contains("If the context attribute is supplied")),
                 "{source}: {:?}",
                 r.errors
             );
@@ -561,17 +544,14 @@ mod tests {
 
         let r = parse(r#"<script server>let x = 1;</script>"#, &alloc);
         assert!(
-            r.errors.iter().any(|error| error
-                .to_string()
-                .contains("The `server` attribute is reserved")),
+            r.errors
+                .iter()
+                .any(|error| error.to_string().contains("The `server` attribute is reserved")),
             "{:?}",
             r.errors
         );
 
-        let r = parse(
-            r#"<script module context="module">let x = 1;</script>"#,
-            &alloc,
-        );
+        let r = parse(r#"<script module context="module">let x = 1;</script>"#, &alloc);
         assert!(r.errors.is_empty(), "{:?}", r.errors);
         assert_eq!(r.ast.module.unwrap().content, "let x = 1;");
     }
@@ -633,8 +613,7 @@ mod tests {
     #[test]
     fn test_style_after_head_style_is_extracted() {
         let alloc = Allocator::default();
-        let source =
-            "<svelte:head><style></style></svelte:head><style>main { color: red; }</style>";
+        let source = "<svelte:head><style></style></svelte:head><style>main { color: red; }</style>";
         let r = parse(source, &alloc);
         assert_eq!(r.ast.css.unwrap().content, "main { color: red; }");
     }
@@ -728,9 +707,11 @@ mod tests {
         let source = "<textarea>{#if x}</textarea><script>let ok = true;</script>";
         let r = parse(source, &alloc);
         assert_eq!(r.ast.instance.unwrap().content, "let ok = true;");
-        assert!(r.errors.iter().any(|error| error
-            .to_string()
-            .contains("block cannot be inside <textarea>")));
+        assert!(
+            r.errors
+                .iter()
+                .any(|error| error.to_string().contains("block cannot be inside <textarea>"))
+        );
     }
 
     #[test]

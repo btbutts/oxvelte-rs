@@ -5,11 +5,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[derive(Parser)]
-#[command(
-    name = "oxvelte",
-    version,
-    about = "A fast Svelte linter powered by oxc"
-)]
+#[command(name = "oxvelte", version, about = "A fast Svelte linter powered by oxc")]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -75,11 +71,7 @@ fn main() -> ExitCode {
             json,
             quiet,
         } => cmd_lint(&paths, config.as_ref(), all_rules, fix, json, quiet),
-        Command::Parse {
-            file,
-            pretty,
-            format,
-        } => cmd_parse(&file, pretty, &format),
+        Command::Parse { file, pretty, format } => cmd_parse(&file, pretty, &format),
         Command::Check { paths } => cmd_lint(&paths, None, false, false, false, false),
         Command::Rules => cmd_rules(),
         Command::Migrate { file, write } => cmd_convert_config(&file, write),
@@ -129,8 +121,8 @@ fn load_lint_config(
                 .map_err(|e| format!("Error reading current directory: {e}"))?
                 .join(path)
         };
-        let content = std::fs::read_to_string(&path)
-            .map_err(|e| format!("Error reading config {}: {e}", path.display()))?;
+        let content =
+            std::fs::read_to_string(&path).map_err(|e| format!("Error reading config {}: {e}", path.display()))?;
         let config = oxvelte::config::OxvelteConfig::parse(&content)
             .map_err(|e| format!("Error parsing config {}: {e}", path.display()))?;
         let config_dir = path
@@ -223,8 +215,7 @@ fn cmd_lint(
     #[cfg(feature = "custom-rules")]
     {
         if !config.custom_rules.is_empty() {
-            let custom =
-                oxvelte::custom_rules::load_custom_rules(&config.custom_rules, &config_dir);
+            let custom = oxvelte::custom_rules::load_custom_rules(&config.custom_rules, &config_dir);
             lint = lint.with_custom_rules(custom);
         }
     }
@@ -253,8 +244,7 @@ fn cmd_lint(
             };
             let path_str = path.to_string_lossy();
             let is_svelte = path.extension().is_some_and(|e| e == "svelte");
-            let is_svelte_module =
-                path_str.ends_with(".svelte.js") || path_str.ends_with(".svelte.ts");
+            let is_svelte_module = path_str.ends_with(".svelte.js") || path_str.ends_with(".svelte.ts");
             let file_path_owned = path_str.to_string();
             // None means an internal panic — the file is skipped entirely.
             let run_lint = |source: &str| -> Option<Vec<linter::LintDiagnostic>> {
@@ -271,12 +261,7 @@ fn cmd_lint(
                                 let span = error
                                     .labels
                                     .first()
-                                    .map(|label| {
-                                        oxc::span::Span::new(
-                                            label.offset(),
-                                            label.offset() + label.len(),
-                                        )
-                                    })
+                                    .map(|label| oxc::span::Span::new(label.offset(), label.offset() + label.len()))
                                     .unwrap_or_else(|| oxc::span::Span::new(0, 0));
                                 linter::LintDiagnostic {
                                     rule_name: "oxvelte/parse-error",
@@ -304,12 +289,7 @@ fn cmd_lint(
                 } else if is_svelte_module {
                     let is_ts = path_str.ends_with(".ts");
                     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        lint.lint_svelte_script_with_project_config_and_path(
-                            source,
-                            is_ts,
-                            &config,
-                            &file_path_owned,
-                        )
+                        lint.lint_svelte_script_with_project_config_and_path(source, is_ts, &config, &file_path_owned)
                     })) {
                         Ok(d) => Some(d),
                         Err(_) => {
@@ -319,11 +299,7 @@ fn cmd_lint(
                     }
                 } else {
                     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        lint.lint_script_with_project_config_and_path(
-                            source,
-                            &config,
-                            &file_path_owned,
-                        )
+                        lint.lint_script_with_project_config_and_path(source, &config, &file_path_owned)
                     })) {
                         Ok(d) => Some(d),
                         Err(_) => {
@@ -342,8 +318,7 @@ fn cmd_lint(
                 let original = source.clone();
                 let mut changed = false;
                 for _ in 0..MAX_FIX_PASSES {
-                    let fixes: Vec<&linter::Fix> =
-                        diags.iter().filter_map(|d| d.fix.as_ref()).collect();
+                    let fixes: Vec<&linter::Fix> = diags.iter().filter_map(|d| d.fix.as_ref()).collect();
                     if fixes.is_empty() {
                         break;
                     }
@@ -357,10 +332,7 @@ fn cmd_lint(
                 }
                 if changed {
                     if let Err(e) = std::fs::write(path, &source) {
-                        eprintln!(
-                            "oxvelte: could not write fixes to {}: {e}",
-                            path.display()
-                        );
+                        eprintln!("oxvelte: could not write fixes to {}: {e}", path.display());
                         source = original;
                         diags = run_lint(&source)?;
                     }
@@ -411,21 +383,12 @@ fn cmd_lint(
             .into_iter()
             .map(|(f, d)| diagnostic_json(&f.path, d))
             .collect();
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json_results).unwrap_or_default()
-        );
+        println!("{}", serde_json::to_string_pretty(&json_results).unwrap_or_default());
     } else if !quiet {
         print_diagnostics(&file_results, use_color, false);
 
         if total_diags > 0 {
-            print_summary(
-                total_diags,
-                warning_count,
-                error_count,
-                files_with_diags,
-                use_color,
-            );
+            print_summary(total_diags, warning_count, error_count, files_with_diags, use_color);
         }
     }
     if quiet {
@@ -437,9 +400,15 @@ fn cmd_lint(
         let elapsed = start.elapsed();
         if use_color {
             if error_count > 0 {
-                eprintln!("\x1b[1m{}\x1b[0m file(s) scanned in \x1b[1m{:.0?}\x1b[0m, \x1b[1;31m{} error(s)\x1b[0m and \x1b[1m{} warning(s)\x1b[0m found.", file_count, elapsed, error_count, warning_count);
+                eprintln!(
+                    "\x1b[1m{}\x1b[0m file(s) scanned in \x1b[1m{:.0?}\x1b[0m, \x1b[1;31m{} error(s)\x1b[0m and \x1b[1m{} warning(s)\x1b[0m found.",
+                    file_count, elapsed, error_count, warning_count
+                );
             } else {
-                eprintln!("\x1b[1m{}\x1b[0m file(s) scanned in \x1b[1m{:.0?}\x1b[0m, \x1b[1;32m0 errors\x1b[0m and \x1b[1m{} warning(s)\x1b[0m found.", file_count, elapsed, warning_count);
+                eprintln!(
+                    "\x1b[1m{}\x1b[0m file(s) scanned in \x1b[1m{:.0?}\x1b[0m, \x1b[1;32m0 errors\x1b[0m and \x1b[1m{} warning(s)\x1b[0m found.",
+                    file_count, elapsed, warning_count
+                );
             }
         } else {
             eprintln!(
@@ -455,10 +424,7 @@ fn cmd_lint(
     }
 }
 
-fn diagnostic_severity(
-    config: &oxvelte::config::OxvelteConfig,
-    rule_name: &str,
-) -> DiagnosticSeverity {
+fn diagnostic_severity(config: &oxvelte::config::OxvelteConfig, rule_name: &str) -> DiagnosticSeverity {
     // Template parse errors are always errors (like ESLint's fatal parse
     // failures); they are not configurable.
     if rule_name == "oxvelte/parse-error" {
@@ -475,10 +441,7 @@ fn diagnostic_severity(
     }
 }
 
-fn visible_file_diagnostics<'a>(
-    file_results: &'a [FileResult],
-    quiet: bool,
-) -> Vec<(&'a FileResult, &'a FileDiagnostic)> {
+fn visible_file_diagnostics(file_results: &[FileResult], quiet: bool) -> Vec<(&FileResult, &FileDiagnostic)> {
     file_results
         .iter()
         .flat_map(|f| {
@@ -555,11 +518,7 @@ fn print_summary(
     use_color: bool,
 ) {
     if use_color {
-        let color = if error_count > 0 {
-            "\x1b[1;31m"
-        } else {
-            "\x1b[1;33m"
-        };
+        let color = if error_count > 0 { "\x1b[1;31m" } else { "\x1b[1;33m" };
         eprintln!(
             "\n{}{} problem(s) in {} file(s): {} error(s), {} warning(s).\x1b[0m",
             color, total_diags, files_with_diags, error_count, warning_count
@@ -613,26 +572,17 @@ fn cmd_parse(file: &PathBuf, pretty: bool, format: &str) -> ExitCode {
 fn cmd_rules() -> ExitCode {
     let rules = linter::rules::all_rules();
     let recommended = linter::rules::recommended_rules();
-    let rec_names: std::collections::HashSet<String> =
-        recommended.iter().map(|r| r.name().to_string()).collect();
+    let rec_names: std::collections::HashSet<String> = recommended.iter().map(|r| r.name().to_string()).collect();
 
     println!("{:<50} {:>5}  {:>5}", "Rule", "Rec", "Fix");
     println!("{}", "-".repeat(65));
     for rule in &rules {
         let name = rule.name();
-        let is_rec = if rec_names.contains(name) {
-            "  *  "
-        } else {
-            "     "
-        };
+        let is_rec = if rec_names.contains(name) { "  *  " } else { "     " };
         let is_fix = if rule.is_fixable() { "  *  " } else { "     " };
         println!("{:<50} {:>5}  {:>5}", name, is_rec, is_fix);
     }
-    println!(
-        "\n{} rules total ({} recommended)",
-        rules.len(),
-        recommended.len()
-    );
+    println!("\n{} rules total ({} recommended)", rules.len(), recommended.len());
     ExitCode::SUCCESS
 }
 
@@ -646,11 +596,10 @@ fn cmd_convert_config(file: &PathBuf, write: bool) -> ExitCode {
     };
 
     // Try to extract JSON from JS/MJS config files (common flat config pattern)
-    let json_str = if file
-        .extension()
-        .is_some_and(|e| e == "mjs" || e == "js" || e == "cjs")
-    {
-        eprintln!("Note: JS config files are partially supported. Only inline JSON objects with svelte rules will be extracted.");
+    let json_str = if file.extension().is_some_and(|e| e == "mjs" || e == "js" || e == "cjs") {
+        eprintln!(
+            "Note: JS config files are partially supported. Only inline JSON objects with svelte rules will be extracted."
+        );
         eprintln!("For best results, export your ESLint config as JSON first:");
         eprintln!("  npx eslint --print-config yourfile.svelte > eslint-resolved.json");
         eprintln!("  oxvelte convert-config eslint-resolved.json");
@@ -772,9 +721,7 @@ fn emit_custom_rule_hints(config_source: &str, config_dir: &std::path::Path) {
                 let quote = if pattern.ends_with('\'') { '\'' } else { '"' };
                 if let Some(end) = rest.find(quote) {
                     let path = &rest[..end];
-                    if (path.starts_with("./") || path.starts_with("../"))
-                        && path.ends_with(|c: char| matches!(c, 's' | 'j'))
-                    {
+                    if (path.starts_with("./") || path.starts_with("../")) && path.ends_with(['s', 'j']) {
                         rule_files.push(path.to_string());
                     }
                 }
@@ -804,9 +751,7 @@ fn emit_custom_rule_hints(config_source: &str, config_dir: &std::path::Path) {
                     "\nCustom rule file {} uses both Svelte template and JS/TS visitors.",
                     rel_path
                 );
-                eprintln!(
-                    "  Split it: template checks → oxvelte custom rule, script checks → oxlint plugin."
-                );
+                eprintln!("  Split it: template checks → oxvelte custom rule, script checks → oxlint plugin.");
             }
             RuleLayer::SvelteTemplate => {
                 eprintln!(
@@ -840,10 +785,7 @@ fn extract_rules_from_js(content: &str) -> String {
                         // Try to parse as JSON
                         if let Ok(v) = serde_json::from_str::<serde_json::Value>(val) {
                             rules.insert(
-                                format!(
-                                    "svelte/{}",
-                                    rule_name.strip_prefix("svelte/").unwrap_or(rule_name)
-                                ),
+                                format!("svelte/{}", rule_name.strip_prefix("svelte/").unwrap_or(rule_name)),
                                 v,
                             );
                         } else {
@@ -851,10 +793,7 @@ fn extract_rules_from_js(content: &str) -> String {
                             let normalized = val.replace('\'', "\"");
                             if let Ok(v) = serde_json::from_str::<serde_json::Value>(&normalized) {
                                 rules.insert(
-                                    format!(
-                                        "svelte/{}",
-                                        rule_name.strip_prefix("svelte/").unwrap_or(rule_name)
-                                    ),
+                                    format!("svelte/{}", rule_name.strip_prefix("svelte/").unwrap_or(rule_name)),
                                     v,
                                 );
                             }
@@ -881,15 +820,69 @@ fn diagnostic_json(path: &str, diagnostic: &FileDiagnostic) -> serde_json::Value
     });
     if !diagnostic.suggestions.is_empty() {
         // Replacement ranges are byte offsets into the UTF-8 source, like Fix::span.
-        value["suggestions"] =
-            serde_json::json!(diagnostic.suggestions.iter().map(|s| {
-            serde_json::json!({
-                "desc": s.description,
-                "fix": {"range": [s.fix.span.start, s.fix.span.end], "text": s.fix.replacement}
-            })
-        }).collect::<Vec<_>>());
+        value["suggestions"] = serde_json::json!(
+            diagnostic
+                .suggestions
+                .iter()
+                .map(|s| {
+                    serde_json::json!({
+                        "desc": s.description,
+                        "fix": {"range": [s.fix.span.start, s.fix.span.end], "text": s.fix.replacement}
+                    })
+                })
+                .collect::<Vec<_>>()
+        );
     }
     value
+}
+
+fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
+    let mut line = 1;
+    let mut col = 1;
+    for (i, ch) in source.char_indices() {
+        if i >= offset {
+            break;
+        }
+        if ch == '\n' {
+            line += 1;
+            col = 1;
+        } else {
+            col += 1;
+        }
+    }
+    (line, col)
+}
+
+fn collect_lint_files(paths: &[PathBuf]) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    let extensions = ["svelte", "js", "ts", "mjs", "mts"];
+    let mut stack: Vec<PathBuf> = paths.to_vec();
+    while let Some(path) = stack.pop() {
+        if path.is_file() {
+            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
+                if extensions.contains(&ext) {
+                    // Overlapping inputs (`lint src src/App.svelte`, or the
+                    // same file spelled differently) must not lint twice.
+                    let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+                    if seen.insert(key) {
+                        files.push(path);
+                    }
+                }
+            }
+        } else if path.is_dir() {
+            let dirname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if matches!(dirname, "node_modules" | ".svelte-kit" | "build" | "dist" | ".git") {
+                continue;
+            }
+            if let Ok(entries) = std::fs::read_dir(&path) {
+                for entry in entries.flatten() {
+                    stack.push(entry.path());
+                }
+            }
+        }
+    }
+    files
 }
 
 #[cfg(test)]
@@ -936,9 +929,9 @@ mod tests {
     fn apply_fixes_replaces_inserts_and_deletes() {
         let source = "let  a = 1;\nfoo  \n";
         let fixes = [
-            fix(4, 5, ""),     // collapse double space
-            fix(15, 17, ""),   // strip trailing spaces
-            fix(0, 0, "// "),  // insertion at the start
+            fix(4, 5, ""),    // collapse double space
+            fix(15, 17, ""),  // strip trailing spaces
+            fix(0, 0, "// "), // insertion at the start
         ];
         let refs: Vec<&linter::Fix> = fixes.iter().collect();
         assert_eq!(apply_fixes(source, &refs), "// let a = 1;\nfoo\n");
@@ -984,56 +977,4 @@ mod tests {
         assert_eq!(collect_lint_files(&[file, spelled]).len(), 1);
         std::fs::remove_dir_all(&dir).ok();
     }
-}
-
-fn offset_to_line_col(source: &str, offset: usize) -> (usize, usize) {
-    let mut line = 1;
-    let mut col = 1;
-    for (i, ch) in source.char_indices() {
-        if i >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            col = 1;
-        } else {
-            col += 1;
-        }
-    }
-    (line, col)
-}
-
-fn collect_lint_files(paths: &[PathBuf]) -> Vec<PathBuf> {
-    let mut files = Vec::new();
-    let mut seen = std::collections::HashSet::new();
-    let extensions = ["svelte", "js", "ts", "mjs", "mts"];
-    let mut stack: Vec<PathBuf> = paths.to_vec();
-    while let Some(path) = stack.pop() {
-        if path.is_file() {
-            if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if extensions.contains(&ext) {
-                    // Overlapping inputs (`lint src src/App.svelte`, or the
-                    // same file spelled differently) must not lint twice.
-                    let key = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-                    if seen.insert(key) {
-                        files.push(path);
-                    }
-                }
-            }
-        } else if path.is_dir() {
-            let dirname = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            if matches!(
-                dirname,
-                "node_modules" | ".svelte-kit" | "build" | "dist" | ".git"
-            ) {
-                continue;
-            }
-            if let Ok(entries) = std::fs::read_dir(&path) {
-                for entry in entries.flatten() {
-                    stack.push(entry.path());
-                }
-            }
-        }
-    }
-    files
 }

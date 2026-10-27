@@ -72,10 +72,8 @@ impl ScriptRule {
     fn run_js(&self, ctx: &mut LintContext) -> Result<(), String> {
         let mut js = Context::default();
 
-        let ast_json =
-            serde_json::to_string(&ctx.ast).map_err(|e| format!("AST serialize: {}", e))?;
-        let source_json =
-            serde_json::to_string(ctx.source).map_err(|e| format!("source serialize: {}", e))?;
+        let ast_json = serde_json::to_string(&ctx.ast).map_err(|e| format!("AST serialize: {}", e))?;
+        let source_json = serde_json::to_string(ctx.source).map_err(|e| format!("source serialize: {}", e))?;
         let options_json = ctx
             .config
             .options
@@ -193,11 +191,7 @@ pub fn load_custom_rules(patterns: &[String], config_dir: &Path) -> Vec<Box<dyn 
     for path in paths {
         match load_rule_file(&path) {
             Ok(rule) => {
-                eprintln!(
-                    "oxvelte: loaded custom rule \"{}\" from {}",
-                    rule.name,
-                    path.display()
-                );
+                eprintln!("oxvelte: loaded custom rule \"{}\" from {}", rule.name, path.display());
                 rules.push(Box::new(rule));
             }
             Err(e) => {
@@ -226,9 +220,7 @@ fn load_rule_file(path: &Path) -> Result<ScriptRule, String> {
             content
         )
     } else {
-        return Err(
-            "Rule file must use `export default { ... }` or `module.exports = { ... }`".into(),
-        );
+        return Err("Rule file must use `export default { ... }` or `module.exports = { ... }`".into());
     };
 
     let (name, fixable) = extract_rule_meta(&transformed)?;
@@ -306,15 +298,13 @@ mod tests {
 
     #[test]
     fn extract_rule_meta_reads_name_and_fixable_declaration() {
-        let (name, fixable) =
-            extract_rule_meta("var __rule = { name: \"custom/plain\", run(ctx) {} };").unwrap();
+        let (name, fixable) = extract_rule_meta("var __rule = { name: \"custom/plain\", run(ctx) {} };").unwrap();
         assert_eq!(name, "custom/plain");
         assert!(!fixable, "no meta.fixable means not fixable");
 
-        let (name, fixable) = extract_rule_meta(
-            "var __rule = { name: \"custom/fixer\", meta: { fixable: \"code\" }, run(ctx) {} };",
-        )
-        .unwrap();
+        let (name, fixable) =
+            extract_rule_meta("var __rule = { name: \"custom/fixer\", meta: { fixable: \"code\" }, run(ctx) {} };")
+                .unwrap();
         assert_eq!(name, "custom/fixer");
         assert!(fixable, "meta.fixable must mark the rule fixable");
     }

@@ -2,17 +2,15 @@
 //! for components that expose slots.
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
-use oxc::ast::ast::Statement;
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::Statement;
 use oxc::span::Span;
 
 pub struct ExperimentalRequireSlotTypes;
 
 fn is_ts(lang: Option<&str>) -> bool {
-    lang.map_or(false, |l| {
-        l.eq_ignore_ascii_case("ts") || l.eq_ignore_ascii_case("typescript")
-    })
+    lang.is_some_and(|l| l.eq_ignore_ascii_case("ts") || l.eq_ignore_ascii_case("typescript"))
 }
 
 impl Rule for ExperimentalRequireSlotTypes {
@@ -62,11 +60,7 @@ impl Rule for ExperimentalRequireSlotTypes {
             });
 
         if !has_slots {
-            let position = ctx
-                .source
-                .chars()
-                .next()
-                .map_or(0, |ch| ch.len_utf8() as u32);
+            let position = ctx.source.chars().next().map_or(0, |ch| ch.len_utf8() as u32);
             let span = Span::new(position, position);
             ctx.diagnostic("The component must define the $$Slots interface.", span);
         }

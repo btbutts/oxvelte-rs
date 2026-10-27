@@ -1,7 +1,7 @@
 //! `svelte/no-at-const-tags` migrates reactive legacy const tags to declaration tags.
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::allocator::Allocator;
 use oxc::ast::ast::{Expression, Statement};
 use oxc::span::{GetSpan, SourceType, Span};
@@ -35,8 +35,7 @@ impl Rule for NoAtConstTags {
             let at_offset = tag.span.start + 1 + (raw[1..].len() - body.len()) as u32;
             let allocator = Allocator::default();
             let declaration = format!("const {}", tag.declaration);
-            let parsed =
-                oxc::parser::Parser::new(&allocator, &declaration, SourceType::ts()).parse();
+            let parsed = oxc::parser::Parser::new(&allocator, &declaration, SourceType::ts()).parse();
             let message = "Use `{const ...}` declaration tag instead of legacy `{@const ...}`.";
             if !parsed.diagnostics.is_empty() {
                 ctx.diagnostic(message, tag.span);
@@ -79,26 +78,20 @@ mod tests {
     use super::NoAtConstTags;
     use crate::{
         ast::TemplateNode,
-        linter::{svelte_version_info_from_package_json, LintContext, Rule},
+        linter::{LintContext, Rule, svelte_version_info_from_package_json},
         parser,
     };
     use oxc::allocator::Allocator;
 
-    fn migrate(
-        source: &str,
-        version: &str,
-        runes: bool,
-        explicit_false: bool,
-    ) -> Vec<crate::linter::LintDiagnostic> {
+    fn migrate(source: &str, version: &str, runes: bool, explicit_false: bool) -> Vec<crate::linter::LintDiagnostic> {
         let alloc = Allocator::default();
         let parsed = parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let mut ctx = LintContext::new(&parsed.ast, source);
         ctx.is_runes = runes;
         ctx.runes_explicit_false = explicit_false;
-        ctx.svelte_version = svelte_version_info_from_package_json(
-            &serde_json::json!({"dependencies":{"svelte":version}}).to_string(),
-        );
+        ctx.svelte_version =
+            svelte_version_info_from_package_json(&serde_json::json!({"dependencies":{"svelte":version}}).to_string());
         NoAtConstTags.run(&mut ctx);
         ctx.diagnostics
     }
@@ -110,11 +103,11 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         let fix = diagnostics[0].fix.as_ref().unwrap();
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
+        assert_eq!(
+            output,
+            "<!-- 😀 --><svelte:options runes={true} />{#if yes}{ \tconst /* name */ result = /* before */ $derived(({ text: '😀}', value: count })) /* after */ }{/if}"
         );
-        assert_eq!(output, "<!-- 😀 --><svelte:options runes={true} />{#if yes}{ \tconst /* name */ result = /* before */ $derived(({ text: '😀}', value: count })) /* after */ }{/if}");
         let alloc = Allocator::default();
         let parsed = parser::parse_for_lint(&output, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
@@ -162,10 +155,7 @@ mod tests {
             ("5.56.0", true, true),
             ("*", true, false),
         ] {
-            assert!(
-                migrate(source, version, runes, explicit_false).is_empty(),
-                "{version}"
-            );
+            assert!(migrate(source, version, runes, explicit_false).is_empty(), "{version}");
         }
     }
 }

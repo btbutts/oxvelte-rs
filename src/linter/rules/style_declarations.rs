@@ -24,11 +24,7 @@ pub(super) fn declarations(attr: &Attribute, source: &str) -> Vec<Vec<Declaratio
                 return vec![];
             };
             let mut start = eq + 1;
-            while raw
-                .as_bytes()
-                .get(start)
-                .is_some_and(u8::is_ascii_whitespace)
-            {
+            while raw.as_bytes().get(start).is_some_and(u8::is_ascii_whitespace) {
                 start += 1;
             }
             let quoted = matches!(raw.as_bytes().get(start), Some(b'\'' | b'"'));
@@ -60,11 +56,7 @@ fn css_sets(text: &str, base: u32) -> Vec<Vec<Declaration>> {
             let end = expression_end(text, i);
             if text[start..i].trim().is_empty() {
                 let mut inline = vec![];
-                literal_declarations(
-                    &text[i + 1..end.saturating_sub(1)],
-                    base + i as u32 + 1,
-                    &mut inline,
-                );
+                literal_declarations(&text[i + 1..end.saturating_sub(1)], base + i as u32 + 1, &mut inline);
                 if !inline.is_empty() {
                     sets.push(inline);
                 }
@@ -96,25 +88,16 @@ fn css_sets(text: &str, base: u32) -> Vec<Vec<Declaration>> {
 fn push_declaration(text: &str, base: u32, sets: &mut Vec<Vec<Declaration>>) {
     let Some(colon) = text.find(':') else { return };
     let key = text[..colon].trim();
-    if key.is_empty()
-        || !key
-            .chars()
-            .all(|c| c.is_alphanumeric() || matches!(c, '-' | '_'))
-    {
+    if key.is_empty() || !key.chars().all(|c| c.is_alphanumeric() || matches!(c, '-' | '_')) {
         return;
     }
     let start = base + (text.len() - text.trim_start().len()) as u32;
-    sets.push(vec![(
-        key.to_string(),
-        Span::new(start, start + key.len() as u32),
-    )]);
+    sets.push(vec![(key.to_string(), Span::new(start, start + key.len() as u32))]);
 }
 
 fn literal_declarations(text: &str, base: u32, out: &mut Vec<Declaration>) {
     let allocator = oxc::allocator::Allocator::default();
-    if let Ok(expr) =
-        oxc::parser::Parser::new(&allocator, text, SourceType::ts()).parse_expression()
-    {
+    if let Ok(expr) = oxc::parser::Parser::new(&allocator, text, SourceType::ts()).parse_expression() {
         collect_literals(&expr, text, base, out);
     }
 }
@@ -149,9 +132,7 @@ fn collect_literals(expr: &Expression<'_>, source: &str, base: u32, out: &mut Ve
             collect_literals(&e.left, source, base, out);
             collect_literals(&e.right, source, base, out);
         }
-        Expression::ParenthesizedExpression(e) => {
-            collect_literals(&e.expression, source, base, out)
-        }
+        Expression::ParenthesizedExpression(e) => collect_literals(&e.expression, source, base, out),
         _ => {}
     }
 }
@@ -184,22 +165,15 @@ pub(super) fn expression_end(text: &str, start: usize) -> usize {
     let mut candidate = text.len();
     while candidate > start + 1 {
         if let Ok(expression) =
-            oxc::parser::Parser::new(&allocator, &text[start + 1..candidate], SourceType::ts())
-                .parse_expression()
+            oxc::parser::Parser::new(&allocator, &text[start + 1..candidate], SourceType::ts()).parse_expression()
         {
             let mut end = start + 1 + expression.span().end as usize;
             loop {
-                while text
-                    .as_bytes()
-                    .get(end)
-                    .is_some_and(u8::is_ascii_whitespace)
-                {
+                while text.as_bytes().get(end).is_some_and(u8::is_ascii_whitespace) {
                     end += 1;
                 }
                 if text.as_bytes()[end..].starts_with(b"/*") {
-                    end = text[end + 2..]
-                        .find("*/")
-                        .map_or(text.len(), |n| end + n + 4);
+                    end = text[end + 2..].find("*/").map_or(text.len(), |n| end + n + 4);
                 } else if text.as_bytes()[end..].starts_with(b"//") {
                     end = text[end..].find('\n').map_or(text.len(), |n| end + n);
                 } else {

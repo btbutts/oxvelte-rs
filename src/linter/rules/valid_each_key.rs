@@ -2,7 +2,7 @@
 //! ⭐ Recommended
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use crate::parser::expression::parse_template_expression;
 use oxc::allocator::Allocator;
 use oxc::ast::AstKind;
@@ -48,7 +48,10 @@ fn extract_iter_vars(context: &str) -> Vec<String> {
     if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
     semantic
         .nodes()
         .iter()
@@ -69,7 +72,10 @@ fn key_references_each_var(key: &str, vars: &[String]) -> bool {
     if !parsed.diagnostics.is_empty() {
         return false;
     }
-    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
     let references_each_var = semantic.nodes().iter().any(|node| {
         let AstKind::IdentifierReference(id) = node.kind() else {
             return false;
@@ -119,10 +125,6 @@ mod tests {
             &source[diagnostics[0].span.start as usize..diagnostics[0].span.end as usize],
             "(() => {const id = 1; return id;})()"
         );
-        assert!(lint(
-            "{#each values as {nested: {id}} (id)}x{/each}",
-            serde_json::json!([])
-        )
-        .is_empty());
+        assert!(lint("{#each values as {nested: {id}} (id)}x{/each}", serde_json::json!([])).is_empty());
     }
 }

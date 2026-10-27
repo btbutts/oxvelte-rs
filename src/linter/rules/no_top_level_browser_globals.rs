@@ -28,11 +28,8 @@
 
 use crate::ast::TemplateNode;
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{
-    Expression, ImportDeclarationSpecifier,
-    ModuleExportName, Statement,
-};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::semantic::{AstNodes, NodeId, Semantic};
 use oxc::span::{GetSpan, Span};
 use oxc::syntax::operator::{BinaryOperator, LogicalOperator, UnaryOperator};
@@ -146,9 +143,7 @@ fn analyze_test(expr: &Expression<'_>, ctx: &GuardCtx) -> (Vec<Protect>, Vec<Pro
             let (p, n) = analyze_test(&u.argument, ctx);
             (n, p)
         }
-        Expression::StaticMemberExpression(m) => {
-            analyze_member_test(&m.object, m.property.name.as_str(), ctx)
-        }
+        Expression::StaticMemberExpression(m) => analyze_member_test(&m.object, m.property.name.as_str(), ctx),
         Expression::ComputedMemberExpression(_) => (vec![], vec![]),
         Expression::ChainExpression(c) => match &c.expression {
             oxc::ast::ast::ChainElement::StaticMemberExpression(m) => {
@@ -181,11 +176,7 @@ fn analyze_test(expr: &Expression<'_>, ctx: &GuardCtx) -> (Vec<Protect>, Vec<Pro
     }
 }
 
-fn analyze_member_test(
-    object: &Expression<'_>,
-    prop: &str,
-    ctx: &GuardCtx,
-) -> (Vec<Protect>, Vec<Protect>) {
+fn analyze_member_test(object: &Expression<'_>, prop: &str, ctx: &GuardCtx) -> (Vec<Protect>, Vec<Protect>) {
     // `globalThis.<browserGlobal>` → protects that specific name.
     // `globalThis.window` and `globalThis.document` are universal browser
     // checks (vendor's `browserEnvironment: true` for those names).
@@ -199,9 +190,7 @@ fn analyze_member_test(
             return (vec![p], vec![]);
         }
         // `env.browser` / `env.BROWSER` where env is a namespace import.
-        if ctx.env_namespaces.contains(obj.name.as_str())
-            && (prop == "browser" || prop == "BROWSER")
-        {
+        if ctx.env_namespaces.contains(obj.name.as_str()) && (prop == "browser" || prop == "BROWSER") {
             return (vec![Protect::All], vec![]);
         }
     }
@@ -218,18 +207,11 @@ fn analyze_member_test(
     (vec![], vec![])
 }
 
-fn analyze_binary_test(
-    b: &oxc::ast::ast::BinaryExpression<'_>,
-    ctx: &GuardCtx,
-) -> (Vec<Protect>, Vec<Protect>) {
+fn analyze_binary_test(b: &oxc::ast::ast::BinaryExpression<'_>, ctx: &GuardCtx) -> (Vec<Protect>, Vec<Protect>) {
     // typeof X (!)=== 'undefined' | 'object'
     let (typeof_arg, other) = match (&b.left, &b.right) {
-        (Expression::UnaryExpression(u), _) if u.operator == UnaryOperator::Typeof => {
-            (&u.argument, &b.right)
-        }
-        (_, Expression::UnaryExpression(u)) if u.operator == UnaryOperator::Typeof => {
-            (&u.argument, &b.left)
-        }
+        (Expression::UnaryExpression(u), _) if u.operator == UnaryOperator::Typeof => (&u.argument, &b.right),
+        (_, Expression::UnaryExpression(u)) if u.operator == UnaryOperator::Typeof => (&u.argument, &b.left),
         _ => return analyze_binary_non_typeof(b, ctx),
     };
     let Expression::Identifier(id) = typeof_arg else {
@@ -241,14 +223,9 @@ fn analyze_binary_test(
     };
     let val = sl.value.as_str().unwrap_or("");
     let positive_when_truthy = match (&b.operator, val) {
-        (BinaryOperator::Inequality, "undefined")
-        | (BinaryOperator::StrictInequality, "undefined") => true,
-        (BinaryOperator::Equality, "undefined") | (BinaryOperator::StrictEquality, "undefined") => {
-            false
-        }
-        (BinaryOperator::Inequality, "object") | (BinaryOperator::StrictInequality, "object") => {
-            false
-        }
+        (BinaryOperator::Inequality, "undefined") | (BinaryOperator::StrictInequality, "undefined") => true,
+        (BinaryOperator::Equality, "undefined") | (BinaryOperator::StrictEquality, "undefined") => false,
+        (BinaryOperator::Inequality, "object") | (BinaryOperator::StrictInequality, "object") => false,
         (BinaryOperator::Equality, "object") | (BinaryOperator::StrictEquality, "object") => true,
         _ => return (vec![], vec![]),
     };
@@ -267,10 +244,7 @@ fn analyze_binary_test(
     }
 }
 
-fn analyze_binary_non_typeof(
-    b: &oxc::ast::ast::BinaryExpression<'_>,
-    _ctx: &GuardCtx,
-) -> (Vec<Protect>, Vec<Protect>) {
+fn analyze_binary_non_typeof(b: &oxc::ast::ast::BinaryExpression<'_>, _ctx: &GuardCtx) -> (Vec<Protect>, Vec<Protect>) {
     // `globalThis.<name> instanceof <anything>` — vendor treats this as a
     // truthy browser check on `<name>`. Left-side must be the member;
     // right-side unconstrained.
@@ -370,25 +344,21 @@ fn is_inside_guard(nodes: &AstNodes<'_>, node_id: NodeId, ctx: &GuardCtx, global
                     return true;
                 }
             }
-            AstKind::LogicalExpression(le) => {
-                if span_contains(le.right.span(), ref_span) {
-                    match le.operator {
-                        LogicalOperator::And => {
-                            let (pos, _) = analyze_test(&le.left, ctx);
-                            if protects_global(&pos, global) {
-                                return true;
-                            }
-                        }
-                        LogicalOperator::Or => {
-                            let (_, neg) = analyze_test(&le.left, ctx);
-                            if protects_global(&neg, global) {
-                                return true;
-                            }
-                        }
-                        _ => {}
+            AstKind::LogicalExpression(le) if span_contains(le.right.span(), ref_span) => match le.operator {
+                LogicalOperator::And => {
+                    let (pos, _) = analyze_test(&le.left, ctx);
+                    if protects_global(&pos, global) {
+                        return true;
                     }
                 }
-            }
+                LogicalOperator::Or => {
+                    let (_, neg) = analyze_test(&le.left, ctx);
+                    if protects_global(&neg, global) {
+                        return true;
+                    }
+                }
+                _ => {}
+            },
             _ => {}
         }
         id = parent;
@@ -454,10 +424,7 @@ fn has_jump_in_all_paths(stmt: &Statement<'_>) -> bool {
     match stmt {
         Statement::BlockStatement(b) => b.body.iter().any(has_jump_in_all_paths),
         Statement::IfStatement(ifs) => {
-            ifs.alternate
-                .as_ref()
-                .is_some_and(|a| has_jump_in_all_paths(a))
-                && has_jump_in_all_paths(&ifs.consequent)
+            ifs.alternate.as_ref().is_some_and(|a| has_jump_in_all_paths(a)) && has_jump_in_all_paths(&ifs.consequent)
         }
         _ => false,
     }
@@ -528,9 +495,7 @@ fn collect_type_annotation_spans(sem: &Semantic<'_>) -> Vec<(u32, u32)> {
 }
 
 fn is_inside_any(span: Span, ranges: &[(u32, u32)]) -> bool {
-    ranges
-        .iter()
-        .any(|(s, e)| *s <= span.start && span.end <= *e)
+    ranges.iter().any(|(s, e)| *s <= span.start && span.end <= *e)
 }
 
 impl Rule for NoTopLevelBrowserGlobals {
@@ -567,11 +532,7 @@ impl Rule for NoTopLevelBrowserGlobals {
                 continue;
             };
             // Locally-shadowed reference (`let window = ...`) → skip.
-            if scoping
-                .get_reference(id.reference_id())
-                .symbol_id()
-                .is_some()
-            {
+            if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
                 continue;
             }
             // Type-level use: `let x: Window` → skip.
@@ -579,9 +540,7 @@ impl Rule for NoTopLevelBrowserGlobals {
                 continue;
             }
             // `typeof window` alone — never a read, skip.
-            if is_typeof_argument(nodes, node.id())
-                && is_guard_reference(nodes, node.id(), &guard_ctx, global)
-            {
+            if is_typeof_argument(nodes, node.id()) && is_guard_reference(nodes, node.id(), &guard_ctx, global) {
                 continue;
             }
             // `globalThis.window` — the identifier is `globalThis`, not `window`,
@@ -620,10 +579,7 @@ impl Rule for NoTopLevelBrowserGlobals {
             let byte_offset = id.span.start as usize;
             let s = (content_offset + byte_offset) as u32;
             ctx.diagnostic(
-                format!(
-                    "Unexpected top-level browser global variable \"{}\".",
-                    global
-                ),
+                format!("Unexpected top-level browser global variable \"{}\".", global),
                 Span::new(s, s + global.len() as u32),
             );
         }
@@ -638,10 +594,7 @@ impl Rule for NoTopLevelBrowserGlobals {
             let global = member.property.name.as_str();
             if object.name != "globalThis"
                 || !BROWSER_GLOBALS.contains(&global)
-                || scoping
-                    .get_reference(object.reference_id())
-                    .symbol_id()
-                    .is_some()
+                || scoping.get_reference(object.reference_id()).symbol_id().is_some()
                 || is_inside_any(member.span, &function_spans)
                 || is_inside_any(member.span, &type_annotation_spans)
                 || is_guard_reference(nodes, node.id(), &guard_ctx, global)
@@ -657,10 +610,7 @@ impl Rule for NoTopLevelBrowserGlobals {
                 continue;
             }
             ctx.diagnostic(
-                format!(
-                    "Unexpected top-level browser global variable \"{}\".",
-                    global
-                ),
+                format!("Unexpected top-level browser global variable \"{}\".", global),
                 Span::new(
                     content_offset as u32 + member.span.start,
                     content_offset as u32 + member.span.end,
@@ -795,8 +745,7 @@ fn check_template_nodes(nodes: &[TemplateNode], ctx: &mut LintContext<'_>, in_br
 
 fn is_word_boundary(text: &str, pos: usize, len: usize) -> bool {
     let bytes = text.as_bytes();
-    (pos == 0
-        || !matches!(bytes[pos - 1], b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$' | b'.'))
+    (pos == 0 || !matches!(bytes[pos - 1], b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$' | b'.'))
         && (pos + len >= bytes.len()
             || !matches!(bytes[pos + len], b'0'..=b'9' | b'a'..=b'z' | b'A'..=b'Z' | b'_' | b'$'))
 }
@@ -808,10 +757,7 @@ fn check_expr_for_globals(expr: &str, span: Span, ctx: &mut LintContext<'_>) {
                 continue;
             }
             ctx.diagnostic(
-                format!(
-                    "Unexpected top-level browser global variable \"{}\".",
-                    global
-                ),
+                format!("Unexpected top-level browser global variable \"{}\".", global),
                 Span::new(
                     span.start + 1 + pos as u32,
                     span.start + 1 + pos as u32 + global.len() as u32,
@@ -828,17 +774,13 @@ mod tests {
         let source = "<!-- é -->\n<script data-x='>'>typeof location === 'undefined' && location.href; globalThis.location.href; globalThis.location?.href; function nested(){globalThis.location.href}</script>{location.href}";
         let allocator = oxc::allocator::Allocator::default();
         let parsed = crate::parser::parse_for_lint(source, &allocator);
-        let diagnostics =
-            crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let diagnostics = crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
         let reads: Vec<_> = diagnostics
             .iter()
             .filter(|d| d.rule_name == "svelte/no-top-level-browser-globals")
             .map(|d| &source[d.span.start as usize..d.span.end as usize])
             .collect();
-        assert_eq!(
-            reads,
-            ["location", "location", "globalThis.location", "location"]
-        );
+        assert_eq!(reads, ["location", "location", "globalThis.location", "location"]);
     }
 
     #[test]
@@ -848,8 +790,7 @@ mod tests {
         let source = "<script>import { browser } from '$app/environment';</script>{#if browser}a{:else if browser}b{:else if browser}c{:else}{location.href}{/if}";
         let allocator = oxc::allocator::Allocator::default();
         let parsed = crate::parser::parse_for_lint(source, &allocator);
-        let diagnostics =
-            crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let diagnostics = crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
         assert!(
             diagnostics
                 .iter()

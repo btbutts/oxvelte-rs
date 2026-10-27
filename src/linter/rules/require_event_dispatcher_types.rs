@@ -2,8 +2,8 @@
 //! ⭐ Recommended
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::span::Span;
 
 pub struct RequireEventDispatcherTypes;

@@ -29,9 +29,7 @@ impl Rule for NoReactiveFunctions {
             .ast
             .instance
             .as_ref()
-            .map_or(ctx.instance_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
         let script_source = ctx
             .ast
             .instance
@@ -110,10 +108,7 @@ mod tests {
         assert!(diagnostic.fix.is_none());
         let fix = &diagnostic.suggestions[0].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
-        );
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         assert_eq!(
             output,
             "<!-- 😀 --><script data-note=\">\">const fn = () => 1;</script>"

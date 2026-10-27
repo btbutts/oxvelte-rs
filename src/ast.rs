@@ -191,10 +191,7 @@ impl<'a> Element<'a> {
     /// shorthand `{name}`, or a directive expression). Returns `None` for
     /// literal values, `Concat` values, and parse failures. Use
     /// [`Element::attribute_part_expression_ast`] for `Concat` parts.
-    pub fn attribute_expression_ast(
-        &self,
-        idx: usize,
-    ) -> Option<&'a oxc::ast::ast::Expression<'a>> {
+    pub fn attribute_expression_ast(&self, idx: usize) -> Option<&'a oxc::ast::ast::Expression<'a>> {
         self.attribute_meta.get(idx).and_then(|m| m.expression_ast)
     }
 

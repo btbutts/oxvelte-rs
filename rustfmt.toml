@@ -1,4 +1,4 @@
-unstable_features = false
+# unstable_features = false
 
 # line length
 max_width = 120
@@ -6,15 +6,15 @@ max_width = 120
 # Layout
 style_edition = "2024"
 use_small_heuristics = "Default"
-imports_granularity = "Module"
+# imports_granularity = "Module"
+# imports_layout = "HorizontalVertical"
+# indent_style = "Block"
+# control_brace_style = "AlwaysSameLine"
 reorder_modules = true
-group_imports = "StdExternalCrate"
+# group_imports = "StdExternalCrate"
 reorder_imports = true
-trailing_comma = "Always"
+# trailing_comma = "Always"
 newline_style = "Unix"
 
-wrap_comments = true
-comment_width = 100
-
-trim_trailing_spaces = true
-
+# wrap_comments = true
+# comment_width = 100

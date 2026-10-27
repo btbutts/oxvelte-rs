@@ -1,7 +1,7 @@
 //! Shared bridge to the project's Svelte compiler. The process starts only when
 //! a compiler-backed rule runs and is reused across components.
 use oxc::span::Span;
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -127,7 +127,9 @@ fn resolve_js_runtime(settings: Option<&Value>) -> Result<std::ffi::OsString, St
                 return Ok(path.into());
             }
             _ => {
-                return Err("settings.js-runtime must be \"bun\", \"node\", or [\"bun\"|\"node\", {\"path\": \"...\"}]".into());
+                return Err(
+                    "settings.js-runtime must be \"bun\", \"node\", or [\"bun\"|\"node\", {\"path\": \"...\"}]".into(),
+                );
             }
         }
     }
@@ -161,24 +163,12 @@ impl Runtime {
             .args(["--input-type=commonjs", "-e", "const fs=require('node:fs');const b=Buffer.alloc(1);let n='';while(fs.readSync(0,b,0,1,null)&&b[0]!==10)n+=b.toString();const code=Buffer.alloc(Number(n));let offset=0;while(offset<code.length){const count=fs.readSync(0,code,offset,code.length-offset,null);if(!count)throw Error('Incomplete Oxvelte runtime bootstrap');offset+=count;}eval(code.toString('utf8'));"])
             .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit())
             .spawn().map_err(|e| format!("Cannot start {:?} for Svelte compiler rules: {e}. Install bun or Node.js, or set settings.js-runtime or OXVELTE_NODE.", program))?;
-        let mut input = child
-            .stdin
-            .take()
-            .ok_or("Compiler runtime has no input pipe")?;
+        let mut input = child.stdin.take().ok_or("Compiler runtime has no input pipe")?;
         write!(input, "{}\n{}", script.len(), script)
             .and_then(|_| input.flush())
             .map_err(|error| format!("Cannot initialize Node.js lint runtime: {error}"))?;
-        let output = BufReader::new(
-            child
-                .stdout
-                .take()
-                .ok_or("Compiler runtime has no output pipe")?,
-        );
-        Ok(Self {
-            child,
-            input,
-            output,
-        })
+        let output = BufReader::new(child.stdout.take().ok_or("Compiler runtime has no output pipe")?);
+        Ok(Self { child, input, output })
     }
     fn compile(
         &mut self,
@@ -221,8 +211,8 @@ impl Runtime {
         if line.is_empty() {
             return Err("Svelte compiler runtime exited without a response".into());
         }
-        let response: Response<T> = serde_json::from_str(&line)
-            .map_err(|e| format!("Invalid Svelte compiler response: {e}"))?;
+        let response: Response<T> =
+            serde_json::from_str(&line).map_err(|e| format!("Invalid Svelte compiler response: {e}"))?;
         if let Some(error) = response.error {
             return Err(error);
         }
@@ -264,12 +254,10 @@ fn convert_warnings(source: &str, warnings: Vec<WireWarning>) -> Vec<Warning> {
     let report = |w: WireReport| ReportWarning {
         message: w.message,
         code: w.code,
-        span: w.start.or(w.end).map(|start| {
-            Span::new(
-                utf16_byte(source, start),
-                utf16_byte(source, w.end.unwrap_or(start)),
-            )
-        }),
+        span: w
+            .start
+            .or(w.end)
+            .map(|start| Span::new(utf16_byte(source, start), utf16_byte(source, w.end.unwrap_or(start)))),
     };
     warnings
         .into_iter()
@@ -288,11 +276,7 @@ fn convert_warnings(source: &str, warnings: Vec<WireWarning>) -> Vec<Warning> {
         .collect()
 }
 pub(crate) fn byte_utf16(source: &str, byte: u32) -> usize {
-    source
-        .get(..byte as usize)
-        .unwrap_or(source)
-        .encode_utf16()
-        .count()
+    source.get(..byte as usize).unwrap_or(source).encode_utf16().count()
 }
 pub(crate) fn utf16_byte(source: &str, index: usize) -> u32 {
     let mut units = 0;
@@ -306,11 +290,7 @@ pub(crate) fn utf16_byte(source: &str, index: usize) -> u32 {
 }
 /// Compile using Svelte resolved relative to the component, or the explicit
 /// OXVELTE_COMPILER_RUNTIME directory used by reproducible parity runs.
-pub fn compile(
-    source: &str,
-    filename: Option<&str>,
-    settings: Option<&Value>,
-) -> Result<CompileResult, String> {
+pub fn compile(source: &str, filename: Option<&str>, settings: Option<&Value>) -> Result<CompileResult, String> {
     with_runtime(settings, |runtime| runtime.compile(source, filename, settings))
 }
 /// Apply executable Svelte warning hooks only to warnings retained by the
@@ -332,9 +312,7 @@ pub fn apply_warning_callbacks(
 /// programs are refreshed per request so unsaved source and imports stay current.
 pub(crate) fn typescript_conditions(request: &Value) -> Result<Value, String> {
     let serialized = serde_json::to_string(request).map_err(|error| error.to_string())?;
-    with_runtime(request.get("settings"), |runtime| {
-        runtime.exchange(&serialized)
-    })
+    with_runtime(request.get("settings"), |runtime| runtime.exchange(&serialized))
 }
 
 fn with_runtime<T>(
@@ -351,8 +329,7 @@ fn with_runtime<T>(
     }
     let result = action(state.as_mut().unwrap());
     if result.as_ref().is_err_and(|message| {
-        message.contains("compiler runtime exited")
-            || message.contains("Cannot write compiler request")
+        message.contains("compiler runtime exited") || message.contains("Cannot write compiler request")
     }) {
         *state = None;
     }
@@ -377,24 +354,22 @@ mod tests {
         std::fs::create_dir_all(&directory).unwrap();
         let config = directory.join("_config.cjs");
         let dependency = directory.join("options.cjs");
-        std::fs::write(&config, "module.exports={languageOptions:{parserOptions:{svelteConfig:require('./options.cjs')}}};").unwrap();
+        std::fs::write(
+            &config,
+            "module.exports={languageOptions:{parserOptions:{svelteConfig:require('./options.cjs')}}};",
+        )
+        .unwrap();
         std::fs::write(
             &dependency,
             "module.exports={compilerOptions:{experimental:{async:false}}};",
         )
         .unwrap();
         let settings = serde_json::json!({"compiler":{"executableConfigPath":config}});
-        let filename = directory
-            .join("Refresh.svelte")
-            .to_string_lossy()
-            .into_owned();
+        let filename = directory.join("Refresh.svelte").to_string_lossy().into_owned();
         let mut runtime = Runtime::start(None).unwrap();
         let source = "<script>await new Promise(() => {});</script>";
         assert_eq!(
-            runtime
-                .compile(source, Some(&filename), Some(&settings))
-                .unwrap()
-                .kind,
+            runtime.compile(source, Some(&filename), Some(&settings)).unwrap().kind,
             "error"
         );
         std::fs::write(
@@ -403,31 +378,22 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            runtime
-                .compile(source, Some(&filename), Some(&settings))
-                .unwrap()
-                .kind,
+            runtime.compile(source, Some(&filename), Some(&settings)).unwrap().kind,
             "warn"
         );
         std::fs::write(&config, "module.exports={languageOptions:{parserOptions:{svelteConfig:{compilerOptions:{experimental:{async:false}}}}}};").unwrap();
         assert_eq!(
-            runtime
-                .compile(source, Some(&filename), Some(&settings))
-                .unwrap()
-                .kind,
+            runtime.compile(source, Some(&filename), Some(&settings)).unwrap().kind,
             "error"
         );
 
         let imported = directory.join("_selectors.scss");
         std::fs::write(&imported, ".unused {color: red}").unwrap();
-        let source =
-            "<div class='used'></div><style lang='scss'>@use 'selectors';</style>".to_string();
+        let source = "<div class='used'></div><style lang='scss'>@use 'selectors';</style>".to_string();
         let start = source.find("@use").unwrap();
         let end = source.find("</style>").unwrap();
         let settings = serde_json::json!({"_oxvelteStyles":[{"start":start,"end":end,"element_start":source.find("<style").unwrap(),"element_end":source.len(),"lang":"scss"}]});
-        let first = runtime
-            .compile(&source, Some(&filename), Some(&settings))
-            .unwrap();
+        let first = runtime.compile(&source, Some(&filename), Some(&settings)).unwrap();
         assert!(
             first
                 .warnings
@@ -436,13 +402,13 @@ mod tests {
             "{first:?}"
         );
         std::fs::write(&imported, ".used {color: red}").unwrap();
-        let second = runtime
-            .compile(&source, Some(&filename), Some(&settings))
-            .unwrap();
-        assert!(!second
-            .warnings
-            .iter()
-            .any(|warning| warning.code.as_deref() == Some("css_unused_selector")));
+        let second = runtime.compile(&source, Some(&filename), Some(&settings)).unwrap();
+        assert!(
+            !second
+                .warnings
+                .iter()
+                .any(|warning| warning.code.as_deref() == Some("css_unused_selector"))
+        );
         drop(runtime);
         std::fs::remove_dir_all(directory).unwrap();
     }
@@ -460,21 +426,17 @@ mod tests {
             OsString::from("bun")
         );
         assert_eq!(
-            resolve_js_runtime(Some(
-                &serde_json::json!({"js-runtime": ["node", {"path": "/bin/sh"}]})
-            ))
-            .unwrap(),
+            resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["node", {"path": "/bin/sh"}]}))).unwrap(),
             OsString::from("/bin/sh")
         );
         assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": "deno"}))).is_err());
-        assert!(resolve_js_runtime(Some(
-            &serde_json::json!({"js-runtime": ["bun", {"path": "/definitely/not/here"}]})
-        ))
-        .is_err());
-        assert!(resolve_js_runtime(Some(
-            &serde_json::json!({"js-runtime": [{"path": "/bin/sh"}]})
-        ))
-        .is_err());
+        assert!(
+            resolve_js_runtime(Some(
+                &serde_json::json!({"js-runtime": ["bun", {"path": "/definitely/not/here"}]})
+            ))
+            .is_err()
+        );
+        assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": [{"path": "/bin/sh"}]}))).is_err());
         assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["bun"]}))).is_err());
     }
 }

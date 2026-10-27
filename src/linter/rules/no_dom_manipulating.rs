@@ -2,9 +2,9 @@
 //! ⭐ Recommended
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
-use oxc::ast::ast::{AssignmentTarget, Expression};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{AssignmentTarget, Expression};
 use oxc::semantic::SymbolId;
 use oxc::span::{GetSpan, Span};
 use rustc_hash::FxHashSet;
@@ -27,13 +27,7 @@ const DOM_METHODS: &[&str] = &[
     "replaceWith",
 ];
 
-const DOM_PROPS: &[&str] = &[
-    "textContent",
-    "innerHTML",
-    "outerHTML",
-    "innerText",
-    "outerText",
-];
+const DOM_PROPS: &[&str] = &["textContent", "innerHTML", "outerHTML", "innerText", "outerText"];
 
 pub struct NoDomManipulating;
 
@@ -84,9 +78,9 @@ impl Rule for NoDomManipulating {
                             bound_names.insert(n.to_string());
                         }
                     }
-                    AttributeValue::Concat(parts) => {
+                    AttributeValue::Concat(parts)
                         // `bind:this="{var}"` — one Expression part.
-                        if parts.len() == 1 {
+                        if parts.len() == 1 => {
                             if let AttributeValuePart::Expression(expr) = &parts[0] {
                                 let n = expr.trim();
                                 if !n.is_empty() && n.chars().all(is_ident_char) {
@@ -94,7 +88,6 @@ impl Rule for NoDomManipulating {
                                 }
                             }
                         }
-                    }
                     _ => {}
                 }
             }
@@ -110,9 +103,7 @@ impl Rule for NoDomManipulating {
             .ast
             .instance
             .as_ref()
-            .map_or(ctx.instance_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
         let scoping = semantic.scoping();
 
         // 2. Resolve each bound name to a symbol in the instance root scope.
@@ -148,9 +139,7 @@ impl Rule for NoDomManipulating {
             };
             // Unwrap the callee: parens, chain expression.
             let callee = strip_wrappers(&ce.callee);
-            let Some((base_sym, method, end_span)) =
-                base_symbol_and_tail(callee, scoping, semantic)
-            else {
+            let Some((base_sym, method, end_span)) = base_symbol_and_tail(callee, scoping, semantic) else {
                 continue;
             };
             if !bound_symbols.contains(&base_sym) {
@@ -169,9 +158,7 @@ impl Rule for NoDomManipulating {
             let AstKind::AssignmentExpression(ae) = node.kind() else {
                 continue;
             };
-            let Some((base_sym, prop, end_span)) =
-                assignment_target_tail(&ae.left, scoping, semantic)
-            else {
+            let Some((base_sym, prop, end_span)) = assignment_target_tail(&ae.left, scoping, semantic) else {
                 continue;
             };
             if !bound_symbols.contains(&base_sym) {
@@ -189,24 +176,6 @@ impl Rule for NoDomManipulating {
 
 fn is_ident_char(c: char) -> bool {
     c.is_alphanumeric() || c == '_' || c == '$'
-}
-
-#[cfg(test)]
-mod span_tests {
-    #[test]
-    fn parenthesized_optional_calls_report_the_member_expression() {
-        let source = "<!-- é -->\n<script data-x='>'>let el; (/* keep */ el?.remove)();</script><p bind:this={el}/>";
-        let allocator = oxc::allocator::Allocator::default();
-        let parsed = crate::parser::parse_for_lint(source, &allocator);
-        let diagnostics =
-            crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
-        let reads: Vec<_> = diagnostics
-            .iter()
-            .filter(|d| d.rule_name == "svelte/no-dom-manipulating")
-            .map(|d| &source[d.span.start as usize..d.span.end as usize])
-            .collect();
-        assert_eq!(reads, ["el?.remove"]);
-    }
 }
 
 /// Strip `ParenthesizedExpression` and `ChainExpression` wrappers to get the
@@ -237,23 +206,15 @@ fn base_symbol_and_tail<'a>(
 ) -> Option<(SymbolId, &'a str, Span)> {
     let (mem_obj, prop, end) = match callee {
         Expression::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
-        Expression::ComputedMemberExpression(m) => {
-            (&m.object, computed_property_name(&m.expression)?, m.span)
-        }
+        Expression::ComputedMemberExpression(m) => (&m.object, computed_property_name(&m.expression)?, m.span),
         Expression::ChainExpression(c) => match &c.expression {
-            oxc::ast::ast::ChainElement::StaticMemberExpression(m) => {
-                (&m.object, m.property.name.as_str(), m.span)
-            }
+            oxc::ast::ast::ChainElement::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
             oxc::ast::ast::ChainElement::ComputedMemberExpression(m) => {
                 (&m.object, computed_property_name(&m.expression)?, m.span)
             }
             oxc::ast::ast::ChainElement::CallExpression(ce) => match &ce.callee {
-                Expression::StaticMemberExpression(m) => {
-                    (&m.object, m.property.name.as_str(), m.span)
-                }
-                Expression::ComputedMemberExpression(m) => {
-                    (&m.object, computed_property_name(&m.expression)?, m.span)
-                }
+                Expression::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
+                Expression::ComputedMemberExpression(m) => (&m.object, computed_property_name(&m.expression)?, m.span),
                 _ => return None,
             },
             _ => return None,
@@ -278,12 +239,8 @@ fn assignment_target_tail<'a>(
     semantic: &'a oxc::semantic::Semantic<'a>,
 ) -> Option<(SymbolId, &'a str, Span)> {
     let (object, prop, span) = match target {
-        AssignmentTarget::StaticMemberExpression(m) => {
-            (&m.object, m.property.name.as_str(), m.span)
-        }
-        AssignmentTarget::ComputedMemberExpression(m) => {
-            (&m.object, computed_property_name(&m.expression)?, m.span)
-        }
+        AssignmentTarget::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
+        AssignmentTarget::ComputedMemberExpression(m) => (&m.object, computed_property_name(&m.expression)?, m.span),
         _ => return None,
     };
     let base_id = match object {
@@ -299,5 +256,22 @@ fn computed_property_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
     match expr {
         Expression::StringLiteral(lit) => lit.value.as_str(),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod span_tests {
+    #[test]
+    fn parenthesized_optional_calls_report_the_member_expression() {
+        let source = "<!-- é -->\n<script data-x='>'>let el; (/* keep */ el?.remove)();</script><p bind:this={el}/>";
+        let allocator = oxc::allocator::Allocator::default();
+        let parsed = crate::parser::parse_for_lint(source, &allocator);
+        let diagnostics = crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let reads: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.rule_name == "svelte/no-dom-manipulating")
+            .map(|d| &source[d.span.start as usize..d.span.end as usize])
+            .collect();
+        assert_eq!(reads, ["el?.remove"]);
     }
 }

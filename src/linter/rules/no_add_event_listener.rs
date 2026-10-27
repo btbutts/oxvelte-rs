@@ -2,8 +2,8 @@
 //! 💡
 
 use crate::linter::{Fix, LintContext, Rule, Suggestion};
-use oxc::ast::ast::Expression;
 use oxc::ast::AstKind;
+use oxc::ast::ast::Expression;
 use oxc::span::{GetSpan, Span};
 
 pub struct NoAddEventListener;
@@ -24,9 +24,7 @@ impl Rule for NoAddEventListener {
                 .ast
                 .instance
                 .as_ref()
-                .map_or(ctx.instance_content_offset, |script| {
-                    script.content_span.start
-                });
+                .map_or(ctx.instance_content_offset, |script| script.content_span.start);
             check_semantic(ctx, semantic, offset);
         }
         if let Some(semantic) = ctx.module_semantic {
@@ -34,22 +32,16 @@ impl Rule for NoAddEventListener {
                 .ast
                 .module
                 .as_ref()
-                .map_or(ctx.module_content_offset, |script| {
-                    script.content_span.start
-                });
+                .map_or(ctx.module_content_offset, |script| script.content_span.start);
             check_semantic(ctx, semantic, offset);
         }
     }
 }
 
-fn check_semantic(
-    ctx: &mut LintContext<'_>,
-    semantic: &oxc::semantic::Semantic<'_>,
-    content_offset: u32,
-) {
+fn check_semantic(ctx: &mut LintContext<'_>, semantic: &oxc::semantic::Semantic<'_>, content_offset: u32) {
     let source = ctx.source;
-    let script_source = &source
-        [content_offset as usize..(content_offset + semantic.nodes().program().span.end) as usize];
+    let script_source =
+        &source[content_offset as usize..(content_offset + semantic.nodes().program().span.end) as usize];
     let tokens = super::script_token_spans(script_source);
     for node in semantic.nodes().iter() {
         let AstKind::CallExpression(ce) = node.kind() else {
@@ -79,10 +71,7 @@ fn check_semantic(
             suggestions.push(Suggestion {
                 description: "Use `on` from `svelte/events` instead".into(),
                 fix: Fix {
-                    span: Span::new(
-                        content_offset + callee_span.start,
-                        content_offset + next.end,
-                    ),
+                    span: Span::new(content_offset + callee_span.start, content_offset + next.end),
                     replacement: format!(
                         "on{}{target}, ",
                         &script_source[callee_span.end as usize..next.end as usize]
@@ -116,10 +105,7 @@ mod tests {
         for (diagnostic, replacement) in diagnostics.iter().zip(expected) {
             assert!(diagnostic.fix.is_none());
             assert_eq!(diagnostic.suggestions[0].fix.replacement, replacement);
-            assert!(
-                source[diagnostic.span.start as usize..diagnostic.span.end as usize]
-                    .ends_with("callback)")
-            );
+            assert!(source[diagnostic.span.start as usize..diagnostic.span.end as usize].ends_with("callback)"));
         }
     }
 }

@@ -2,17 +2,18 @@
 //! ⭐ Recommended 🔧 Fixable
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
-use oxc::ast::ast::{
-    BindingPattern, Declaration, Expression, ImportDeclarationSpecifier, ModuleExportName,
-    Statement, TSType, TSTypeName, VariableDeclaration, VariableDeclarationKind,
-};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{
+    BindingPattern, Declaration, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement, TSType,
+    TSTypeName, VariableDeclaration, VariableDeclarationKind,
+};
 use oxc::span::{GetSpan, Span};
 use std::collections::{HashMap, HashSet};
 
 const STORE_FACTORIES: &[&str] = &["writable", "readable", "derived"];
-const RAW_STORE_MSG: &str = "Use the $ prefix or the get function to access reactive values instead of accessing the raw store.";
+const RAW_STORE_MSG: &str =
+    "Use the $ prefix or the get function to access reactive values instead of accessing the raw store.";
 
 pub struct RequireStoreReactiveAccess;
 impl Rule for RequireStoreReactiveAccess {
@@ -32,8 +33,7 @@ impl Rule for RequireStoreReactiveAccess {
         let Some(semantic) = ctx.instance_semantic else {
             return;
         };
-        let is_typescript =
-            script.lang.as_deref() == Some("ts") || script.lang.as_deref() == Some("typescript");
+        let is_typescript = script.lang.as_deref() == Some("ts") || script.lang.as_deref() == Some("typescript");
         let imports = collect_imports(semantic.nodes().program().body.as_slice());
         let mut factory_names = HashSet::new();
         for (local, imported, module) in &imports {
@@ -44,9 +44,7 @@ impl Rule for RequireStoreReactiveAccess {
         let mut stores = HashMap::new();
         for statement in &semantic.nodes().program().body {
             match statement {
-                Statement::VariableDeclaration(decl) => {
-                    collect_store_vars_from_decl(decl, &factory_names, &mut stores)
-                }
+                Statement::VariableDeclaration(decl) => collect_store_vars_from_decl(decl, &factory_names, &mut stores),
                 Statement::ExportDeclaration(export) => {
                     if let Declaration::VariableDeclaration(decl) = &export.declaration {
                         collect_store_vars_from_decl(decl, &factory_names, &mut stores);
@@ -115,28 +113,20 @@ impl Rule for RequireStoreReactiveAccess {
         let mut symbol_stores = HashMap::new();
         for (name, consistent) in &stores {
             if !name.contains('.') {
-                if let Some(symbol) =
-                    scoping.get_binding(scoping.root_scope_id(), name.as_str().into())
-                {
+                if let Some(symbol) = scoping.get_binding(scoping.root_scope_id(), name.as_str().into()) {
                     symbol_stores.insert(symbol, *consistent);
                 }
             }
         }
         let factory_symbols: HashSet<_> = imports
             .iter()
-            .filter(|(_, name, module)| {
-                module == "svelte/store" && STORE_FACTORIES.contains(&name.as_str())
-            })
-            .filter_map(|(local, _, _)| {
-                scoping.get_binding(scoping.root_scope_id(), local.as_str().into())
-            })
+            .filter(|(_, name, module)| module == "svelte/store" && STORE_FACTORIES.contains(&name.as_str()))
+            .filter_map(|(local, _, _)| scoping.get_binding(scoping.root_scope_id(), local.as_str().into()))
             .collect();
         let namespace_symbols: HashSet<_> = imports
             .iter()
             .filter(|(_, name, module)| module == "svelte/store" && name == "*")
-            .filter_map(|(local, _, _)| {
-                scoping.get_binding(scoping.root_scope_id(), local.as_str().into())
-            })
+            .filter_map(|(local, _, _)| scoping.get_binding(scoping.root_scope_id(), local.as_str().into()))
             .collect();
         for node in semantic.nodes().iter() {
             let AstKind::VariableDeclarator(declaration) = node.kind() else {
@@ -183,13 +173,7 @@ impl Rule for RequireStoreReactiveAccess {
         }
         let offset = script.content_span.start;
         for node in semantic.nodes().iter() {
-            report_target(
-                node.kind(),
-                offset,
-                &stores,
-                Some((semantic, &symbol_stores)),
-                ctx,
-            );
+            report_target(node.kind(), offset, &stores, Some((semantic, &symbol_stores)), ctx);
             for (expression, consistent) in operand_expressions(node.kind()) {
                 report_expression(
                     expression,
@@ -247,16 +231,12 @@ impl Rule for RequireStoreReactiveAccess {
                     }
                 }
             }
-            TemplateNode::SnippetBlock(block) => {
-                local_regions.push((block.body.span, binding_names(&block.params)))
-            }
+            TemplateNode::SnippetBlock(block) => local_regions.push((block.body.span, binding_names(&block.params))),
             _ => {}
         });
         let mut containers = vec![ctx.ast.html.span];
         walk_template_nodes(&ctx.ast.html, &mut |node| match node {
-            TemplateNode::Element(el) => {
-                containers.push(Span::new(el.start_tag_end + 1, el.span.end))
-            }
+            TemplateNode::Element(el) => containers.push(Span::new(el.start_tag_end + 1, el.span.end)),
             TemplateNode::EachBlock(block) => {
                 containers.push(block.body.span);
                 if let Some(fallback) = &block.fallback {
@@ -267,10 +247,7 @@ impl Rule for RequireStoreReactiveAccess {
                 containers.push(block.consequent.span);
             }
             TemplateNode::AwaitBlock(block) => {
-                for body in [&block.pending, &block.then, &block.catch]
-                    .into_iter()
-                    .flatten()
-                {
+                for body in [&block.pending, &block.then, &block.catch].into_iter().flatten() {
                     containers.push(body.span);
                 }
             }
@@ -287,11 +264,10 @@ impl Rule for RequireStoreReactiveAccess {
                     .unwrap();
                 let allocator = oxc::allocator::Allocator::default();
                 let declaration = format!("const {};", tag.declaration);
-                let parsed =
-                    oxc::parser::Parser::new(&allocator, &declaration, oxc::span::SourceType::ts())
-                        .parse();
+                let parsed = oxc::parser::Parser::new(&allocator, &declaration, oxc::span::SourceType::ts()).parse();
                 if parsed.diagnostics.is_empty() {
-                    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+                    let semantic = oxc::semantic::SemanticBuilder::new()
+                        .with_build_nodes(true)
                         .build(&parsed.program)
                         .semantic;
                     let names = semantic
@@ -306,46 +282,29 @@ impl Rule for RequireStoreReactiveAccess {
         });
         let source = ctx.source;
         walk_template_nodes(&ctx.ast.html, &mut |node| {
-            let mut template =
-                |text: &str, span: Span, check_root: bool, consistent: bool, disable_fix: bool| {
-                    let mut current = stores.clone();
-                    for (region, name) in &narrowed {
-                        if region.start <= span.start && region.end >= span.end {
-                            current.insert(name.clone(), true);
-                        }
+            let mut template = |text: &str, span: Span, check_root: bool, consistent: bool, disable_fix: bool| {
+                let mut current = stores.clone();
+                for (region, name) in &narrowed {
+                    if region.start <= span.start && region.end >= span.end {
+                        current.insert(name.clone(), true);
                     }
-                    for (region, names) in &local_regions {
-                        if region.start <= span.start && region.end >= span.end {
-                            current.retain(|name, _| {
-                                !names
-                                    .iter()
-                                    .any(|local| name.split('.').next() == Some(local.as_str()))
-                            });
-                        }
-                    }
-                    check_template(
-                        text,
-                        span,
-                        check_root,
-                        consistent,
-                        disable_fix,
-                        &current,
-                        ctx,
-                    );
-                };
-            match node {
-                TemplateNode::MustacheTag(tag) => {
-                    template(&tag.expression, tag.expression_span, true, false, false)
                 }
+                for (region, names) in &local_regions {
+                    if region.start <= span.start && region.end >= span.end {
+                        current.retain(|name, _| {
+                            !names.iter().any(|local| name.split('.').next() == Some(local.as_str()))
+                        });
+                    }
+                }
+                check_template(text, span, check_root, consistent, disable_fix, &current, ctx);
+            };
+            match node {
+                TemplateNode::MustacheTag(tag) => template(&tag.expression, tag.expression_span, true, false, false),
                 TemplateNode::RawMustacheTag(tag) => {
                     template(&tag.expression, tag.expression_span, false, false, false)
                 }
-                TemplateNode::RenderTag(tag) => {
-                    template(&tag.expression, tag.expression_span, false, false, false)
-                }
-                TemplateNode::IfBlock(block) => {
-                    template(&block.test, block.test_span, true, true, false)
-                }
+                TemplateNode::RenderTag(tag) => template(&tag.expression, tag.expression_span, false, false, false),
+                TemplateNode::IfBlock(block) => template(&block.test, block.test_span, true, true, false),
                 TemplateNode::AwaitBlock(block) => {
                     template(&block.expression, block.expression_span, true, true, false)
                 }
@@ -355,16 +314,11 @@ impl Rule for RequireStoreReactiveAccess {
                         template(key, span, false, false, false);
                     }
                 }
-                TemplateNode::KeyBlock(block) => template(
-                    &block.expression,
-                    block.expression_span,
-                    false,
-                    false,
-                    false,
-                ),
+                TemplateNode::KeyBlock(block) => {
+                    template(&block.expression, block.expression_span, false, false, false)
+                }
                 TemplateNode::Element(element) => {
-                    let accepts_store =
-                        !element.kind().is_html() && element.name != "svelte:element";
+                    let accepts_store = !element.kind().is_html() && element.name != "svelte:element";
                     for (index, attribute) in element.attributes.iter().enumerate() {
                         let Some(meta) = element.attribute_meta.get(index) else {
                             continue;
@@ -373,12 +327,9 @@ impl Rule for RequireStoreReactiveAccess {
                             Attribute::NormalAttribute { name, value, .. } => {
                                 if let AttributeValue::Concat(parts) = value {
                                     for (part_index, part) in parts.iter().enumerate() {
-                                        if let (AttributeValuePart::Expression(text), Some(span)) = (
-                                            part,
-                                            meta.parts
-                                                .get(part_index)
-                                                .and_then(|p| p.expression_span),
-                                        ) {
+                                        if let (AttributeValuePart::Expression(text), Some(span)) =
+                                            (part, meta.parts.get(part_index).and_then(|p| p.expression_span))
+                                        {
                                             template(text, span, true, false, false);
                                         }
                                     }
@@ -386,8 +337,7 @@ impl Rule for RequireStoreReactiveAccess {
                                     (value, meta.expression_span)
                                 {
                                     let shorthand = meta.equals_span.is_none();
-                                    let special_this =
-                                        name == "this" && element.kind().is_svelte_special();
+                                    let special_this = name == "this" && element.kind().is_svelte_special();
                                     template(
                                         text,
                                         span,
@@ -398,16 +348,12 @@ impl Rule for RequireStoreReactiveAccess {
                                 }
                             }
                             Attribute::Spread { span } => {
-                                let expression_span = meta
-                                    .expression_span
-                                    .unwrap_or(Span::new(span.start + 4, span.end - 1));
-                                let text = &source
-                                    [expression_span.start as usize..expression_span.end as usize];
+                                let expression_span =
+                                    meta.expression_span.unwrap_or(Span::new(span.start + 4, span.end - 1));
+                                let text = &source[expression_span.start as usize..expression_span.end as usize];
                                 template(text, expression_span, true, false, false);
                             }
-                            Attribute::Directive {
-                                kind, name, value, ..
-                            } => {
+                            Attribute::Directive { kind, name, value, .. } => {
                                 let shorthand = meta.equals_span.is_none();
                                 if matches!(
                                     kind,
@@ -445,18 +391,14 @@ impl Rule for RequireStoreReactiveAccess {
                                 } else if shorthand
                                     && matches!(
                                         kind,
-                                        DirectiveKind::Binding
-                                            | DirectiveKind::Class
-                                            | DirectiveKind::StyleDirective
+                                        DirectiveKind::Binding | DirectiveKind::Class | DirectiveKind::StyleDirective
                                     )
                                 {
                                     if let Some(span) = meta.directive_subject_span {
                                         template(
                                             name,
                                             span,
-                                            !accepts_store
-                                                || !matches!(kind, DirectiveKind::Binding)
-                                                || name == "this",
+                                            !accepts_store || !matches!(kind, DirectiveKind::Binding) || name == "this",
                                             matches!(kind, DirectiveKind::Class),
                                             true,
                                         );
@@ -474,11 +416,9 @@ impl Rule for RequireStoreReactiveAccess {
 fn expression_name(expression: &Expression<'_>) -> Option<String> {
     match expression {
         Expression::Identifier(id) if !id.name.starts_with('$') => Some(id.name.to_string()),
-        Expression::StaticMemberExpression(member) => Some(format!(
-            "{}.{}",
-            expression_name(&member.object)?,
-            member.property.name
-        )),
+        Expression::StaticMemberExpression(member) => {
+            Some(format!("{}.{}", expression_name(&member.object)?, member.property.name))
+        }
         Expression::ComputedMemberExpression(member) => {
             if let Expression::StringLiteral(property) = &member.expression {
                 Some(format!(
@@ -502,45 +442,37 @@ fn report_expression(
     consistent: bool,
     disable_fix: bool,
     stores: &HashMap<String, bool>,
-    semantic: Option<(
-        &oxc::semantic::Semantic<'_>,
-        &HashMap<oxc::semantic::SymbolId, bool>,
-    )>,
+    semantic: Option<(&oxc::semantic::Semantic<'_>, &HashMap<oxc::semantic::SymbolId, bool>)>,
     ctx: &mut LintContext<'_>,
 ) {
     let Some(name) = expression_name(expression) else {
         return;
     };
     let expression = expression.get_inner_expression();
-    let always_store =
-        if let (Some((semantic, symbols)), Expression::Identifier(id)) = (semantic, expression) {
-            let Some(symbol) = semantic
-                .scoping()
-                .get_reference(id.reference_id())
-                .symbol_id()
-            else {
-                return;
-            };
-            let Some(&consistent) = symbols.get(&symbol) else {
-                return;
-            };
-            consistent
-        } else {
-            if let (Some((semantic, _)), Some(root_name)) = (semantic, name.split('.').next()) {
-                if let Some(reference) = base_identifier(expression) {
-                    let scoping = semantic.scoping();
-                    if scoping.get_reference(reference.reference_id()).symbol_id()
-                        != scoping.get_binding(scoping.root_scope_id(), root_name.into())
-                    {
-                        return;
-                    }
+    let always_store = if let (Some((semantic, symbols)), Expression::Identifier(id)) = (semantic, expression) {
+        let Some(symbol) = semantic.scoping().get_reference(id.reference_id()).symbol_id() else {
+            return;
+        };
+        let Some(&consistent) = symbols.get(&symbol) else {
+            return;
+        };
+        consistent
+    } else {
+        if let (Some((semantic, _)), Some(root_name)) = (semantic, name.split('.').next()) {
+            if let Some(reference) = base_identifier(expression) {
+                let scoping = semantic.scoping();
+                if scoping.get_reference(reference.reference_id()).symbol_id()
+                    != scoping.get_binding(scoping.root_scope_id(), root_name.into())
+                {
+                    return;
                 }
             }
-            let Some(&consistent) = stores.get(&name) else {
-                return;
-            };
-            consistent
+        }
+        let Some(&consistent) = stores.get(&name) else {
+            return;
         };
+        consistent
+    };
     if consistent && !always_store {
         return;
     }
@@ -559,9 +491,7 @@ fn report_expression(
         ctx.diagnostic(RAW_STORE_MSG, span);
     }
 }
-fn base_identifier<'a>(
-    expression: &'a Expression<'a>,
-) -> Option<&'a oxc::ast::ast::IdentifierReference<'a>> {
+fn base_identifier<'a>(expression: &'a Expression<'a>) -> Option<&'a oxc::ast::ast::IdentifierReference<'a>> {
     match expression {
         Expression::Identifier(id) => Some(id),
         Expression::StaticMemberExpression(member) => base_identifier(&member.object),
@@ -580,12 +510,12 @@ fn check_template(
 ) {
     let allocator = oxc::allocator::Allocator::default();
     let wrapper = format!("({text});");
-    let parsed =
-        oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
+    let parsed = oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
     if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+    let semantic = oxc::semantic::SemanticBuilder::new()
+        .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     let offset = expression_span.start - 1;
@@ -595,15 +525,7 @@ fn check_template(
             if expression_is_local(expression, &semantic) {
                 return;
             }
-            report_expression(
-                expression,
-                offset,
-                consistent,
-                disable_fix,
-                stores,
-                None,
-                ctx,
-            );
+            report_expression(expression, offset, consistent, disable_fix, stores, None, ctx);
         }
     }
     for node in semantic.nodes().iter() {
@@ -617,10 +539,7 @@ fn check_template(
         }
     }
 }
-fn expression_is_local(
-    expression: &Expression<'_>,
-    semantic: &oxc::semantic::Semantic<'_>,
-) -> bool {
+fn expression_is_local(expression: &Expression<'_>, semantic: &oxc::semantic::Semantic<'_>) -> bool {
     base_identifier(expression.get_inner_expression()).is_some_and(|id| {
         semantic
             .scoping()
@@ -642,9 +561,7 @@ fn target_is_local(kind: AstKind<'_>, semantic: &oxc::semantic::Semantic<'_>) ->
             .get_reference(id.reference_id())
             .symbol_id()
             .is_some(),
-        Some(SimpleAssignmentTarget::StaticMemberExpression(member)) => {
-            expression_is_local(&member.object, semantic)
-        }
+        Some(SimpleAssignmentTarget::StaticMemberExpression(member)) => expression_is_local(&member.object, semantic),
         _ => false,
     }
 }
@@ -652,10 +569,7 @@ fn report_target(
     kind: AstKind<'_>,
     offset: u32,
     stores: &HashMap<String, bool>,
-    semantic: Option<(
-        &oxc::semantic::Semantic<'_>,
-        &HashMap<oxc::semantic::SymbolId, bool>,
-    )>,
+    semantic: Option<(&oxc::semantic::Semantic<'_>, &HashMap<oxc::semantic::SymbolId, bool>)>,
     ctx: &mut LintContext<'_>,
 ) {
     use oxc::ast::ast::SimpleAssignmentTarget;
@@ -697,8 +611,7 @@ fn report_target(
                 if let Some(reference) = base_identifier(&member.object) {
                     let scoping = semantic.scoping();
                     if scoping.get_reference(reference.reference_id()).symbol_id()
-                        != scoping
-                            .get_binding(scoping.root_scope_id(), reference.name.as_str().into())
+                        != scoping.get_binding(scoping.root_scope_id(), reference.name.as_str().into())
                     {
                         return;
                     }
@@ -722,11 +635,7 @@ fn operand_expressions<'a>(kind: AstKind<'a>) -> Vec<(&'a Expression<'a>, bool)>
         AstKind::WhileStatement(node) => vec![(&node.test, true)],
         AstKind::DoWhileStatement(node) => vec![(&node.test, true)],
         AstKind::ConditionalExpression(node) => vec![(&node.test, true)],
-        AstKind::ForStatement(node) => node
-            .test
-            .as_ref()
-            .map(|test| vec![(test, true)])
-            .unwrap_or_default(),
+        AstKind::ForStatement(node) => node.test.as_ref().map(|test| vec![(test, true)]).unwrap_or_default(),
         AstKind::ForInStatement(node) => vec![(&node.right, false)],
         AstKind::ForOfStatement(node) => vec![(&node.right, false)],
         AstKind::SwitchStatement(node) => vec![(&node.discriminant, false)],
@@ -736,14 +645,11 @@ fn operand_expressions<'a>(kind: AstKind<'a>) -> Vec<(&'a Expression<'a>, bool)>
             &node.argument,
             matches!(
                 node.operator,
-                oxc::syntax::operator::UnaryOperator::LogicalNot
-                    | oxc::syntax::operator::UnaryOperator::Typeof
+                oxc::syntax::operator::UnaryOperator::LogicalNot | oxc::syntax::operator::UnaryOperator::Typeof
             ),
         )],
         AstKind::SpreadElement(node) => vec![(&node.argument, false)],
-        AstKind::AssignmentExpression(node)
-            if node.operator != oxc::syntax::operator::AssignmentOperator::Assign =>
-        {
+        AstKind::AssignmentExpression(node) if node.operator != oxc::syntax::operator::AssignmentOperator::Assign => {
             vec![(&node.right, false)]
         }
         AstKind::BinaryExpression(node) => {
@@ -751,11 +657,7 @@ fn operand_expressions<'a>(kind: AstKind<'a>) -> Vec<(&'a Expression<'a>, bool)>
             vec![(&node.left, consistent), (&node.right, consistent)]
         }
         AstKind::LogicalExpression(node) => vec![(&node.left, true)],
-        AstKind::TemplateLiteral(node) => node
-            .expressions
-            .iter()
-            .map(|expression| (expression, false))
-            .collect(),
+        AstKind::TemplateLiteral(node) => node.expressions.iter().map(|expression| (expression, false)).collect(),
         AstKind::TaggedTemplateExpression(node) => vec![(&node.tag, false)],
         AstKind::ObjectProperty(node) if node.computed => node
             .key
@@ -795,9 +697,7 @@ fn collect_store_vars_from_decl(
 ) {
     let is_const = matches!(
         vd.kind,
-        VariableDeclarationKind::Const
-            | VariableDeclarationKind::Using
-            | VariableDeclarationKind::AwaitUsing
+        VariableDeclarationKind::Const | VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing
     );
     for d in &vd.declarations {
         let Some(name) = binding_identifier_name(&d.id) else {
@@ -877,18 +777,10 @@ fn collect_imports(body: &[Statement<'_>]) -> Vec<(String, String, String)> {
                     out.push((s.local.name.as_str().to_string(), imported, source.clone()));
                 }
                 ImportDeclarationSpecifier::ImportDefaultSpecifier(s) => {
-                    out.push((
-                        s.local.name.as_str().to_string(),
-                        "default".to_string(),
-                        source.clone(),
-                    ));
+                    out.push((s.local.name.as_str().to_string(), "default".to_string(), source.clone()));
                 }
                 ImportDeclarationSpecifier::ImportNamespaceSpecifier(s) => {
-                    out.push((
-                        s.local.name.as_str().to_string(),
-                        "*".to_string(),
-                        source.clone(),
-                    ));
+                    out.push((s.local.name.as_str().to_string(), "*".to_string(), source.clone()));
                 }
             }
         }
@@ -976,9 +868,7 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
         };
         let is_const = matches!(
             vd.kind,
-            VariableDeclarationKind::Const
-                | VariableDeclarationKind::Using
-                | VariableDeclarationKind::AwaitUsing
+            VariableDeclarationKind::Const | VariableDeclarationKind::Using | VariableDeclarationKind::AwaitUsing
         );
         for d in &vd.declarations {
             exported_decls.push((d, is_const));
@@ -1005,16 +895,10 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
                 })
                 .unwrap_or(false);
             if init_store || typed_store {
-                let consistent = d.type_annotation.as_ref().map_or(true, |annotation| {
+                let consistent = d.type_annotation.as_ref().is_none_or(|annotation| {
                     ts_type_consistently_store(&annotation.type_annotation)
-                        || ts_type_consistently_references_names(
-                            &annotation.type_annotation,
-                            &store_type_names,
-                        )
-                        || ts_type_consistently_references_names(
-                            &annotation.type_annotation,
-                            &store_interfaces,
-                        )
+                        || ts_type_consistently_references_names(&annotation.type_annotation, &store_type_names)
+                        || ts_type_consistently_references_names(&annotation.type_annotation, &store_interfaces)
                 });
                 stores.insert(name.to_string(), consistent);
             }
@@ -1033,17 +917,12 @@ fn detect_store_exports(content: &str) -> HashMap<String, bool> {
             };
             if let Expression::ObjectExpression(object) = initializer {
                 for property in &object.properties {
-                    let oxc::ast::ast::ObjectPropertyKind::ObjectProperty(property) = property
-                    else {
+                    let oxc::ast::ast::ObjectPropertyKind::ObjectProperty(property) = property else {
                         continue;
                     };
                     let key = match &property.key {
-                        oxc::ast::ast::PropertyKey::StaticIdentifier(key) => {
-                            Some(key.name.to_string())
-                        }
-                        oxc::ast::ast::PropertyKey::StringLiteral(key) => {
-                            Some(key.value.display().to_string())
-                        }
+                        oxc::ast::ast::PropertyKey::StaticIdentifier(key) => Some(key.name.to_string()),
+                        oxc::ast::ast::PropertyKey::StringLiteral(key) => Some(key.value.display().to_string()),
                         _ => None,
                     };
                     if let (Some(key), Some(value)) = (key, expression_name(&property.value)) {
@@ -1087,12 +966,12 @@ fn ts_type_references_names(ty: &TSType<'_>, names: &HashSet<String>) -> bool {
 fn binding_names(pattern: &str) -> Vec<String> {
     let allocator = oxc::allocator::Allocator::default();
     let wrapper = format!("({pattern})=>0");
-    let parsed =
-        oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
+    let parsed = oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
     if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+    let semantic = oxc::semantic::SemanticBuilder::new()
+        .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     semantic
@@ -1111,9 +990,7 @@ fn ts_type_consistently_references_names(ty: &TSType<'_>, names: &HashSet<String
             .types
             .iter()
             .all(|ty| ts_type_consistently_references_names(ty, names)),
-        TSType::TSParenthesizedType(ty) => {
-            ts_type_consistently_references_names(&ty.type_annotation, names)
-        }
+        TSType::TSParenthesizedType(ty) => ts_type_consistently_references_names(&ty.type_annotation, names),
         _ => ts_type_references_names(ty, names),
     }
 }
@@ -1174,7 +1051,9 @@ mod tests {
     }
     #[test]
     fn imported_object_properties_do_not_make_containers_or_functions_stores() {
-        let exports = super::detect_store_exports("import {writable} from 'svelte/store'; const local = writable(1); export const store = writable(1); export const object = {value: store}; export const factory = () => store; export const ordinary = consume(store);");
+        let exports = super::detect_store_exports(
+            "import {writable} from 'svelte/store'; const local = writable(1); export const store = writable(1); export const object = {value: store}; export const factory = () => store; export const ordinary = consume(store);",
+        );
         assert!(exports.contains_key("store"));
         assert!(exports.contains_key("object.value"));
         assert!(!exports.contains_key("object"));

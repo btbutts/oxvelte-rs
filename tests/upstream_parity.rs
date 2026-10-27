@@ -11,7 +11,7 @@ use oxvelte::{
     parser,
 };
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::{
     collections::BTreeMap,
     fs,
@@ -79,10 +79,11 @@ fn verify_files(root: &Path, manifest: &Manifest) -> Result<(), String> {
         return Err("Invalid, empty or unpinned manifest".into());
     }
     for (name, expected) in &manifest.files {
-        let bytes = fs::read(checked_path(root, name)?)
-            .map_err(|e| format!("Missing corpus file {name}: {e}"))?;
+        let bytes = fs::read(checked_path(root, name)?).map_err(|e| format!("Missing corpus file {name}: {e}"))?;
         if parity::hash(&bytes) != *expected {
-            return Err(format!("Corpus hash differs: {name}. Restore the pinned blob; do not change upstream expectations."));
+            return Err(format!(
+                "Corpus hash differs: {name}. Restore the pinned blob; do not change upstream expectations."
+            ));
         }
     }
     let mut ids = std::collections::BTreeSet::new();
@@ -141,20 +142,13 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
             .config_file
             .as_deref()
             .ok_or("Executable fixture has no module path")?;
-        Some(
-            checked_path(root, path)?
-                .to_string_lossy()
-                .replace('\\', "/"),
-        )
+        Some(checked_path(root, path)?.to_string_lossy().replace('\\', "/"))
     } else {
         None
     };
     let config = parity::rewrite_fixture_paths(&case.config, root, &case.filename);
-    let mut settings =
-        parity::fixture_settings(&config, executable_path.as_deref(), root, &case.rule);
-    if config.pointer("/languageOptions/parserOptions/ecmaFeatures/globalReturn")
-        == Some(&json!(true))
-    {
+    let mut settings = parity::fixture_settings(&config, executable_path.as_deref(), root, &case.rule);
+    if config.pointer("/languageOptions/parserOptions/ecmaFeatures/globalReturn") == Some(&json!(true)) {
         let settings = settings.get_or_insert_with(|| json!({}));
         settings["parserOptions"] = json!({"ecmaFeatures": {"globalReturn": true}});
     }
@@ -174,8 +168,7 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
                     key != "svelteConfig"
                         && !(key == "ecmaFeatures" && value == &json!({"globalReturn": true}))
                         && !(compiler_rule && key == "parser" && value == "@babel/eslint-parser")
-                        && !(case.rule == "@typescript-eslint/no-unnecessary-condition"
-                            && key == "project")
+                        && !(case.rule == "@typescript-eslint/no-unnecessary-condition" && key == "project")
                 })
             }) {
                 issues.insert("parser_configuration".into(), parser_options.clone());
@@ -198,31 +191,18 @@ fn script_errors(source: &str, is_ts: bool) -> Vec<String> {
     parity::script_parse_errors(source, is_ts)
 }
 
-fn lint_case(
-    lint: &Linter,
-    source: &str,
-    path: &str,
-    config: RuleConfig,
-    issues: &mut Issues,
-) -> Vec<LintDiagnostic> {
+fn lint_case(lint: &Linter, source: &str, path: &str, config: RuleConfig, issues: &mut Issues) -> Vec<LintDiagnostic> {
     if path.ends_with(".svelte") {
         let alloc = Allocator::default();
         let result = parser::parse_for_lint(source, &alloc);
-        let mut errors: Vec<_> = result
-            .errors
-            .iter()
-            .map(|error| error.to_string())
-            .collect();
+        let mut errors: Vec<_> = result.errors.iter().map(|error| error.to_string()).collect();
         // The configured Babel parser validates syntax in the compiler bridge.
         let external_parser = config
             .settings
             .as_ref()
             .and_then(|settings| settings.pointer("/compiler/parser"))
             .is_some_and(|parser| parser == "@babel/eslint-parser");
-        for script in [&result.ast.instance, &result.ast.module]
-            .into_iter()
-            .flatten()
-        {
+        for script in [&result.ast.instance, &result.ast.module].into_iter().flatten() {
             if external_parser {
                 continue;
             }
@@ -241,12 +221,7 @@ fn lint_case(
             issues.insert("parse_errors".into(), json!(errors));
         }
         if path.ends_with(".svelte.js") || path.ends_with(".svelte.ts") {
-            lint.lint_svelte_script_with_config_and_path(
-                source,
-                path.ends_with(".ts"),
-                config,
-                path,
-            )
+            lint.lint_svelte_script_with_config_and_path(source, path.ends_with(".ts"), config, path)
         } else {
             lint.lint_script_with_config_and_path(source, config, path)
         }
@@ -280,12 +255,8 @@ fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
     // normalize real paths in messages back to the virtual fixture path.
     let virtual_path = format!("tests/fixtures/rules/{}", case.id);
     for diagnostic in &mut diags {
-        diagnostic.message = parity::fixture_message(
-            &diagnostic.message,
-            &filename,
-            &cwd.to_string_lossy(),
-            &virtual_path,
-        );
+        diagnostic.message =
+            parity::fixture_message(&diagnostic.message, &filename, &cwd.to_string_lossy(), &virtual_path);
         for suggestion in &mut diagnostic.suggestions {
             suggestion.description = parity::fixture_message(
                 &suggestion.description,
@@ -309,10 +280,7 @@ fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
                 );
             }
             if expected != actual {
-                issues.insert(
-                    "diagnostics".into(),
-                    parity::mismatch(&json!(expected), &json!(actual)),
-                );
+                issues.insert("diagnostics".into(), parity::mismatch(&json!(expected), &json!(actual)));
             }
         }
         Err(error) => {
@@ -342,23 +310,21 @@ fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
             }
         }
     } else if !case.fixable && !fixes.is_empty() {
-        issues.insert(
-            "unexpected_fix".into(),
-            json!("Upstream rule is not fixable"),
-        );
+        issues.insert("unexpected_fix".into(), json!("Upstream rule is not fixable"));
     }
     let expected_suggestions: Vec<_> = case
         .errors
         .iter()
         .map(|d| {
-            json!(d
-                .get("suggestions")
-                .and_then(Value::as_array)
-                .map(|suggestions| suggestions
-                    .iter()
-                    .map(|s| json!({"desc": s["desc"], "output": s["output"]}))
-                    .collect::<Vec<_>>())
-                .unwrap_or_default())
+            json!(
+                d.get("suggestions")
+                    .and_then(Value::as_array)
+                    .map(|suggestions| suggestions
+                        .iter()
+                        .map(|s| json!({"desc": s["desc"], "output": s["output"]}))
+                        .collect::<Vec<_>>())
+                    .unwrap_or_default()
+            )
         })
         .collect();
     match parity::suggestions(&source, &diags) {
@@ -407,10 +373,9 @@ fn run() -> Result<(), String> {
     let manifest_hash = parity::hash(&manifest_bytes);
     let mut baseline: Signatures = BTreeMap::new();
     if !args.update && !args.no_baseline {
-        let saved: Value = serde_json::from_slice(
-            &fs::read(&baseline_path).map_err(|e| format!("Cannot read baseline: {e}"))?,
-        )
-        .map_err(|e| e.to_string())?;
+        let saved: Value =
+            serde_json::from_slice(&fs::read(&baseline_path).map_err(|e| format!("Cannot read baseline: {e}"))?)
+                .map_err(|e| e.to_string())?;
         if saved["revision"] != REVISION || saved["manifestHash"] != manifest_hash {
             return Err("Baseline belongs to another corpus/environment. Review the import before updating it.".into());
         }
@@ -426,8 +391,7 @@ fn run() -> Result<(), String> {
     }
     if args.corpus.is_some() {
         if let Some(case) = selected.iter().find(|case| {
-            case.ineligible.is_empty()
-                && ["valid-compile", "no-unused-svelte-ignore"].contains(&case.rule.as_str())
+            case.ineligible.is_empty() && ["valid-compile", "no-unused-svelte-ignore"].contains(&case.rule.as_str())
         }) {
             let expected = manifest
                 .environment
@@ -440,7 +404,10 @@ fn run() -> Result<(), String> {
             let runtime = oxvelte::compiler::compile("", Some(&filename), None)
                 .map_err(|error| format!("Cannot verify matrix Svelte runtime: {error}"))?;
             if runtime.compiler_version != expected {
-                return Err(format!("Matrix Svelte runtime is {}, but the manifest requires {expected}. Set OXVELTE_COMPILER_RUNTIME to the matching installed environment.", runtime.compiler_version));
+                return Err(format!(
+                    "Matrix Svelte runtime is {}, but the manifest requires {expected}. Set OXVELTE_COMPILER_RUNTIME to the matching installed environment.",
+                    runtime.compiler_version
+                ));
             }
         }
     }
@@ -491,10 +458,7 @@ fn run() -> Result<(), String> {
             totals[index] += stats[index];
         }
     }
-    println!(
-        "{:<48} {:>6} {:>6} {:>6}",
-        "TOTAL", totals[0], totals[1], totals[2]
-    );
+    println!("{:<48} {:>6} {:>6} {:>6}", "TOTAL", totals[0], totals[1], totals[2]);
     if let Some(path) = &args.report {
         if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -511,14 +475,14 @@ fn run() -> Result<(), String> {
         if let Some(parent) = baseline_path.parent() {
             fs::create_dir_all(parent).map_err(|error| error.to_string())?;
         }
-        fs::write(
-            &baseline_path,
-            serde_json::to_string_pretty(&saved).unwrap() + "\n",
-        )
-        .map_err(|e| e.to_string())?;
+        fs::write(&baseline_path, serde_json::to_string_pretty(&saved).unwrap() + "\n").map_err(|e| e.to_string())?;
         println!("Updated {}", baseline_path.display());
     } else if !regressions.is_empty() {
-        return Err(format!("{} new/changed gaps:\n{}\nUse --report for expected/actual details. Baseline updates require review.", regressions.len(), regressions.iter().take(30).cloned().collect::<Vec<_>>().join("\n")));
+        return Err(format!(
+            "{} new/changed gaps:\n{}\nUse --report for expected/actual details. Baseline updates require review.",
+            regressions.len(),
+            regressions.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
+        ));
     } else if args.no_baseline {
         println!("Every eligible case passed; version skips are listed above.");
     } else {

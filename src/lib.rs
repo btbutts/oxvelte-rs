@@ -112,14 +112,13 @@ mod linter_fixture_tests {
     /// Executable (JS/CJS) fixture configs load through the compiler bridge.
     fn config_for_case(case: &FixtureCase) -> RuleConfig {
         if case.executable_config {
-            let path = std::fs::canonicalize(format!(
-                "fixtures/linter/{}",
-                case.config_file.as_deref().unwrap()
-            ))
-            .unwrap();
+            let path =
+                std::fs::canonicalize(format!("fixtures/linter/{}", case.config_file.as_deref().unwrap())).unwrap();
             return RuleConfig {
                 options: None,
-                settings: Some(serde_json::json!({"compiler":{"executableConfigPath": path.to_string_lossy().trim_start_matches(r"\\?\").replace('\\',"/")}})),
+                settings: Some(
+                    serde_json::json!({"compiler":{"executableConfigPath": path.to_string_lossy().trim_start_matches(r"\\?\").replace('\\',"/")}}),
+                ),
             };
         }
         let config = &rewrite_fixture_paths(&case.config, &case.filename);
@@ -143,21 +142,14 @@ mod linter_fixture_tests {
             if let Some(svelte_config) = parser_options.get("svelteConfig") {
                 settings["compiler"]["svelteConfig"] = svelte_config.clone();
             }
-            if parser_options.pointer("/ecmaFeatures/globalReturn") == Some(&serde_json::json!(true))
-            {
-                settings["parserOptions"] =
-                    serde_json::json!({"ecmaFeatures": {"globalReturn": true}});
+            if parser_options.pointer("/ecmaFeatures/globalReturn") == Some(&serde_json::json!(true)) {
+                settings["parserOptions"] = serde_json::json!({"ecmaFeatures": {"globalReturn": true}});
             }
         }
         RuleConfig { options, settings }
     }
 
-    fn lint_fixture_file(
-        lint: &Linter,
-        source: &str,
-        config: RuleConfig,
-        file_path: &str,
-    ) -> Vec<LintDiagnostic> {
+    fn lint_fixture_file(lint: &Linter, source: &str, config: RuleConfig, file_path: &str) -> Vec<LintDiagnostic> {
         if file_path.ends_with(".svelte") {
             let alloc = oxc::allocator::Allocator::default();
             let result = parser::parse(source, &alloc);
@@ -325,13 +317,9 @@ mod linter_fixture_tests {
         let Some(range) = case.requirements.get("svelte").and_then(|v| v.as_str()) else {
             return true;
         };
-        let version = crate::compiler::compile(
-            "",
-            Some(&format!("fixtures/linter/{}", case.filename)),
-            None,
-        )
-        .expect("Compiler fixtures require Node and an installed Svelte compiler")
-        .svelte_major;
+        let version = crate::compiler::compile("", Some(&format!("fixtures/linter/{}", case.filename)), None)
+            .expect("Compiler fixtures require Node and an installed Svelte compiler")
+            .svelte_major;
         crate::linter::npm_range_may_include_major(range, version as u8)
     }
 
@@ -374,16 +362,12 @@ mod linter_fixture_tests {
         )
         .unwrap();
 
-        let diags = Linter::all().lint_with_project_config_and_path(
-            &result.ast,
-            source,
-            &config,
-            "fixture.svelte",
-        );
+        let diags = Linter::all().lint_with_project_config_and_path(&result.ast, source, &config, "fixture.svelte");
 
         assert!(
-            diags.iter().any(|d| d.rule_name == "svelte/button-has-type"
-                && d.message.contains("forbidden value")),
+            diags
+                .iter()
+                .any(|d| d.rule_name == "svelte/button-has-type" && d.message.contains("forbidden value")),
             "project config options should be visible to rule implementations"
         );
     }
@@ -1014,11 +998,7 @@ mod parser_fixture_tests {
 
     /// Recursively compare two JSON values, ignoring key ordering.
     /// Returns a list of differences found.
-    fn json_diff(
-        expected: &serde_json::Value,
-        actual: &serde_json::Value,
-        path: &str,
-    ) -> Vec<String> {
+    fn json_diff(expected: &serde_json::Value, actual: &serde_json::Value, path: &str) -> Vec<String> {
         use serde_json::Value;
         let mut diffs = Vec::new();
 
@@ -1039,12 +1019,7 @@ mod parser_fixture_tests {
             }
             (Value::Array(exp_arr), Value::Array(act_arr)) => {
                 if exp_arr.len() != act_arr.len() {
-                    diffs.push(format!(
-                        "{}: array length {} vs {}",
-                        path,
-                        exp_arr.len(),
-                        act_arr.len()
-                    ));
+                    diffs.push(format!("{}: array length {} vs {}", path, exp_arr.len(), act_arr.len()));
                 }
                 for (i, (e, a)) in exp_arr.iter().zip(act_arr.iter()).enumerate() {
                     diffs.extend(json_diff(e, a, &format!("{}[{}]", path, i)));
@@ -1052,10 +1027,7 @@ mod parser_fixture_tests {
             }
             _ => {
                 if expected != actual {
-                    diffs.push(format!(
-                        "{}: expected {:?}, got {:?}",
-                        path, expected, actual
-                    ));
+                    diffs.push(format!("{}: expected {:?}, got {:?}", path, expected, actual));
                 }
             }
         }
@@ -1067,13 +1039,13 @@ mod parser_fixture_tests {
         let input_path = format!("{}/input.svelte", fixture_dir);
         let output_path = format!("{}/output.json", fixture_dir);
 
-        let input = std::fs::read_to_string(&input_path)
-            .unwrap_or_else(|e| panic!("Cannot read {}: {}", input_path, e));
-        let expected_str = std::fs::read_to_string(&output_path)
-            .unwrap_or_else(|e| panic!("Cannot read {}: {}", output_path, e));
+        let input =
+            std::fs::read_to_string(&input_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", input_path, e));
+        let expected_str =
+            std::fs::read_to_string(&output_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", output_path, e));
 
-        let expected: serde_json::Value = serde_json::from_str(&expected_str)
-            .unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", output_path, e));
+        let expected: serde_json::Value =
+            serde_json::from_str(&expected_str).unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", output_path, e));
 
         let alloc = oxc::allocator::Allocator::default();
         let result = parser::parse(&input, &alloc);
@@ -1112,33 +1084,18 @@ mod parser_fixture_tests {
     legacy_fixture_test!(legacy_attribute_static, "attribute-static");
     legacy_fixture_test!(legacy_attribute_static_boolean, "attribute-static-boolean");
     legacy_fixture_test!(legacy_attribute_dynamic, "attribute-dynamic");
-    legacy_fixture_test!(
-        legacy_attribute_dynamic_boolean,
-        "attribute-dynamic-boolean"
-    );
+    legacy_fixture_test!(legacy_attribute_dynamic_boolean, "attribute-dynamic-boolean");
     legacy_fixture_test!(legacy_attribute_shorthand, "attribute-shorthand");
     legacy_fixture_test!(legacy_attribute_multiple, "attribute-multiple");
     legacy_fixture_test!(legacy_attribute_empty, "attribute-empty");
     legacy_fixture_test!(legacy_attribute_escaped, "attribute-escaped");
     legacy_fixture_test!(legacy_attribute_curly_bracket, "attribute-curly-bracket");
     legacy_fixture_test!(legacy_attribute_unquoted, "attribute-unquoted");
-    legacy_fixture_test!(
-        legacy_attribute_containing_solidus,
-        "attribute-containing-solidus"
-    );
-    legacy_fixture_test!(
-        legacy_attribute_with_whitespace,
-        "attribute-with-whitespace"
-    );
+    legacy_fixture_test!(legacy_attribute_containing_solidus, "attribute-containing-solidus");
+    legacy_fixture_test!(legacy_attribute_with_whitespace, "attribute-with-whitespace");
     legacy_fixture_test!(legacy_attribute_style, "attribute-style");
-    legacy_fixture_test!(
-        legacy_attribute_class_directive,
-        "attribute-class-directive"
-    );
-    legacy_fixture_test!(
-        legacy_attribute_style_directive,
-        "attribute-style-directive"
-    );
+    legacy_fixture_test!(legacy_attribute_class_directive, "attribute-class-directive");
+    legacy_fixture_test!(legacy_attribute_style_directive, "attribute-style-directive");
     legacy_fixture_test!(
         legacy_attribute_style_directive_modifiers,
         "attribute-style-directive-modifiers"
@@ -1171,10 +1128,7 @@ mod parser_fixture_tests {
     legacy_fixture_test!(legacy_action_duplicate, "action-duplicate");
     legacy_fixture_test!(legacy_animation, "animation");
     legacy_fixture_test!(legacy_transition_intro, "transition-intro");
-    legacy_fixture_test!(
-        legacy_transition_intro_no_params,
-        "transition-intro-no-params"
-    );
+    legacy_fixture_test!(legacy_transition_intro_no_params, "transition-intro-no-params");
     legacy_fixture_test!(legacy_refs, "refs");
     legacy_fixture_test!(legacy_await_catch, "await-catch");
     legacy_fixture_test!(legacy_await_then_catch, "await-then-catch");
@@ -1185,10 +1139,7 @@ mod parser_fixture_tests {
     legacy_fixture_test!(legacy_dynamic_element_variable, "dynamic-element-variable");
     legacy_fixture_test!(legacy_dynamic_import, "dynamic-import");
     legacy_fixture_test!(legacy_convert_entities, "convert-entities");
-    legacy_fixture_test!(
-        legacy_convert_entities_in_element,
-        "convert-entities-in-element"
-    );
+    legacy_fixture_test!(legacy_convert_entities_in_element, "convert-entities-in-element");
     legacy_fixture_test!(legacy_javascript_comments, "javascript-comments");
     legacy_fixture_test!(legacy_nbsp, "nbsp");
     legacy_fixture_test!(legacy_self_reference, "self-reference");
@@ -1196,35 +1147,17 @@ mod parser_fixture_tests {
     legacy_fixture_test!(legacy_space_between_mustaches, "space-between-mustaches");
     legacy_fixture_test!(legacy_textarea_children, "textarea-children");
     legacy_fixture_test!(legacy_textarea_end_tag, "textarea-end-tag");
-    legacy_fixture_test!(
-        legacy_whitespace_leading_trailing,
-        "whitespace-leading-trailing"
-    );
+    legacy_fixture_test!(legacy_whitespace_leading_trailing, "whitespace-leading-trailing");
     legacy_fixture_test!(legacy_whitespace_normal, "whitespace-normal");
-    legacy_fixture_test!(
-        legacy_whitespace_after_script_tag,
-        "whitespace-after-script-tag"
-    );
-    legacy_fixture_test!(
-        legacy_whitespace_after_style_tag,
-        "whitespace-after-style-tag"
-    );
+    legacy_fixture_test!(legacy_whitespace_after_script_tag, "whitespace-after-script-tag");
+    legacy_fixture_test!(legacy_whitespace_after_style_tag, "whitespace-after-style-tag");
     legacy_fixture_test!(legacy_implicitly_closed_li, "implicitly-closed-li");
-    legacy_fixture_test!(
-        legacy_implicitly_closed_li_block,
-        "implicitly-closed-li-block"
-    );
-    legacy_fixture_test!(
-        legacy_no_error_if_before_closing,
-        "no-error-if-before-closing"
-    );
+    legacy_fixture_test!(legacy_implicitly_closed_li_block, "implicitly-closed-li-block");
+    legacy_fixture_test!(legacy_no_error_if_before_closing, "no-error-if-before-closing");
     legacy_fixture_test!(legacy_unusual_identifier, "unusual-identifier");
     legacy_fixture_test!(legacy_comment_with_ignores, "comment-with-ignores");
     legacy_fixture_test!(legacy_script_comment_only, "script-comment-only");
-    legacy_fixture_test!(
-        legacy_script_context_module_unquoted,
-        "script-context-module-unquoted"
-    );
+    legacy_fixture_test!(legacy_script_context_module_unquoted, "script-context-module-unquoted");
     legacy_fixture_test!(
         legacy_script_attribute_with_curly_braces,
         "script-attribute-with-curly-braces"
@@ -1238,10 +1171,7 @@ mod parser_fixture_tests {
     legacy_fixture_test!(legacy_loose_unclosed_tag, "loose-unclosed-tag");
     // Multi-level unclosed-at-EOF: pins vendor's `-1` sentinel for outer
     // (non-topmost) entries on the parser stack.
-    legacy_fixture_test!(
-        legacy_loose_unclosed_nested_at_eof,
-        "loose-unclosed-nested-at-eof"
-    );
+    legacy_fixture_test!(legacy_loose_unclosed_nested_at_eof, "loose-unclosed-nested-at-eof");
 }
 
 #[cfg(test)]
@@ -1249,11 +1179,7 @@ mod modern_fixture_tests {
     use crate::parser;
     use crate::parser::serialize::to_modern_json;
 
-    fn json_diff(
-        expected: &serde_json::Value,
-        actual: &serde_json::Value,
-        path: &str,
-    ) -> Vec<String> {
+    fn json_diff(expected: &serde_json::Value, actual: &serde_json::Value, path: &str) -> Vec<String> {
         use serde_json::Value;
         let mut diffs = Vec::new();
         match (expected, actual) {
@@ -1273,12 +1199,7 @@ mod modern_fixture_tests {
             }
             (Value::Array(exp_arr), Value::Array(act_arr)) => {
                 if exp_arr.len() != act_arr.len() {
-                    diffs.push(format!(
-                        "{}: array length {} vs {}",
-                        path,
-                        exp_arr.len(),
-                        act_arr.len()
-                    ));
+                    diffs.push(format!("{}: array length {} vs {}", path, exp_arr.len(), act_arr.len()));
                 }
                 for (i, (e, a)) in exp_arr.iter().zip(act_arr.iter()).enumerate() {
                     diffs.extend(json_diff(e, a, &format!("{}[{}]", path, i)));
@@ -1286,10 +1207,7 @@ mod modern_fixture_tests {
             }
             _ => {
                 if expected != actual {
-                    diffs.push(format!(
-                        "{}: expected {:?}, got {:?}",
-                        path, expected, actual
-                    ));
+                    diffs.push(format!("{}: expected {:?}, got {:?}", path, expected, actual));
                 }
             }
         }
@@ -1301,13 +1219,13 @@ mod modern_fixture_tests {
         let input_path = format!("{}/input.svelte", fixture_dir);
         let output_path = format!("{}/output.json", fixture_dir);
 
-        let input = std::fs::read_to_string(&input_path)
-            .unwrap_or_else(|e| panic!("Cannot read {}: {}", input_path, e));
-        let expected_str = std::fs::read_to_string(&output_path)
-            .unwrap_or_else(|e| panic!("Cannot read {}: {}", output_path, e));
+        let input =
+            std::fs::read_to_string(&input_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", input_path, e));
+        let expected_str =
+            std::fs::read_to_string(&output_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", output_path, e));
 
-        let expected: serde_json::Value = serde_json::from_str(&expected_str)
-            .unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", output_path, e));
+        let expected: serde_json::Value =
+            serde_json::from_str(&expected_str).unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", output_path, e));
 
         let alloc = oxc::allocator::Allocator::default();
         let result = parser::parse(&input, &alloc);
@@ -1335,10 +1253,7 @@ mod modern_fixture_tests {
     modern_fixture_test!(modern_if_block, "if-block");
     modern_fixture_test!(modern_if_block_else, "if-block-else");
     modern_fixture_test!(modern_if_block_elseif, "if-block-elseif");
-    modern_fixture_test!(
-        modern_each_block_object_pattern,
-        "each-block-object-pattern"
-    );
+    modern_fixture_test!(modern_each_block_object_pattern, "each-block-object-pattern");
     modern_fixture_test!(
         modern_each_block_object_pattern_special,
         "each-block-object-pattern-special-characters"
@@ -1358,10 +1273,7 @@ mod modern_fixture_tests {
     modern_fixture_test!(modern_script_style_no_markup, "script-style-no-markup");
     modern_fixture_test!(modern_semicolon_inside_quotes, "semicolon-inside-quotes");
     modern_fixture_test!(modern_template_shadowroot, "template-shadowroot");
-    modern_fixture_test!(
-        modern_typescript_in_event_handler,
-        "typescript-in-event-handler"
-    );
+    modern_fixture_test!(modern_typescript_in_event_handler, "typescript-in-event-handler");
     modern_fixture_test!(modern_loose_valid_each_as, "loose-valid-each-as");
     modern_fixture_test!(modern_loose_invalid_block, "loose-invalid-block");
     modern_fixture_test!(modern_loose_invalid_expression, "loose-invalid-expression");
@@ -1369,8 +1281,5 @@ mod modern_fixture_tests {
     modern_fixture_test!(modern_loose_unclosed_tag, "loose-unclosed-tag");
     // Multi-level unclosed-at-EOF: pins vendor's `-1` sentinel for outer
     // (non-topmost) entries on the parser stack.
-    modern_fixture_test!(
-        modern_loose_unclosed_nested_at_eof,
-        "loose-unclosed-nested-at-eof"
-    );
+    modern_fixture_test!(modern_loose_unclosed_nested_at_eof, "loose-unclosed-nested-at-eof");
 }

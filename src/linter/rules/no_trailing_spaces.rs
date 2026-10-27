@@ -93,16 +93,10 @@ fn collect_ignored_lines(source: &str, ignore_comments: bool, ignored: &mut Hash
             i += 1;
             continue;
         }
-        if i + 3 < len
-            && bytes[i] == b'<'
-            && bytes[i + 1] == b'!'
-            && bytes[i + 2] == b'-'
-            && bytes[i + 3] == b'-'
-        {
+        if i + 3 < len && bytes[i] == b'<' && bytes[i + 1] == b'!' && bytes[i + 2] == b'-' && bytes[i + 3] == b'-' {
             let start_pos = i;
             i += 4;
-            while i + 2 < len && !(bytes[i] == b'-' && bytes[i + 1] == b'-' && bytes[i + 2] == b'>')
-            {
+            while i + 2 < len && !(bytes[i] == b'-' && bytes[i + 1] == b'-' && bytes[i + 2] == b'>') {
                 i += 1;
             }
             let end_pos = if i + 2 < len { i + 3 } else { len };
@@ -194,7 +188,6 @@ fn line_number_at(line_starts: &[usize], offset: usize) -> usize {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     #[test]
@@ -204,8 +197,7 @@ mod tests {
         let source = "<p>a</p>   \r\n<p>b</p>  \r\n";
         let allocator = oxc::allocator::Allocator::default();
         let parsed = crate::parser::parse_for_lint(source, &allocator);
-        let diagnostics =
-            crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let diagnostics = crate::linter::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
         let spans: Vec<_> = diagnostics
             .iter()
             .filter(|d| d.rule_name == "svelte/no-trailing-spaces")

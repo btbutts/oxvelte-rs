@@ -18,16 +18,10 @@ impl Rule for NoUnusedSvelteIgnore {
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
         let items = crate::compiler_ignore::items(ctx);
         for item in items.iter().filter(|item| item.code.is_none()) {
-            ctx.diagnostic(
-                "svelte-ignore comment must include the code",
-                item.token_span,
-            );
+            ctx.diagnostic("svelte-ignore comment must include the code", item.token_span);
         }
         if ctx.is_svelte_module
-            || !ctx
-                .file_path
-                .as_deref()
-                .is_some_and(|path| path.ends_with(".svelte"))
+            || !ctx.file_path.as_deref().is_some_and(|path| path.ends_with(".svelte"))
             || !items.iter().any(|item| item.code.is_some())
         {
             return;
@@ -39,8 +33,7 @@ impl Rule for NoUnusedSvelteIgnore {
                 // Svelte 4 does not emit this warning with generate:false.
                 // Follow upstream's workaround for that compiler behavior.
                 .filter(|item| {
-                    !(result.compiler_version.starts_with("4.")
-                        && item.code.as_deref() == Some("reactive-component"))
+                    !(result.compiler_version.starts_with("4.") && item.code.as_deref() == Some("reactive-component"))
                 })
                 .cloned()
                 .collect::<Vec<_>>(),

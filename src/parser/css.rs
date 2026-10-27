@@ -12,7 +12,7 @@
 //! `src/parser/selector.rs` remains the semantic selector walker for linter
 //! rules that need typed selector components from the Servo `selectors` crate.
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// Parse CSS content string into legacy AST children array.
 /// `offset` is the byte position of the CSS content start in the original source.
@@ -401,8 +401,7 @@ impl<'a> CssParser<'a> {
                     .and_then(Value::as_u64)
                     .map(|n| (n as u32).saturating_sub(self.offset) as usize)
                     .unwrap_or(self.pos);
-                relative_selector =
-                    RelativeSelectorBuilder::new(Some(combinator), combinator_start);
+                relative_selector = RelativeSelectorBuilder::new(Some(combinator), combinator_start);
 
                 self.allow_whitespace();
 
@@ -422,11 +421,7 @@ impl<'a> CssParser<'a> {
         None
     }
 
-    fn read_type_selector(
-        &mut self,
-        start: usize,
-        relative_selector: &mut RelativeSelectorBuilder,
-    ) {
+    fn read_type_selector(&mut self, start: usize, relative_selector: &mut RelativeSelectorBuilder) {
         let name = if self.eat("|") {
             self.read_identifier()
         } else {
@@ -602,11 +597,7 @@ impl<'a> CssParser<'a> {
                 in_url = true;
             } else if (ch == ';' || ch == '{' || ch == '}') && !in_url && quote_mark.is_none() {
                 return Some(value.trim().to_string());
-            } else if ch == '/'
-                && !in_url
-                && quote_mark.is_none()
-                && self.source[self.pos..].starts_with("/*")
-            {
+            } else if ch == '/' && !in_url && quote_mark.is_none() && self.source[self.pos..].starts_with("/*") {
                 self.pos += 2;
                 while self.pos < self.source.len() {
                     if self.source[self.pos..].starts_with("*/") {
@@ -763,10 +754,7 @@ impl<'a> CssParser<'a> {
             self.pos += 1;
             return Some("=".to_string());
         }
-        if bytes.len() >= 2
-            && matches!(bytes[0], b'~' | b'^' | b'$' | b'*' | b'|')
-            && bytes[1] == b'='
-        {
+        if bytes.len() >= 2 && matches!(bytes[0], b'~' | b'^' | b'$' | b'*' | b'|') && bytes[1] == b'=' {
             self.pos += 2;
             return Some(rest[..2].to_string());
         }
@@ -848,10 +836,7 @@ impl<'a> CssParser<'a> {
             pos += 1;
 
             let after_n_ws = self.skip_css_whitespace_from(pos);
-            if self
-                .byte_at(after_n_ws)
-                .is_some_and(|b| b == b'+' || b == b'-')
-            {
+            if self.byte_at(after_n_ws).is_some_and(|b| b == b'+' || b == b'-') {
                 let sign = after_n_ws + 1;
                 let digits = self.skip_css_whitespace_from(sign);
                 let digit_start = digits;
@@ -889,9 +874,7 @@ impl<'a> CssParser<'a> {
         if ws > pos && self.source[ws..].starts_with("of") {
             let after_of = ws + 2;
             if after_of < self.source.len() {
-                return self
-                    .current_char_at(after_of)
-                    .is_some_and(is_css_whitespace);
+                return self.current_char_at(after_of).is_some_and(is_css_whitespace);
             }
         }
 
@@ -903,9 +886,7 @@ impl<'a> CssParser<'a> {
         if ws > pos && self.source[ws..].starts_with("of") {
             let mut end = ws + 2;
             if end < self.source.len() && self.current_char_at(end).is_some_and(is_css_whitespace) {
-                while end < self.source.len()
-                    && self.current_char_at(end).is_some_and(is_css_whitespace)
-                {
+                while end < self.source.len() && self.current_char_at(end).is_some_and(is_css_whitespace) {
                     end += self.current_char_at(end).map(char::len_utf8).unwrap_or(1);
                 }
                 return end;
@@ -957,10 +938,7 @@ impl<'a> CssParser<'a> {
     }
 
     fn match_combinator(&self) -> bool {
-        self.source[self.pos..].starts_with("||")
-            || self
-                .current_char()
-                .is_some_and(|ch| matches!(ch, '+' | '~' | '>'))
+        self.source[self.pos..].starts_with("||") || self.current_char().is_some_and(|ch| matches!(ch, '+' | '~' | '>'))
     }
 
     fn allow_comment_or_whitespace(&mut self) {
@@ -977,10 +955,7 @@ impl<'a> CssParser<'a> {
                     if let Some(end) = self.source[self.pos..].find("*/") {
                         self.pos += end + 2;
                     } else {
-                        self.error_at(
-                            self.pos.saturating_sub(2),
-                            CssParseErrorKind::UnclosedComment,
-                        );
+                        self.error_at(self.pos.saturating_sub(2), CssParseErrorKind::UnclosedComment);
                         self.pos = self.source.len();
                     }
                 } else if self.source[self.pos..].starts_with("<!--") {
@@ -988,10 +963,7 @@ impl<'a> CssParser<'a> {
                     if let Some(end) = self.source[self.pos..].find("-->") {
                         self.pos += end + 3;
                     } else {
-                        self.error_at(
-                            self.pos.saturating_sub(4),
-                            CssParseErrorKind::UnclosedComment,
-                        );
+                        self.error_at(self.pos.saturating_sub(4), CssParseErrorKind::UnclosedComment);
                         self.pos = self.source.len();
                     }
                 } else {
@@ -1103,10 +1075,7 @@ impl<'a> CssParser<'a> {
             .last()
             .is_none_or(|error| error.position != pos || error.kind != kind)
         {
-            self.errors.push(CssParseError {
-                position: pos,
-                kind,
-            });
+            self.errors.push(CssParseError { position: pos, kind });
         }
     }
 }
@@ -1140,14 +1109,8 @@ impl RelativeSelectorBuilder {
 }
 
 fn modern_selector_list_to_legacy(selector_list: Value) -> Value {
-    let start = selector_list
-        .get("start")
-        .cloned()
-        .unwrap_or_else(|| json!(0));
-    let end = selector_list
-        .get("end")
-        .cloned()
-        .unwrap_or_else(|| json!(0));
+    let start = selector_list.get("start").cloned().unwrap_or_else(|| json!(0));
+    let end = selector_list.get("end").cloned().unwrap_or_else(|| json!(0));
 
     let children = selector_list
         .get("children")
@@ -1247,10 +1210,7 @@ mod tests {
 
     #[test]
     fn parses_nested_rules_and_line_comments() {
-        let mut parser = CssParser::new(
-            ".container { .item { // scss-style comment\n color: red; } }",
-            0,
-        );
+        let mut parser = CssParser::new(".container { .item { // scss-style comment\n color: red; } }", 0);
         let children = parser.parse_rules();
         assert!(parser.error_positions.is_empty());
         assert_eq!(children.len(), 1);
@@ -1289,10 +1249,7 @@ mod tests {
     fn uppercase_url_function_does_not_end_value_early() {
         // CSS function names are case-insensitive: the `;` inside `URL(...)`
         // must not terminate the declaration value.
-        let children = parse_css_children(
-            ".a { background: URL(data:image/png;base64,AAA); color: red; }",
-            0,
-        );
+        let children = parse_css_children(".a { background: URL(data:image/png;base64,AAA); color: red; }", 0);
         let declarations: Vec<_> = children[0]["block"]["children"]
             .as_array()
             .unwrap()
@@ -1317,10 +1274,7 @@ mod tests {
 
     #[test]
     fn parses_attribute_selector_namespaces_without_breaking_pipe_matcher() {
-        let mut parser = CssParser::new(
-            r#"[xlink|href] { color: red; } [data-foo|="bar"] { color: blue; }"#,
-            0,
-        );
+        let mut parser = CssParser::new(r#"[xlink|href] { color: red; } [data-foo|="bar"] { color: blue; }"#, 0);
         let children = parser.parse_rules();
         assert!(parser.errors.is_empty());
 
@@ -1350,9 +1304,7 @@ mod tests {
     #[test]
     fn parses_descendant_combinator() {
         let children = parse_css_children("div span { color: red; }", 0);
-        let selector_children = children[0]["prelude"]["children"][0]["children"]
-            .as_array()
-            .unwrap();
+        let selector_children = children[0]["prelude"]["children"][0]["children"].as_array().unwrap();
         assert_eq!(selector_children[1]["type"], "Combinator");
         assert_eq!(selector_children[1]["name"], " ");
     }
@@ -1363,9 +1315,7 @@ mod tests {
         let children = parser.parse_rules();
         assert!(parser.errors.is_empty(), "{:?}", parser.errors);
 
-        let selector_children = children[0]["prelude"]["children"][0]["children"]
-            .as_array()
-            .unwrap();
+        let selector_children = children[0]["prelude"]["children"][0]["children"].as_array().unwrap();
         assert_eq!(selector_children[1]["type"], "Combinator");
         assert_eq!(selector_children[1]["name"], ">");
         assert_eq!(selector_children[2]["type"], "TypeSelector");
@@ -1424,18 +1374,12 @@ mod tests {
         let children = parse_css_children("<!-- ignored --> /* ignored */ div { color: red; }", 0);
         assert_eq!(children.len(), 1);
         assert_eq!(children[0]["type"], "Rule");
-        assert_eq!(
-            children[0]["prelude"]["children"][0]["children"][0]["name"],
-            "div"
-        );
+        assert_eq!(children[0]["prelude"]["children"][0]["children"][0]["name"], "div");
     }
 
     #[test]
     fn parses_keyframe_blocks() {
-        let children = parse_css_children(
-            "@keyframes fade { from { opacity: 0; } 50% { opacity: .5; } }",
-            0,
-        );
+        let children = parse_css_children("@keyframes fade { from { opacity: 0; } 50% { opacity: .5; } }", 0);
         let block_children = children[0]["block"]["children"].as_array().unwrap();
 
         assert_eq!(children[0]["name"], "keyframes");
@@ -1459,9 +1403,7 @@ mod tests {
     fn parses_nesting_selector() {
         let children = parse_css_children(".foo { & > .bar { color: red; } }", 0);
         let nested = &children[0]["block"]["children"][0];
-        let selector_children = nested["prelude"]["children"][0]["children"]
-            .as_array()
-            .unwrap();
+        let selector_children = nested["prelude"]["children"][0]["children"].as_array().unwrap();
 
         assert_eq!(nested["type"], "Rule");
         assert_eq!(selector_children[0]["type"], "NestingSelector");
@@ -1477,16 +1419,10 @@ mod tests {
         let inline_global = &children[0]["prelude"]["children"][0]["children"][0];
         assert_eq!(inline_global["type"], "PseudoClassSelector");
         assert_eq!(inline_global["name"], "global");
-        assert_eq!(
-            inline_global["args"]["children"][0]["children"][0]["name"],
-            "foo"
-        );
+        assert_eq!(inline_global["args"]["children"][0]["children"][0]["name"], "foo");
 
         let block_global = &children[1];
-        assert_eq!(
-            block_global["prelude"]["children"][0]["children"][0]["name"],
-            "global"
-        );
+        assert_eq!(block_global["prelude"]["children"][0]["children"][0]["name"], "global");
         assert_eq!(block_global["block"]["children"][0]["type"], "Rule");
         assert_eq!(
             block_global["block"]["children"][0]["prelude"]["children"][0]["children"][0]["name"],

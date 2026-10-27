@@ -308,8 +308,7 @@ impl Linter {
     }
 
     pub fn with_custom_rules(mut self, rules: Vec<Box<dyn Rule>>) -> Self {
-        self.has_script_rules =
-            self.has_script_rules || rules.iter().any(|r| r.applies_to_scripts());
+        self.has_script_rules = self.has_script_rules || rules.iter().any(|r| r.applies_to_scripts());
         self.rules.extend(rules);
         self
     }
@@ -505,14 +504,7 @@ impl Linter {
             css: None,
             _phantom: PhantomData,
         };
-        self.lint_impl(
-            &ast,
-            source,
-            config,
-            file_path,
-            script_mode,
-            is_svelte_module,
-        )
+        self.lint_impl(&ast, source, config, file_path, script_mode, is_svelte_module)
     }
 
     pub fn lint_with_config<'a>(
@@ -647,11 +639,7 @@ impl Linter {
                     ..ParseOptions::default()
                 })
                 .parse();
-            if !r.diagnostics.is_empty() {
-                None
-            } else {
-                Some(r)
-            }
+            if !r.diagnostics.is_empty() { None } else { Some(r) }
         });
         let module_parse = ast.module.as_ref().and_then(|s| {
             if s.content.trim().is_empty() {
@@ -668,11 +656,7 @@ impl Linter {
                     ..ParseOptions::default()
                 })
                 .parse();
-            if !r.diagnostics.is_empty() {
-                None
-            } else {
-                Some(r)
-            }
+            if !r.diagnostics.is_empty() { None } else { Some(r) }
         });
         let instance_semantic = instance_parse
             .as_ref()
@@ -705,9 +689,7 @@ impl Linter {
             let include = match script_mode {
                 ScriptMode::Full => true,
                 ScriptMode::ScriptOnly => rule.applies_to_scripts(),
-                ScriptMode::SvelteModule => {
-                    rule.applies_to_scripts() || rule.applies_to_svelte_scripts()
-                }
+                ScriptMode::SvelteModule => rule.applies_to_scripts() || rule.applies_to_svelte_scripts(),
             };
             if !include {
                 continue;
@@ -775,8 +757,8 @@ const RUNE_NAMES: &[&str] = &[
 ];
 
 fn detect_runes(semantic: &oxc::semantic::Semantic) -> bool {
-    use oxc::ast::ast::Expression;
     use oxc::ast::AstKind;
+    use oxc::ast::ast::Expression;
     for node in semantic.nodes().iter() {
         let AstKind::CallExpression(ce) = node.kind() else {
             continue;
@@ -825,9 +807,7 @@ fn detect_runes_option(fragment: &Fragment<'_>) -> Option<bool> {
 fn attribute_bool_value(value: &AttributeValue) -> Option<bool> {
     match value {
         AttributeValue::True => Some(true),
-        AttributeValue::Static(value) | AttributeValue::Expression(value) => {
-            bool_literal_value(value.trim())
-        }
+        AttributeValue::Static(value) | AttributeValue::Expression(value) => bool_literal_value(value.trim()),
         AttributeValue::Concat(parts) => match parts.as_slice() {
             [AttributeValuePart::Expression(value)] => bool_literal_value(value.trim()),
             _ => None,
@@ -905,11 +885,7 @@ fn range_segment_requires_release(segment: &str, release: (u32, u32, u32)) -> bo
         if version.contains('-') {
             return false;
         }
-        let version = version
-            .trim_start_matches('v')
-            .split('+')
-            .next()
-            .unwrap_or(version);
+        let version = version.trim_start_matches('v').split('+').next().unwrap_or(version);
         let mut parts = version.split('.');
         let Some(major) = parts.next().and_then(|part| part.parse::<u32>().ok()) else {
             return false;
@@ -931,11 +907,9 @@ fn range_segment_requires_release(segment: &str, release: (u32, u32, u32)) -> bo
             return false;
         }
         if !upper {
-            minimum = Some(
-                minimum.map_or((major, minor, patch), |current: (u32, u32, u32)| {
-                    current.max((major, minor, patch))
-                }),
-            );
+            minimum = Some(minimum.map_or((major, minor, patch), |current: (u32, u32, u32)| {
+                current.max((major, minor, patch))
+            }));
         }
     }
     minimum.is_some_and(|minimum| minimum >= release)
@@ -999,12 +973,8 @@ fn npm_range_segment_may_include_major(segment: &str, major: u8) -> bool {
 }
 
 fn parse_range_token(token: &str) -> Option<(RangeOp, u8)> {
-    let mut token = token.trim_matches(|ch: char| {
-        matches!(
-            ch,
-            '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ';' | ','
-        )
-    });
+    let mut token =
+        token.trim_matches(|ch: char| matches!(ch, '"' | '\'' | '(' | ')' | '[' | ']' | '{' | '}' | ';' | ','));
     if token.is_empty() {
         return None;
     }
@@ -1034,10 +1004,7 @@ fn parse_range_token(token: &str) -> Option<(RangeOp, u8)> {
     };
 
     let rest = rest.trim_start_matches('v');
-    let major = rest
-        .chars()
-        .take_while(|ch| ch.is_ascii_digit())
-        .collect::<String>();
+    let major = rest.chars().take_while(|ch| ch.is_ascii_digit()).collect::<String>();
     if major.is_empty() {
         if rest == "*" || rest.eq_ignore_ascii_case("x") {
             return Some((RangeOp::Any, 0));
@@ -1156,25 +1123,18 @@ fn parse_directives(source: &str) -> Vec<Directive> {
                 let enable = format!("{}-enable", prefix_base);
 
                 if let Some(rest) = inner.strip_prefix(disable.as_str()) {
-                    if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t') {
-                        if !rest.trim_start().starts_with("next-line")
-                            && !rest.trim_start().starts_with("line")
-                        {
-                            let rules = parse_rule_list(rest.trim());
-                            directives.push(Directive::DisableBlock {
-                                line: line_idx,
-                                rules,
-                            });
-                        }
+                    if (rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t'))
+                        && !rest.trim_start().starts_with("next-line")
+                        && !rest.trim_start().starts_with("line")
+                    {
+                        let rules = parse_rule_list(rest.trim());
+                        directives.push(Directive::DisableBlock { line: line_idx, rules });
                     }
                 }
                 if let Some(rest) = inner.strip_prefix(enable.as_str()) {
                     if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t') {
                         let rules = parse_rule_list(rest.trim());
-                        directives.push(Directive::EnableBlock {
-                            line: line_idx,
-                            rules,
-                        });
+                        directives.push(Directive::EnableBlock { line: line_idx, rules });
                     }
                 }
             }
@@ -1215,10 +1175,7 @@ fn parse_directives(source: &str) -> Vec<Directive> {
                     });
                 } else if let Some(rest) = comment.strip_prefix(dl.as_str()) {
                     let rules = parse_rule_list(rest.trim());
-                    directives.push(Directive::DisableLine {
-                        line: line_idx,
-                        rules,
-                    });
+                    directives.push(Directive::DisableLine { line: line_idx, rules });
                 }
             }
         }
@@ -1232,24 +1189,17 @@ fn parse_directives(source: &str) -> Vec<Directive> {
 
                 // Must match "eslint-disable" but NOT "eslint-disable-next-line" or "eslint-disable-line"
                 if let Some(rest) = comment.strip_prefix(disable.as_str()) {
-                    if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t') {
-                        if !rest.trim_start().starts_with("next-line")
-                            && !rest.trim_start().starts_with("line")
-                        {
-                            let rules = parse_rule_list(rest.trim());
-                            directives.push(Directive::DisableBlock {
-                                line: line_idx,
-                                rules,
-                            });
-                        }
+                    if (rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t'))
+                        && !rest.trim_start().starts_with("next-line")
+                        && !rest.trim_start().starts_with("line")
+                    {
+                        let rules = parse_rule_list(rest.trim());
+                        directives.push(Directive::DisableBlock { line: line_idx, rules });
                     }
                 } else if let Some(rest) = comment.strip_prefix(enable.as_str()) {
                     if rest.is_empty() || rest.starts_with(' ') || rest.starts_with('\t') {
                         let rules = parse_rule_list(rest.trim());
-                        directives.push(Directive::EnableBlock {
-                            line: line_idx,
-                            rules,
-                        });
+                        directives.push(Directive::EnableBlock { line: line_idx, rules });
                     }
                 }
             }
@@ -1314,7 +1264,7 @@ fn parse_rule_list(s: &str) -> Vec<String> {
     if s.is_empty() {
         return Vec::new();
     } // empty = all rules
-    s.split(|c: char| c == ',' || c == ' ')
+    s.split([',', ' '])
         .map(|r| r.trim())
         .filter(|r| !r.is_empty() && !r.starts_with("--"))
         .map(|r| r.to_string())
@@ -1339,9 +1289,7 @@ fn parse_svelte_ignore_rules(s: &str) -> Vec<String> {
             break;
         }
         // Extract rule name (until space, comma, or paren)
-        let end = rest_trimmed
-            .find(|c: char| c == ' ' || c == ',' || c == '(')
-            .unwrap_or(rest_trimmed.len());
+        let end = rest_trimmed.find([' ', ',', '(']).unwrap_or(rest_trimmed.len());
         let rule = &rest_trimmed[..end];
         if !rule.is_empty() {
             // Normalize underscores to hyphens for svelte rules
@@ -1495,10 +1443,7 @@ fn filter_suppressed(
     kept
 }
 
-fn directive_targets_active_rule(
-    directive_rules: &[String],
-    active_rule_names: &[&'static str],
-) -> bool {
+fn directive_targets_active_rule(directive_rules: &[String], active_rule_names: &[&'static str]) -> bool {
     !directive_rules.is_empty()
         && active_rule_names
             .iter()
@@ -1528,14 +1473,11 @@ where
                 if let Some(alt) = &block.alternate {
                     visitor(alt);
                     // Recurse into the alternate node
-                    match alt.as_ref() {
-                        TemplateNode::IfBlock(ib) => {
-                            walk_nodes(&ib.consequent.nodes, visitor);
-                            if let Some(a) = &ib.alternate {
-                                walk_alt(a, visitor);
-                            }
+                    if let TemplateNode::IfBlock(ib) = alt.as_ref() {
+                        walk_nodes(&ib.consequent.nodes, visitor);
+                        if let Some(a) = &ib.alternate {
+                            walk_alt(a, visitor);
                         }
-                        _ => {}
                     }
                 }
             }
@@ -1563,12 +1505,12 @@ where
     }
 }
 
-fn walk_alt<F>(alt: &Box<TemplateNode>, visitor: &mut F)
+fn walk_alt<F>(alt: &TemplateNode, visitor: &mut F)
 where
     F: FnMut(&TemplateNode),
 {
     visitor(alt);
-    if let TemplateNode::IfBlock(ib) = alt.as_ref() {
+    if let TemplateNode::IfBlock(ib) = alt {
         walk_nodes(&ib.consequent.nodes, visitor);
         if let Some(a) = &ib.alternate {
             walk_alt(a, visitor);
@@ -1602,16 +1544,11 @@ mod minimum_release_tests {
             let info = svelte_version_info_from_package_json(
                 &serde_json::json!({"dependencies":{"svelte":range}}).to_string(),
             );
-            assert_eq!(
-                info.guarantees_minimum_release((5, 56, 0)),
-                expected,
-                "{range}"
-            );
+            assert_eq!(info.guarantees_minimum_release((5, 56, 0)), expected, "{range}");
         }
         assert!(!super::SvelteVersionInfo::default().guarantees_minimum_release((5, 56, 0)));
     }
 }
-
 
 #[cfg(test)]
 mod suppression_tests {
@@ -1755,8 +1692,7 @@ mod suppression_tests {
         let mut lint = Linter::recommended();
         lint = lint.with_custom_rules(vec![Box::new(DummyCustomRule)]);
         assert!(lint.rules().iter().any(|r| r.name() == "custom/dummy"));
-        let config =
-            crate::config::OxvelteConfig::parse("{\"rules\":{\"custom/dummy\":\"off\"}}").unwrap();
+        let config = crate::config::OxvelteConfig::parse("{\"rules\":{\"custom/dummy\":\"off\"}}").unwrap();
         lint.remove_disabled_rules(&config);
         assert!(
             !lint.rules().iter().any(|r| r.name() == "custom/dummy"),

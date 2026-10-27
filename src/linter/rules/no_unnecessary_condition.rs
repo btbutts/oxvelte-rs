@@ -4,7 +4,7 @@ use crate::compiler::{byte_utf16, utf16_byte};
 use crate::linter::{Fix, LintContext, Rule};
 use oxc::span::Span;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 pub struct NoUnnecessaryCondition;
 
@@ -28,10 +28,7 @@ impl Rule for NoUnnecessaryCondition {
     }
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
         if ctx.is_svelte_module
-            || !ctx
-                .file_path
-                .as_deref()
-                .is_some_and(|path| path.ends_with(".svelte"))
+            || !ctx.file_path.as_deref().is_some_and(|path| path.ends_with(".svelte"))
             || ctx
                 .ast
                 .instance
@@ -63,14 +60,10 @@ impl Rule for NoUnnecessaryCondition {
             "scripts": scripts, "templates": templates,
             "options": ctx.config.options.as_ref().and_then(Value::as_array).and_then(|options| options.first()),
         });
-        let result = crate::compiler::typescript_conditions(&request).and_then(|value| {
-            serde_json::from_value::<Vec<Diagnostic>>(value).map_err(|error| error.to_string())
-        });
+        let result = crate::compiler::typescript_conditions(&request)
+            .and_then(|value| serde_json::from_value::<Vec<Diagnostic>>(value).map_err(|error| error.to_string()));
         match result {
-            Err(error) => ctx.diagnostic(
-                format!("Unable to run TypeScript checks: {error}"),
-                Span::new(0, 0),
-            ),
+            Err(error) => ctx.diagnostic(format!("Unable to run TypeScript checks: {error}"), Span::new(0, 0)),
             Ok(diagnostics) => {
                 let length = ctx.source.encode_utf16().count();
                 for diagnostic in diagnostics {
@@ -81,10 +74,7 @@ impl Rule for NoUnnecessaryCondition {
                             .as_ref()
                             .is_some_and(|fix| fix.start > fix.end || fix.end > length)
                     {
-                        ctx.diagnostic(
-                            "TypeScript checker returned an invalid source range",
-                            Span::new(0, 0),
-                        );
+                        ctx.diagnostic("TypeScript checker returned an invalid source range", Span::new(0, 0));
                         continue;
                     }
                     let span = Span::new(
@@ -96,10 +86,7 @@ impl Rule for NoUnnecessaryCondition {
                             diagnostic.message,
                             span,
                             Fix {
-                                span: Span::new(
-                                    utf16_byte(ctx.source, fix.start),
-                                    utf16_byte(ctx.source, fix.end),
-                                ),
+                                span: Span::new(utf16_byte(ctx.source, fix.start), utf16_byte(ctx.source, fix.end)),
                                 replacement: fix.text,
                             },
                         );
@@ -114,7 +101,8 @@ impl Rule for NoUnnecessaryCondition {
 
 fn add(source: &str, templates: &mut Vec<Value>, span: Span, kind: &str) {
     if span.start < span.end && source.get(span.start as usize..span.end as usize).is_some() {
-        templates.push(json!({"start": byte_utf16(source, span.start), "end": byte_utf16(source, span.end), "kind": kind}));
+        templates
+            .push(json!({"start": byte_utf16(source, span.start), "end": byte_utf16(source, span.end), "kind": kind}));
     }
 }
 
@@ -136,15 +124,9 @@ fn collect_templates(source: &str, nodes: &[TemplateNode<'_>], templates: &mut V
                 }
                 collect_templates(source, &element.children, templates);
             }
-            TemplateNode::MustacheTag(tag) => {
-                add(source, templates, tag.expression_span, "expression")
-            }
-            TemplateNode::RawMustacheTag(tag) => {
-                add(source, templates, tag.expression_span, "expression")
-            }
-            TemplateNode::RenderTag(tag) => {
-                add(source, templates, tag.expression_span, "expression")
-            }
+            TemplateNode::MustacheTag(tag) => add(source, templates, tag.expression_span, "expression"),
+            TemplateNode::RawMustacheTag(tag) => add(source, templates, tag.expression_span, "expression"),
+            TemplateNode::RenderTag(tag) => add(source, templates, tag.expression_span, "expression"),
             TemplateNode::IfBlock(block) => {
                 add(source, templates, block.test_span, "condition");
                 collect_templates(source, &block.consequent.nodes, templates);

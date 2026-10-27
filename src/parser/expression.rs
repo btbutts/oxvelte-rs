@@ -32,9 +32,7 @@ pub fn parse_template_expression<'a>(text: &str, allocator: &'a Allocator) -> Pa
 /// Extract the inner expression from a `void (EXPR);` wrapper produced by
 /// `parse_template_expression`. Returns `None` if the wrapper didn't parse
 /// to the expected shape (e.g. the input wasn't a valid expression at all).
-pub fn unwrap_template_expression<'a, 'r>(
-    result: &'r ParserReturn<'a>,
-) -> Option<&'r Expression<'a>> {
+pub fn unwrap_template_expression<'a, 'r>(result: &'r ParserReturn<'a>) -> Option<&'r Expression<'a>> {
     let stmt = result.program.body.first()?;
     let Statement::ExpressionStatement(es) = stmt else {
         return None;

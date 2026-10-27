@@ -2,7 +2,7 @@
 //! ⭐ Recommended, 🔧 Fixable
 
 use crate::ast::{Element, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 
 const RAW_NAMES: &[&str] = &["head", "body", "window", "document", "element", "options"];
 

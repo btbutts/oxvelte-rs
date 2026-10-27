@@ -17,9 +17,7 @@ fn node_type(kind: AstKind<'_>) -> String {
         AstKind::ArrayAssignmentTarget(_) => "ArrayPattern".into(),
         AstKind::ObjectAssignmentTarget(_) => "ObjectPattern".into(),
         AstKind::BindingRestElement(_) | AstKind::AssignmentTargetRest(_) => "RestElement".into(),
-        AstKind::AssignmentTargetWithDefault(_) | AstKind::AssignmentPattern(_) => {
-            "AssignmentPattern".into()
-        }
+        AstKind::AssignmentTargetWithDefault(_) | AstKind::AssignmentPattern(_) => "AssignmentPattern".into(),
         AstKind::Function(n) => if n.is_function_declaration() {
             "FunctionDeclaration"
         } else {
@@ -114,32 +112,12 @@ mod tests {
             .iter()
             .find(|n| matches!(n.kind(),AstKind::CallExpression(c) if c.span.start==12))
             .unwrap();
-        let ancestors = s
-            .nodes()
-            .ancestors(n.id())
-            .map(|n| n.kind())
-            .collect::<Vec<_>>();
+        let ancestors = s.nodes().ancestors(n.id()).map(|n| n.kind()).collect::<Vec<_>>();
         assert!(matches("CallExpression", n.kind(), &ancestors));
-        assert!(matches(
-            "VariableDeclarator CallExpression",
-            n.kind(),
-            &ancestors
-        ));
-        assert!(matches(
-            "CallExpression > CallExpression",
-            n.kind(),
-            &ancestors
-        ));
-        assert!(matches(
-            "CallExpression>CallExpression",
-            n.kind(),
-            &ancestors
-        ));
-        assert!(!matches(
-            "VariableDeclarator > CallExpression",
-            n.kind(),
-            &ancestors
-        ));
+        assert!(matches("VariableDeclarator CallExpression", n.kind(), &ancestors));
+        assert!(matches("CallExpression > CallExpression", n.kind(), &ancestors));
+        assert!(matches("CallExpression>CallExpression", n.kind(), &ancestors));
+        assert!(!matches("VariableDeclarator > CallExpression", n.kind(), &ancestors));
         let a = Allocator::default();
         let p = Parser::new(&a, "function f(x) {}", SourceType::ts()).parse();
         let s = SemanticBuilder::new().with_build_nodes(true).build(&p.program).semantic;
@@ -148,15 +126,7 @@ mod tests {
             .iter()
             .find(|n| matches!(n.kind(), AstKind::BindingIdentifier(id) if id.name == "x"))
             .unwrap();
-        let ancestors = s
-            .nodes()
-            .ancestors(n.id())
-            .map(|n| n.kind())
-            .collect::<Vec<_>>();
-        assert!(matches(
-            "FunctionDeclaration>Identifier",
-            n.kind(),
-            &ancestors
-        ));
+        let ancestors = s.nodes().ancestors(n.id()).map(|n| n.kind()).collect::<Vec<_>>();
+        assert!(matches("FunctionDeclaration>Identifier", n.kind(), &ancestors));
     }
 }

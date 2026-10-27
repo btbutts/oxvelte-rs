@@ -19,9 +19,7 @@ impl Rule for NoExportLoadInSvelteModuleInKitPages {
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
         if let Some(fp) = &ctx.file_path {
             let fname = fp.rsplit(['/', '\\']).next().unwrap_or(fp);
-            let is_page = ["+page.svelte", "+layout.svelte", "+error.svelte"]
-                .iter()
-                .any(|s| fname == *s);
+            let is_page = ["+page.svelte", "+layout.svelte", "+error.svelte"].contains(&fname);
             if !is_page {
                 return;
             }
@@ -47,9 +45,7 @@ impl Rule for NoExportLoadInSvelteModuleInKitPages {
             .ast
             .module
             .as_ref()
-            .map_or(ctx.module_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.module_content_offset, |script| script.content_span.start);
         for stmt in &module_sem.nodes().program().body {
             let Statement::ExportDeclaration(exp) = stmt else {
                 continue;
@@ -57,7 +53,7 @@ impl Rule for NoExportLoadInSvelteModuleInKitPages {
             let decl = &exp.declaration;
             let load_span = match decl {
                 Declaration::FunctionDeclaration(f) => {
-                    if f.id.as_ref().map_or(false, |id| id.name == "load") {
+                    if f.id.as_ref().is_some_and(|id| id.name == "load") {
                         f.id.as_ref().map(|id| id.span)
                     } else {
                         None
@@ -98,12 +94,7 @@ mod tests {
             ("src/routes/not+page.svelte", 0),
         ] {
             let diagnostics: Vec<_> = crate::linter::Linter::all()
-                .lint_with_config_and_path(
-                    &parsed.ast,
-                    source,
-                    crate::linter::RuleConfig::default(),
-                    path,
-                )
+                .lint_with_config_and_path(&parsed.ast, source, crate::linter::RuleConfig::default(), path)
                 .into_iter()
                 .filter(|d| d.rule_name == "svelte/no-export-load-in-svelte-module-in-kit-pages")
                 .collect();

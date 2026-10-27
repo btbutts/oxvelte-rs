@@ -1,17 +1,11 @@
 use oxc::allocator::Allocator;
 use oxvelte::{config::OxvelteConfig, linter::Linter, parser};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn check(name: &str) {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/jobsys");
-    let cases: Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("cases.json")).unwrap()).unwrap();
-    let case = cases
-        .as_array()
-        .unwrap()
-        .iter()
-        .find(|c| c["name"] == name)
-        .unwrap();
+    let cases: Value = serde_json::from_str(&std::fs::read_to_string(root.join("cases.json")).unwrap()).unwrap();
+    let case = cases.as_array().unwrap().iter().find(|c| c["name"] == name).unwrap();
     let file = root.join(case["file"].as_str().unwrap());
     let source = std::fs::read_to_string(&file).unwrap();
     let rule = case["rule"].as_str().unwrap();

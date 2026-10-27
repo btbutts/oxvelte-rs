@@ -2,10 +2,9 @@
 //! 🔧 Fixable
 
 use crate::ast::{
-    Attribute, AttributeMeta, AttributeQuote, AttributeValue, AttributeValuePart, DirectiveKind,
-    TemplateNode,
+    Attribute, AttributeMeta, AttributeQuote, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode,
 };
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 
 pub struct HtmlQuotes;
@@ -66,13 +65,7 @@ impl Rule for HtmlQuotes {
                             span: _,
                         } => {
                             if single_mustache_span(value, meta).is_some() {
-                                check_dynamic_quotes(
-                                    ctx,
-                                    meta,
-                                    dynamic_quoted,
-                                    avoid_invalid_unquoted,
-                                    prefer_quote,
-                                );
+                                check_dynamic_quotes(ctx, meta, dynamic_quoted, avoid_invalid_unquoted, prefer_quote);
                             } else if !matches!(value, AttributeValue::True) {
                                 verify_quote(ctx, prefer_quote, meta);
                             }
@@ -85,13 +78,7 @@ impl Rule for HtmlQuotes {
                                     verify_quote(ctx, prefer_quote, meta);
                                 }
                             } else if !matches!(value, AttributeValue::True) {
-                                check_dynamic_quotes(
-                                    ctx,
-                                    meta,
-                                    dynamic_quoted,
-                                    avoid_invalid_unquoted,
-                                    prefer_quote,
-                                );
+                                check_dynamic_quotes(ctx, meta, dynamic_quoted, avoid_invalid_unquoted, prefer_quote);
                             }
                         }
                         _ => {}
@@ -139,11 +126,7 @@ fn check_dynamic_quotes(
     avoid_invalid_unquoted: bool,
     prefer_quote: Quote,
 ) {
-    let dynamic_quote = if dynamic_quoted {
-        prefer_quote
-    } else {
-        Quote::Unquoted
-    };
+    let dynamic_quote = if dynamic_quoted { prefer_quote } else { Quote::Unquoted };
     let expected = if avoid_invalid_unquoted
         && single_mustache_text(ctx.source, meta).is_some_and(|text| !can_be_unquoted_in_html(text))
     {

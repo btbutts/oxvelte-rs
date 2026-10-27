@@ -28,9 +28,7 @@ impl Rule for NoReactiveLiterals {
             .ast
             .instance
             .as_ref()
-            .map_or(ctx.instance_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
 
         for stmt in &semantic.nodes().program().body {
             let Statement::LabeledStatement(ls) = stmt else {
@@ -59,35 +57,15 @@ impl Rule for NoReactiveLiterals {
                     description: "Move the literal out of the reactive statement into an assignment".into(),
                     fix: Fix {
                         span: Span::new(s, e),
-                        replacement: format!("let {}", &ctx.source[(content_offset + ae.span.start) as usize..(content_offset + ae.span.end) as usize]),
+                        replacement: format!(
+                            "let {}",
+                            &ctx.source
+                                [(content_offset + ae.span.start) as usize..(content_offset + ae.span.end) as usize]
+                        ),
                     },
                 }],
             );
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn literal_suggestion_uses_assignment_range_and_keeps_inner_comments() {
-        let source = "<!-- 😀 --><script data-note=\">\">$: value /* = */ = { /* inner */ }; // trailing</script>";
-        let allocator = oxc::allocator::Allocator::default();
-        let parsed = crate::parser::parse_for_lint(source, &allocator);
-        assert!(parsed.errors.is_empty());
-        let diagnostics = crate::linter::Linter::all().lint(&parsed.ast, source);
-        let diagnostic = diagnostics
-            .iter()
-            .find(|d| d.rule_name == "svelte/no-reactive-literals")
-            .unwrap();
-        assert!(diagnostic.fix.is_none());
-        let fix = &diagnostic.suggestions[0].fix;
-        let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
-        );
-        assert_eq!(output, "<!-- 😀 --><script data-note=\">\">let value /* = */ = { /* inner */ } // trailing</script>");
     }
 }
 
@@ -107,5 +85,29 @@ fn is_literal_rhs(expr: &Expression<'_>) -> bool {
         Expression::ArrayExpression(a) => a.elements.is_empty(),
         Expression::ObjectExpression(o) => o.properties.is_empty(),
         _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn literal_suggestion_uses_assignment_range_and_keeps_inner_comments() {
+        let source = "<!-- 😀 --><script data-note=\">\">$: value /* = */ = { /* inner */ }; // trailing</script>";
+        let allocator = oxc::allocator::Allocator::default();
+        let parsed = crate::parser::parse_for_lint(source, &allocator);
+        assert!(parsed.errors.is_empty());
+        let diagnostics = crate::linter::Linter::all().lint(&parsed.ast, source);
+        let diagnostic = diagnostics
+            .iter()
+            .find(|d| d.rule_name == "svelte/no-reactive-literals")
+            .unwrap();
+        assert!(diagnostic.fix.is_none());
+        let fix = &diagnostic.suggestions[0].fix;
+        let mut output = source.to_string();
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
+        assert_eq!(
+            output,
+            "<!-- 😀 --><script data-note=\">\">let value /* = */ = { /* inner */ } // trailing</script>"
+        );
     }
 }

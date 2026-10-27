@@ -93,8 +93,7 @@ impl OxvelteConfig {
 
     /// Parse config from a JSON string.
     pub fn parse(json_str: &str) -> Result<Self, String> {
-        let value: Value =
-            serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON: {}", e))?;
+        let value: Value = serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON: {}", e))?;
 
         let mut config = Self::default();
 
@@ -111,10 +110,7 @@ impl OxvelteConfig {
 
         // Parse customRules
         if let Some(arr) = value.get("customRules").and_then(|v| v.as_array()) {
-            config.custom_rules = arr
-                .iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect();
+            config.custom_rules = arr.iter().filter_map(|v| v.as_str().map(String::from)).collect();
         }
 
         Ok(config)
@@ -147,8 +143,7 @@ impl OxvelteConfig {
 
     /// Convert from an ESLint-style config (flat or legacy).
     pub fn from_eslint(json_str: &str) -> Result<Self, String> {
-        let value: Value =
-            serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON: {}", e))?;
+        let value: Value = serde_json::from_str(json_str).map_err(|e| format!("Invalid JSON: {}", e))?;
 
         let mut config = Self::default();
 
@@ -172,7 +167,7 @@ impl OxvelteConfig {
         if !self.rules.is_empty() {
             let mut rules = serde_json::Map::new();
             let mut sorted_rules: Vec<_> = self.rules.iter().collect();
-            sorted_rules.sort_by(|(a, _), (b, _)| a.cmp(b));
+            sorted_rules.sort_by_key(|(a, _)| *a);
             for (name, entry) in sorted_rules {
                 let val = if let Some(opts) = &entry.options {
                     let mut arr = vec![Value::String(entry.severity.clone())];
@@ -197,13 +192,7 @@ impl OxvelteConfig {
         if !self.custom_rules.is_empty() {
             obj.insert(
                 "customRules".to_string(),
-                Value::Array(
-                    self.custom_rules
-                        .iter()
-                        .cloned()
-                        .map(Value::String)
-                        .collect(),
-                ),
+                Value::Array(self.custom_rules.iter().cloned().map(Value::String).collect()),
             );
         }
 
@@ -285,11 +274,7 @@ fn merge_eslint_object(obj: &Value, config: &mut OxvelteConfig) {
             let applies_to_svelte = override_obj
                 .get("files")
                 .and_then(|f| f.as_array())
-                .is_some_and(|files| {
-                    files
-                        .iter()
-                        .any(|f| f.as_str().is_some_and(|s| s.contains(".svelte")))
-                });
+                .is_some_and(|files| files.iter().any(|f| f.as_str().is_some_and(|s| s.contains(".svelte"))));
             if applies_to_svelte {
                 merge_eslint_object(override_obj, config);
             }
@@ -341,8 +326,7 @@ mod tests {
 
     #[test]
     fn test_to_json_round_trips_custom_rules() {
-        let json =
-            r#"{ "rules": { "custom/a": "error" }, "customRules": ["./rules/a.js", "./rules/*.js"] }"#;
+        let json = r#"{ "rules": { "custom/a": "error" }, "customRules": ["./rules/a.js", "./rules/*.js"] }"#;
         let config = OxvelteConfig::parse(json).unwrap();
         let serialized = config.to_json();
         let reparsed = OxvelteConfig::parse(&serialized).unwrap();
@@ -387,8 +371,7 @@ mod tests {
 
     #[test]
     fn load_with_dir_returns_the_configs_own_directory() {
-        let base = std::env::temp_dir()
-            .join(format!("oxvelte-cfg-dir-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("oxvelte-cfg-dir-{}", std::process::id()));
         let child = base.join("sub");
         std::fs::create_dir_all(&child).unwrap();
         std::fs::write(base.join("oxvelte.config.json"), "{ \"rules\": {} }").unwrap();
@@ -402,8 +385,7 @@ mod tests {
 
     #[test]
     fn load_with_dir_errors_on_invalid_discovered_config() {
-        let base = std::env::temp_dir()
-            .join(format!("oxvelte-cfg-bad-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("oxvelte-cfg-bad-{}", std::process::id()));
         let child = base.join("sub");
         std::fs::create_dir_all(&child).unwrap();
         std::fs::write(base.join("oxvelte.config.json"), "{ not json").unwrap();

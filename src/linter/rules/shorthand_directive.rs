@@ -2,7 +2,7 @@
 //! 🔧 Fixable
 
 use crate::ast::{Attribute, AttributeValue, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::ast::ast::Expression;
 use oxc::span::Span;
 
@@ -75,10 +75,7 @@ impl Rule for ShorthandDirective {
                             let crate::ast::AttributeValuePart::Expression(expr) = &parts[0] else {
                                 continue;
                             };
-                            (
-                                expr.as_str(),
-                                meta.parts.first().and_then(|part| part.expression_ast),
-                            )
+                            (expr.as_str(), meta.parts.first().and_then(|part| part.expression_ast))
                         }
                         _ => continue,
                     };
@@ -141,9 +138,11 @@ mod tests {
         let source = "<!-- 😀 --><div style:color = \"{color}\" class:active='{active}' />";
         let diagnostics = lint(source, serde_json::json!([]));
         assert_eq!(diagnostics.len(), 2);
-        assert!(diagnostics
-            .iter()
-            .all(|d| d.fix.as_ref().unwrap().replacement.is_empty()));
+        assert!(
+            diagnostics
+                .iter()
+                .all(|d| d.fix.as_ref().unwrap().replacement.is_empty())
+        );
         assert!(lint("<div style:color=\" {color} \" />", serde_json::json!([])).is_empty());
     }
 }

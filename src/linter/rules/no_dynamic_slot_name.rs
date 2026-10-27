@@ -2,7 +2,7 @@
 
 use super::no_not_function_handler::resolve_handler_expression;
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::{ast::ast::Expression, span::Span, syntax::operator::BinaryOperator};
 
 pub struct NoDynamicSlotName;
@@ -32,9 +32,7 @@ impl Rule for NoDynamicSlotName {
                 }
                 let meta = &el.attribute_meta[index];
                 match value {
-                    AttributeValue::True => {
-                        findings.push(("`<slot>` name requires a value.", *span, None))
-                    }
+                    AttributeValue::True => findings.push(("`<slot>` name requires a value.", *span, None)),
                     AttributeValue::Static(_) => {}
                     AttributeValue::Expression(_) => {
                         if let Some(mustache) = meta.mustache_span {
@@ -107,7 +105,13 @@ fn static_text(expr: &Expression<'_>) -> Option<String> {
         Expression::TemplateLiteral(template) => {
             let mut text = String::new();
             for (index, quasi) in template.quasis.iter().enumerate() {
-                text.push_str(quasi.value.cooked.as_ref().map_or("null", |s| s.as_str().unwrap_or("null")));
+                text.push_str(
+                    quasi
+                        .value
+                        .cooked
+                        .as_ref()
+                        .map_or("null", |s| s.as_str().unwrap_or("null")),
+                );
                 if let Some(expression) = template.expressions.get(index) {
                     text.push_str(&static_text(expression)?);
                 }
@@ -144,10 +148,7 @@ mod tests {
         let mut fixes: Vec<_> = fixes.iter().collect();
         fixes.sort_by_key(|fix| std::cmp::Reverse(fix.span.start));
         for fix in fixes {
-            fixed.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            fixed.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         }
         fixed
     }
@@ -157,7 +158,10 @@ mod tests {
         let diagnostics = lint(source);
         assert_eq!(diagnostics.len(), 3);
         let fixes: Vec<_> = diagnostics.iter().map(|d| d.fix.clone().unwrap()).collect();
-        assert_eq!(apply_fixes(source, &fixes), "<!-- 😀 --><script data-note=\">\">const name = 'row';</script><slot name=\"row\"/><slot name='preab'/>");
+        assert_eq!(
+            apply_fixes(source, &fixes),
+            "<!-- 😀 --><script data-note=\">\">const name = 'row';</script><slot name=\"row\"/><slot name='preab'/>"
+        );
         assert_eq!(
             &source[diagnostics[0].span.start as usize..diagnostics[0].span.end as usize],
             "{name}"
@@ -165,8 +169,7 @@ mod tests {
     }
     #[test]
     fn string_only_constant_evaluation_matches_upstream() {
-        let diagnostics =
-            lint("<slot name={'a' + `b${'c'}`}/><slot name={1}/><slot name={`a${1}`}/>");
+        let diagnostics = lint("<slot name={'a' + `b${'c'}`}/><slot name={1}/><slot name={`a${1}`}/>");
         assert_eq!(diagnostics.len(), 3);
         assert_eq!(diagnostics[0].fix.as_ref().unwrap().replacement, "\"abc\"");
         assert!(diagnostics[1].fix.is_none());
@@ -179,9 +182,6 @@ mod tests {
         assert_eq!(diagnostics.len(), 3);
         assert!(diagnostics[0].fix.is_none());
         assert!(diagnostics[1].fix.is_none());
-        assert_eq!(
-            diagnostics[2].fix.as_ref().unwrap().replacement,
-            "\"outer\""
-        );
+        assert_eq!(diagnostics[2].fix.as_ref().unwrap().replacement, "\"outer\"");
     }
 }

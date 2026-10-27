@@ -4,7 +4,7 @@
 
 use crate::ast::Element;
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 
 pub struct HtmlClosingBracketNewLine;
@@ -26,9 +26,7 @@ impl Rule for HtmlClosingBracketNewLine {
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first());
         let get_str = |key: &str| opts.and_then(|o| o.get(key)).and_then(|v| v.as_str());
-        let singleline_expect_newline = get_str("singleline")
-            .map(|s| s == "always")
-            .unwrap_or(false);
+        let singleline_expect_newline = get_str("singleline").map(|s| s == "always").unwrap_or(false);
         let multiline_expect_newline = get_str("multiline").map(|s| s == "always").unwrap_or(true);
         let sc = opts.and_then(|o| o.get("selfClosingTag"));
         let sc_get = |key: &str| {
@@ -108,12 +106,7 @@ fn end_tag_data(el: &Element<'_>, line_starts: &[usize]) -> Option<BracketData> 
     bracket_data(line_starts, end_tag.start, name_end, bracket)
 }
 
-fn bracket_data(
-    line_starts: &[usize],
-    node_start: u32,
-    prev_end: u32,
-    end_token_start: u32,
-) -> Option<BracketData> {
+fn bracket_data(line_starts: &[usize], node_start: u32, prev_end: u32, end_token_start: u32) -> Option<BracketData> {
     if prev_end > end_token_start {
         return None;
     }
@@ -151,17 +144,10 @@ fn build_line_starts(source: &str) -> Vec<usize> {
 }
 
 fn line_number_at(line_starts: &[usize], offset: usize) -> usize {
-    line_starts
-        .partition_point(|&start| start <= offset)
-        .saturating_sub(1)
+    line_starts.partition_point(|&start| start <= offset).saturating_sub(1)
 }
 
-fn report_if_needed(
-    ctx: &mut LintContext<'_>,
-    data: BracketData,
-    expected: usize,
-    can_fix_add_linebreak: bool,
-) {
+fn report_if_needed(ctx: &mut LintContext<'_>, data: BracketData, expected: usize, can_fix_add_linebreak: bool) {
     if data.actual == expected {
         return;
     }

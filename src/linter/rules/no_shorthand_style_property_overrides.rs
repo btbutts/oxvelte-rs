@@ -3,7 +3,7 @@
 
 use super::style_declarations::declarations;
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use rustc_hash::FxHashSet;
 
 pub struct NoShorthandStylePropertyOverrides;
@@ -22,10 +22,7 @@ impl Rule for NoShorthandStylePropertyOverrides {
             let TemplateNode::Element(el) = node else {
                 return;
             };
-            let decl_sets = el
-                .attributes
-                .iter()
-                .flat_map(|attr| declarations(attr, ctx.source));
+            let decl_sets = el.attributes.iter().flat_map(|attr| declarations(attr, ctx.source));
             let mut before_declarations = FxHashSet::default();
             for decls in decl_sets {
                 for (prop, span) in &decls {
@@ -36,10 +33,7 @@ impl Rule for NoShorthandStylePropertyOverrides {
                     for longhand in longhands {
                         let original = format!("{prefix}{longhand}");
                         if before_declarations.contains(&original) {
-                            ctx.diagnostic(
-                                format!("Unexpected shorthand '{}' after '{}'.", prop, original),
-                                *span,
-                            );
+                            ctx.diagnostic(format!("Unexpected shorthand '{}' after '{}'.", prop, original), *span);
                         }
                     }
                 }
@@ -70,12 +64,7 @@ fn split_vendor_prefix(prop: &str) -> (&str, &str) {
 fn longhands_for_shorthand(property: &str) -> Option<&'static [&'static str]> {
     Some(match property {
         "margin" => &["margin-top", "margin-bottom", "margin-left", "margin-right"],
-        "padding" => &[
-            "padding-top",
-            "padding-bottom",
-            "padding-left",
-            "padding-right",
-        ],
+        "padding" => &["padding-top", "padding-bottom", "padding-left", "padding-right"],
         "background" => &[
             "background-image",
             "background-size",
@@ -110,21 +99,9 @@ fn longhands_for_shorthand(property: &str) -> Option<&'static [&'static str]> {
             "border-right-color",
         ],
         "border-top" => &["border-top-width", "border-top-style", "border-top-color"],
-        "border-bottom" => &[
-            "border-bottom-width",
-            "border-bottom-style",
-            "border-bottom-color",
-        ],
-        "border-left" => &[
-            "border-left-width",
-            "border-left-style",
-            "border-left-color",
-        ],
-        "border-right" => &[
-            "border-right-width",
-            "border-right-style",
-            "border-right-color",
-        ],
+        "border-bottom" => &["border-bottom-width", "border-bottom-style", "border-bottom-color"],
+        "border-left" => &["border-left-width", "border-left-style", "border-left-color"],
+        "border-right" => &["border-right-width", "border-right-style", "border-right-color"],
         "border-width" => &[
             "border-top-width",
             "border-bottom-width",
@@ -193,11 +170,7 @@ fn longhands_for_shorthand(property: &str) -> Option<&'static [&'static str]> {
             "border-inline-start-style",
             "border-inline-start-color",
         ],
-        "column-rule" => &[
-            "column-rule-width",
-            "column-rule-style",
-            "column-rule-color",
-        ],
+        "column-rule" => &["column-rule-width", "column-rule-style", "column-rule-color"],
         "columns" => &["column-width", "column-count"],
         "flex" => &["flex-grow", "flex-shrink", "flex-basis"],
         "flex-flow" => &["flex-direction", "flex-wrap"],
@@ -211,26 +184,13 @@ fn longhands_for_shorthand(property: &str) -> Option<&'static [&'static str]> {
             "grid-column-gap",
             "grid-row-gap",
         ],
-        "grid-area" => &[
-            "grid-row-start",
-            "grid-column-start",
-            "grid-row-end",
-            "grid-column-end",
-        ],
+        "grid-area" => &["grid-row-start", "grid-column-start", "grid-row-end", "grid-column-end"],
         "grid-column" => &["grid-column-start", "grid-column-end"],
         "grid-gap" => &["grid-row-gap", "grid-column-gap"],
         "grid-row" => &["grid-row-start", "grid-row-end"],
-        "grid-template" => &[
-            "grid-template-columns",
-            "grid-template-rows",
-            "grid-template-areas",
-        ],
+        "grid-template" => &["grid-template-columns", "grid-template-rows", "grid-template-areas"],
         "outline" => &["outline-color", "outline-style", "outline-width"],
-        "text-decoration" => &[
-            "text-decoration-color",
-            "text-decoration-style",
-            "text-decoration-line",
-        ],
+        "text-decoration" => &["text-decoration-color", "text-decoration-style", "text-decoration-line"],
         "text-emphasis" => &["text-emphasis-style", "text-emphasis-color"],
         "mask" => &[
             "mask-image",

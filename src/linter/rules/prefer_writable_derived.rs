@@ -2,8 +2,8 @@
 //! ⭐ Recommended 💡
 
 use crate::linter::{Fix, LintContext, Rule, Suggestion};
-use oxc::ast::ast::{Argument, AssignmentTarget, Expression, Statement};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Argument, AssignmentTarget, Expression, Statement};
 use oxc::span::{GetSpan, Span};
 use oxc::syntax::operator::AssignmentOperator;
 
@@ -19,9 +19,7 @@ impl Rule for PreferWritableDerived {
     }
 
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
-        if ctx.runes_explicit_false
-            || (!ctx.svelte_version.is_unknown() && !ctx.svelte_version.includes_major(5))
-        {
+        if ctx.runes_explicit_false || (!ctx.svelte_version.is_unknown() && !ctx.svelte_version.includes_major(5)) {
             return;
         }
         let Some(semantic) = ctx.instance_semantic else {
@@ -31,9 +29,7 @@ impl Rule for PreferWritableDerived {
             .ast
             .instance
             .as_ref()
-            .map_or(ctx.instance_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
         let scoping = semantic.scoping();
         let nodes = semantic.nodes();
 
@@ -109,8 +105,7 @@ impl Rule for PreferWritableDerived {
             let replacement = format!(
                 "{}{}{}",
                 edits[0].1,
-                &ctx.source[(content_offset + edits[0].0.end) as usize
-                    ..(content_offset + edits[1].0.start) as usize],
+                &ctx.source[(content_offset + edits[0].0.end) as usize..(content_offset + edits[1].0.start) as usize],
                 edits[1].1
             );
             ctx.diagnostic_with_suggestions(
@@ -132,8 +127,7 @@ fn is_effect_or_effect_pre(callee: &Expression<'_>) -> bool {
     match callee {
         Expression::Identifier(id) => id.name == "$effect",
         Expression::StaticMemberExpression(mem) => {
-            matches!(&mem.object, Expression::Identifier(id) if id.name == "$effect")
-                && mem.property.name == "pre"
+            matches!(&mem.object, Expression::Identifier(id) if id.name == "$effect") && mem.property.name == "pre"
         }
         _ => false,
     }
@@ -187,6 +181,9 @@ mod tests {
             suggestion.fix.span.start as usize..suggestion.fix.span.end as usize,
             &suggestion.fix.replacement,
         );
-        assert_eq!(output, "<!-- 😀 --><script data-note=\">\">let value = $derived(count + 1); /* keep */ ; function inner() { let value = 0; $effect(() => { value = 2; }); }</script>");
+        assert_eq!(
+            output,
+            "<!-- 😀 --><script data-note=\">\">let value = $derived(count + 1); /* keep */ ; function inner() { let value = 0; $effect(() => { value = 2; }); }</script>"
+        );
     }
 }

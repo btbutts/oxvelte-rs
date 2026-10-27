@@ -1,7 +1,7 @@
 //! `svelte/button-has-type` — disallow usage of button without an explicit type attribute.
 
 use crate::ast::{Attribute, AttributeValue, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct ButtonHasType;
 
@@ -45,10 +45,7 @@ impl Rule for ButtonHasType {
                 }
 
                 let has_shorthand_type = el.attributes.iter().any(|attr| {
-                    if let Attribute::NormalAttribute {
-                        name, value, span, ..
-                    } = attr
-                    {
+                    if let Attribute::NormalAttribute { name, value, span, .. } = attr {
                         if name == "type" {
                             if let AttributeValue::Expression(_) = value {
                                 let src = &ctx.source[span.start as usize..span.end as usize];
@@ -62,9 +59,10 @@ impl Rule for ButtonHasType {
                     return;
                 }
 
-                let type_attr = el.attributes.iter().find(|attr| {
-                    matches!(attr, Attribute::NormalAttribute { name, .. } if name == "type")
-                });
+                let type_attr = el
+                    .attributes
+                    .iter()
+                    .find(|attr| matches!(attr, Attribute::NormalAttribute { name, .. } if name == "type"));
 
                 match type_attr {
                     Some(Attribute::NormalAttribute { value, span, .. }) => match value {
@@ -73,15 +71,9 @@ impl Rule for ButtonHasType {
                         }
                         AttributeValue::Static(v) => {
                             if v.is_empty() {
-                                ctx.diagnostic(
-                                    "A value must be set for button type attribute.",
-                                    *span,
-                                );
+                                ctx.diagnostic("A value must be set for button type attribute.", *span);
                             } else if !matches!(v.as_str(), "button" | "submit" | "reset") {
-                                ctx.diagnostic(
-                                    format!("{} is an invalid value for button type attribute.", v),
-                                    *span,
-                                );
+                                ctx.diagnostic(format!("{} is an invalid value for button type attribute.", v), *span);
                             } else {
                                 let forbidden = match v.as_str() {
                                     "button" => button_forbidden,
@@ -91,10 +83,7 @@ impl Rule for ButtonHasType {
                                 };
                                 if forbidden {
                                     ctx.diagnostic(
-                                        format!(
-                                            "{} is a forbidden value for button type attribute.",
-                                            v
-                                        ),
+                                        format!("{} is a forbidden value for button type attribute.", v),
                                         *span,
                                     );
                                 }
@@ -103,11 +92,7 @@ impl Rule for ButtonHasType {
                         _ => {}
                     },
                     None => {
-                        if el
-                            .attributes
-                            .iter()
-                            .any(|a| matches!(a, Attribute::Spread { .. }))
-                        {
+                        if el.attributes.iter().any(|a| matches!(a, Attribute::Spread { .. })) {
                             return;
                         }
                         ctx.diagnostic("Missing an explicit type attribute for button.", el.span);

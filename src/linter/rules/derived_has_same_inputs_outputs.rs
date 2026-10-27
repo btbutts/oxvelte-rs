@@ -1,11 +1,10 @@
 //! `svelte/derived-has-same-inputs-outputs` names callback parameters after stores.
 
 use crate::linter::{Fix, LintContext, Rule, Suggestion};
-use oxc::ast::ast::{
-    BindingIdentifier, BindingPattern, Expression, ImportDeclarationSpecifier, ModuleExportName,
-    Statement,
-};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{
+    BindingIdentifier, BindingPattern, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement,
+};
 use oxc::span::{GetSpan, Span};
 
 pub struct DerivedHasSameInputsOutputs;
@@ -26,9 +25,7 @@ impl Rule for DerivedHasSameInputsOutputs {
             .ast
             .instance
             .as_ref()
-            .map_or(ctx.instance_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
         let nodes = semantic.nodes();
         let scoping = semantic.scoping();
         let mut imports = Vec::new();
@@ -83,12 +80,8 @@ impl Rule for DerivedHasSameInputsOutputs {
                 continue;
             };
             let (parameter, callback_span) = match callback {
-                Expression::ArrowFunctionExpression(function) => {
-                    (function.params.items.first(), function.span)
-                }
-                Expression::FunctionExpression(function) => {
-                    (function.params.items.first(), function.span)
-                }
+                Expression::ArrowFunctionExpression(function) => (function.params.items.first(), function.span),
+                Expression::FunctionExpression(function) => (function.params.items.first(), function.span),
                 _ => continue,
             };
             let Some(parameter) = parameter else { continue };
@@ -99,10 +92,8 @@ impl Rule for DerivedHasSameInputsOutputs {
                 }
                 (Expression::ArrayExpression(stores), BindingPattern::ArrayPattern(bindings)) => {
                     for (store, binding) in stores.elements.iter().zip(&bindings.elements) {
-                        if let (
-                            Some(Expression::Identifier(store)),
-                            Some(BindingPattern::BindingIdentifier(binding)),
-                        ) = (store.as_expression(), binding.as_ref())
+                        if let (Some(Expression::Identifier(store)), Some(BindingPattern::BindingIdentifier(binding))) =
+                            (store.as_expression(), binding.as_ref())
                         {
                             pairs.push((store.name.as_str(), binding));
                         }
@@ -120,15 +111,10 @@ impl Rule for DerivedHasSameInputsOutputs {
                 let references: Vec<_> = scoping.get_resolved_references(sid).collect();
                 // Avoid both changing which binding a use resolves to and
                 // capturing existing references to the replacement name.
-                let conflict = scoping
-                    .get_binding(scope, expected.as_str().into())
-                    .is_some()
+                let conflict = scoping.get_binding(scope, expected.as_str().into()).is_some()
                     || references.iter().any(|reference| {
                         scoping
-                            .find_binding(
-                                nodes.get_node(reference.node_id()).scope_id(),
-                                expected.as_str().into(),
-                            )
+                            .find_binding(nodes.get_node(reference.node_id()).scope_id(), expected.as_str().into())
                             .is_some()
                     })
                     || nodes.iter().any(|other| {
@@ -147,9 +133,7 @@ impl Rule for DerivedHasSameInputsOutputs {
                                     // instead become captured by the parameter.
                                     let target_scope = scoping.symbol_scope_id(target);
                                     target_scope != scope
-                                        && scoping
-                                            .scope_ancestors(target_scope)
-                                            .any(|ancestor| ancestor == scope)
+                                        && scoping.scope_ancestors(target_scope).any(|ancestor| ancestor == scope)
                                 })
                     });
                 let mut suggestions = Vec::new();
@@ -162,9 +146,7 @@ impl Rule for DerivedHasSameInputsOutputs {
                         // and variable. Expand it so renaming preserves keys.
                         let shorthand = match nodes.parent_kind(node_id) {
                             AstKind::ObjectProperty(property) => property.shorthand,
-                            AstKind::AssignmentTargetPropertyIdentifier(property) => {
-                                property.binding.span == span
-                            }
+                            AstKind::AssignmentTargetPropertyIdentifier(property) => property.binding.span == span,
                             _ => false,
                         };
                         let replacement = if shorthand {
@@ -181,16 +163,12 @@ impl Rule for DerivedHasSameInputsOutputs {
                     let mut replacement = String::new();
                     let mut cursor = start;
                     for (span, text) in edits {
-                        replacement
-                            .push_str(&ctx.source[cursor as usize..(offset + span.start) as usize]);
+                        replacement.push_str(&ctx.source[cursor as usize..(offset + span.start) as usize]);
                         replacement.push_str(&text);
                         cursor = offset + span.end;
                     }
                     suggestions.push(Suggestion {
-                        description: format!(
-                            "Rename the parameter from {} to {}.",
-                            binding.name, expected
-                        ),
+                        description: format!("Rename the parameter from {} to {}.", binding.name, expected),
                         fix: Fix {
                             span: Span::new(start, end),
                             replacement,
@@ -237,11 +215,11 @@ mod tests {
         );
         let fix = &diagnostics[0].suggestions[0].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
+        assert_eq!(
+            output,
+            "<!-- 😀 --><script data-note=\">\">import { derived as make } from 'svelte/store'; make(a, ($a) => { $a; (() => { const value = 1; value; })(); });</script>"
         );
-        assert_eq!(output, "<!-- 😀 --><script data-note=\">\">import { derived as make } from 'svelte/store'; make(a, ($a) => { $a; (() => { const value = 1; value; })(); });</script>");
     }
 
     #[test]
@@ -255,10 +233,7 @@ mod tests {
         assert_eq!(diagnostics[3].suggestions.len(), 1);
         let fix = &diagnostics[0].suggestions[0].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
-        );
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         assert!(output.contains("([$a, y]) => { $a; y; }"));
     }
 
@@ -283,11 +258,11 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         let fix = &diagnostics[0].suggestions[0].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
+        assert_eq!(
+            output,
+            "<script>import { derived } from 'svelte/store'; derived(a, ($a) => { ({x: $a} = obj); ({x: $a = 1} = obj); return {x: $a}; });</script>"
         );
-        assert_eq!(output, "<script>import { derived } from 'svelte/store'; derived(a, ($a) => { ({x: $a} = obj); ({x: $a = 1} = obj); return {x: $a}; });</script>");
     }
 
     #[test]
@@ -295,8 +270,6 @@ mod tests {
         let source = "<script>import { derived } from 'svelte/store'; derived(a, (x, y = $a) => x); derived(a, function(x, y = $a) { return x; });</script>";
         let diagnostics = lint(source);
         assert_eq!(diagnostics.len(), 2);
-        assert!(diagnostics
-            .iter()
-            .all(|diagnostic| diagnostic.suggestions.is_empty()));
+        assert!(diagnostics.iter().all(|diagnostic| diagnostic.suggestions.is_empty()));
     }
 }

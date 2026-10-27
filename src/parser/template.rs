@@ -21,18 +21,12 @@ pub(crate) enum ValidationMode {
 /// owns any pre-parsed template expression nodes stored on template AST
 /// nodes (e.g. `MustacheTag.expression_ast`). It must outlive the
 /// returned `Fragment`.
-pub fn parse_fragment<'a>(
-    source: &'a str,
-    allocator: &'a Allocator,
-) -> Result<Fragment<'a>, OxcDiagnostic> {
+pub fn parse_fragment<'a>(source: &'a str, allocator: &'a Allocator) -> Result<Fragment<'a>, OxcDiagnostic> {
     let mut parser = TemplateParser::new(source, allocator);
     parser.parse_root_fragment()
 }
 
-pub fn parse_fragment_with_errors<'a>(
-    source: &'a str,
-    allocator: &'a Allocator,
-) -> (Fragment<'a>, Vec<OxcDiagnostic>) {
+pub fn parse_fragment_with_errors<'a>(source: &'a str, allocator: &'a Allocator) -> (Fragment<'a>, Vec<OxcDiagnostic>) {
     parse_fragment_with_mode(source, allocator, ValidationMode::Compiler)
 }
 
@@ -100,6 +94,9 @@ struct TemplateParser<'a> {
     template_tag_spans: Vec<TemplateTagSpan>,
 }
 
+// Deliberately kept inline: in this hot parse loop, copying the large variant
+// by value is cheaper than a heap allocation per step.
+#[allow(clippy::large_enum_variant)]
 enum FragmentStep<'a> {
     Node(TemplateNode<'a>),
     /// The dispatch step encountered a token that can't be handled inside
@@ -512,9 +509,7 @@ impl<'a> TemplateParser<'a> {
 
         let mut end = self.pos as u32;
         if end as usize >= self.source.len() {
-            while end > span_start
-                && self.source.as_bytes()[(end - 1) as usize].is_ascii_whitespace()
-            {
+            while end > span_start && self.source.as_bytes()[(end - 1) as usize].is_ascii_whitespace() {
                 end -= 1;
             }
         }
@@ -559,10 +554,7 @@ impl<'a> TemplateParser<'a> {
     /// `unclosed_at_eof_outer` flag distinguishes the innermost (vendor's
     /// topmost on its parser stack — gets `end = template.length`) from
     /// outer unclosed entries (vendor leaves at the initial sentinel `-1`).
-    fn implicit_close_top_open_element_at_eof(
-        &mut self,
-        unclosed_at_eof_outer: bool,
-    ) -> Result<(), OxcDiagnostic> {
+    fn implicit_close_top_open_element_at_eof(&mut self, unclosed_at_eof_outer: bool) -> Result<(), OxcDiagnostic> {
         if let Some(OpenNode::Element(pending)) = self.open_nodes.last() {
             let name = pending.name.clone();
             self.report_unclosed_eof(format!("`<{name}>` was left open"));
@@ -590,10 +582,7 @@ impl<'a> TemplateParser<'a> {
         unclosed_at_eof_outer: bool,
         chain_inner_unclosed_at_eof_outer: bool,
     ) -> Result<(), OxcDiagnostic> {
-        if matches!(
-            self.open_nodes.last(),
-            Some(OpenNode::Block(OpenBlock::If { .. }))
-        ) {
+        if matches!(self.open_nodes.last(), Some(OpenNode::Block(OpenBlock::If { .. }))) {
             return self.finalize_if_chain(
                 fragment_end,
                 closed,
@@ -810,16 +799,7 @@ impl<'a> TemplateParser<'a> {
                 ),
                 _ => panic!("finalize_if_chain called without an If on top of open_nodes"),
             };
-            let (
-                block_start,
-                test,
-                test_span,
-                header_span,
-                body_start,
-                elseif,
-                chained,
-                stored_consequent,
-            ) = pending;
+            let (block_start, test, test_span, header_span, body_start, elseif, chained, stored_consequent) = pending;
 
             let consequent = if is_deepest {
                 let nodes = self.exit_fragment();
@@ -830,9 +810,7 @@ impl<'a> TemplateParser<'a> {
                     template_tag_spans: Vec::new(),
                 }
             } else {
-                stored_consequent.expect(
-                    "ancestor If chain entry must have stored consequent before next chain push",
-                )
+                stored_consequent.expect("ancestor If chain entry must have stored consequent before next chain push")
             };
             let synthetic_else_slot = chained && !elseif;
             let unclosed_at_eof_outer = if synthetic_else_slot {
@@ -855,11 +833,7 @@ impl<'a> TemplateParser<'a> {
             // (matching `parse_else_block_node`'s `Span::new(content_start,
             // else_end)`); `{#if}` and `{:else if}` slots use `block_start`.
             let synthetic_else = chained && !elseif;
-            let span_start = if synthetic_else {
-                body_start
-            } else {
-                block_start
-            };
+            let span_start = if synthetic_else { body_start } else { block_start };
             let span_end = if !chained {
                 // Outermost: span ends at `self.pos`, matching pre-flatten
                 // `parse_if_block` which always wrote `Span::new(start,
@@ -931,9 +905,7 @@ impl<'a> TemplateParser<'a> {
                 OpenNode::Block(OpenBlock::If { body_start, .. }) => *body_start,
                 _ => unreachable!(),
             };
-            if let Some(OpenNode::Block(OpenBlock::If { consequent, .. })) =
-                self.open_nodes.last_mut()
-            {
+            if let Some(OpenNode::Block(OpenBlock::If { consequent, .. })) = self.open_nodes.last_mut() {
                 *consequent = Some(Fragment {
                     _phantom: PhantomData,
                     nodes: fragment_nodes,
@@ -1131,9 +1103,7 @@ impl<'a> TemplateParser<'a> {
                 OpenNode::Block(OpenBlock::If { body_start, .. }) => *body_start,
                 _ => unreachable!(),
             };
-            if let Some(OpenNode::Block(OpenBlock::If { consequent, .. })) =
-                self.open_nodes.last_mut()
-            {
+            if let Some(OpenNode::Block(OpenBlock::If { consequent, .. })) = self.open_nodes.last_mut() {
                 *consequent = Some(Fragment {
                     _phantom: PhantomData,
                     nodes: fragment_nodes,
@@ -1192,10 +1162,7 @@ impl<'a> TemplateParser<'a> {
     /// `unclosed_at_eof_outer` so that the resulting block AST node — and,
     /// for `OpenBlock::If`, every chain link except the deepest — is
     /// stamped with the flag the serializer translates to `end: -1`.
-    fn implicit_close_top_open_block_at_eof(
-        &mut self,
-        unclosed_at_eof_outer: bool,
-    ) -> Result<(), OxcDiagnostic> {
+    fn implicit_close_top_open_block_at_eof(&mut self, unclosed_at_eof_outer: bool) -> Result<(), OxcDiagnostic> {
         let fragment_end = self.pos as u32;
         self.finalize_top_open_block(fragment_end, false, unclosed_at_eof_outer, true)
     }
@@ -1274,9 +1241,7 @@ impl<'a> TemplateParser<'a> {
     fn drain_implicit_close_top_at_eof(&mut self) -> Result<(), OxcDiagnostic> {
         let is_innermost = !self.reported_unclosed_eof;
         match self.open_nodes.last() {
-            Some(OpenNode::Element(_)) => {
-                self.implicit_close_top_open_element_at_eof(!is_innermost)
-            }
+            Some(OpenNode::Element(_)) => self.implicit_close_top_open_element_at_eof(!is_innermost),
             Some(OpenNode::Block(_)) => {
                 self.report_unclosed_eof("Block was left open");
                 self.implicit_close_top_open_block_at_eof(!is_innermost)
@@ -1285,10 +1250,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn parse_fragment_frame(
-        &mut self,
-        frame: FragmentFrame,
-    ) -> Result<Fragment<'a>, OxcDiagnostic> {
+    fn parse_fragment_frame(&mut self, frame: FragmentFrame) -> Result<Fragment<'a>, OxcDiagnostic> {
         let start = self.pos as u32;
         // Remember the open-node stack depth so block/element closes that
         // belong to outer frames don't accidentally finalize inner entries,
@@ -1351,17 +1313,12 @@ impl<'a> TemplateParser<'a> {
         })
     }
 
-    fn parse_fragment_step(
-        &mut self,
-        frame: FragmentFrame,
-    ) -> Result<FragmentStep<'a>, OxcDiagnostic> {
+    fn parse_fragment_step(&mut self, frame: FragmentFrame) -> Result<FragmentStep<'a>, OxcDiagnostic> {
         // The open-element stack now carries element parents. The frame
         // argument only distinguishes root vs block; element nesting is
         // tracked via `open_nodes` and the per-frame checkpoint.
         let is_root = self.current_frame_is_root_scope(frame);
-        let parent_open_name = self
-            .current_frame_parent_element_name()
-            .map(|s| s.to_string());
+        let parent_open_name = self.current_frame_parent_element_name().map(|s| s.to_string());
 
         // Skip over <script> and <style> blocks at top level only.
         if is_root && (self.looking_at_start_tag("script") || self.looking_at_start_tag("style")) {
@@ -1392,9 +1349,7 @@ impl<'a> TemplateParser<'a> {
             // needs to be auto-closed first (mirroring vendor's stack
             // unwinding) before the element-close logic can find an element
             // parent below it.
-            if self.open_nodes.len() > checkpoint
-                && matches!(self.open_nodes.last(), Some(OpenNode::Block(_)))
-            {
+            if self.open_nodes.len() > checkpoint && matches!(self.open_nodes.last(), Some(OpenNode::Block(_))) {
                 self.drain_implicit_close_top()?;
                 return Ok(FragmentStep::Continue);
             }
@@ -1478,9 +1433,7 @@ impl<'a> TemplateParser<'a> {
                 Ok(FragmentStep::Exit)
             }
         } else if self.looking_at("{:") {
-            let continuation = self
-                .peek_block_continuation()
-                .unwrap_or(BlockContinuation::Other);
+            let continuation = self.peek_block_continuation().unwrap_or(BlockContinuation::Other);
 
             // If the innermost open node in this frame is an `{#each}`,
             // `{#if}`, or `{#await}` block, it claims the continuation inline
@@ -1516,9 +1469,7 @@ impl<'a> TemplateParser<'a> {
                             self.consume_continuation_body()?;
                             return Ok(FragmentStep::Continue);
                         }
-                        BlockContinuation::Then
-                        | BlockContinuation::Catch
-                        | BlockContinuation::Other => {
+                        BlockContinuation::Then | BlockContinuation::Catch | BlockContinuation::Other => {
                             self.report_error("Expected token {:else} or {:else if}");
                             self.consume_continuation_body()?;
                             return Ok(FragmentStep::Continue);
@@ -1542,8 +1493,7 @@ impl<'a> TemplateParser<'a> {
                             return Ok(FragmentStep::Continue);
                         }
                     },
-                    OpenNode::Block(OpenBlock::Key { .. } | OpenBlock::Snippet { .. })
-                    | OpenNode::Element(_) => {
+                    OpenNode::Block(OpenBlock::Key { .. } | OpenBlock::Snippet { .. }) | OpenNode::Element(_) => {
                         // Fall through to invalid-placement handling below.
                     }
                 }
@@ -1560,11 +1510,8 @@ impl<'a> TemplateParser<'a> {
             Ok(FragmentStep::Continue)
         } else if self.looking_at("<!--") {
             self.parse_comment().map(FragmentStep::Node)
-        } else if self.looking_at_svelte_keyword_missing_whitespace(
-            "{#",
-            &["if", "each", "await", "key", "snippet"],
-        ) || self
-            .looking_at_svelte_keyword_missing_whitespace("{@", &["html", "render", "const"])
+        } else if self.looking_at_svelte_keyword_missing_whitespace("{#", &["if", "each", "await", "key", "snippet"])
+            || self.looking_at_svelte_keyword_missing_whitespace("{@", &["html", "render", "const"])
         {
             self.report_error("Expected whitespace");
             Ok(FragmentStep::Node(self.parse_mustache_with_recovery()))
@@ -1665,11 +1612,7 @@ impl<'a> TemplateParser<'a> {
         })
     }
 
-    fn looking_at_svelte_keyword_missing_whitespace(
-        &self,
-        prefix: &str,
-        keywords: &[&str],
-    ) -> bool {
+    fn looking_at_svelte_keyword_missing_whitespace(&self, prefix: &str, keywords: &[&str]) -> bool {
         let Some(end) = self.prefix_end(prefix) else {
             return false;
         };
@@ -1694,8 +1637,7 @@ impl<'a> TemplateParser<'a> {
         while pos < self.source.len() && bytes[pos].is_ascii_whitespace() {
             pos += 1;
         }
-        self.source[pos..].starts_with("if")
-            && scanner::is_svelte_keyword_boundary(self.source, pos + 2)
+        self.source[pos..].starts_with("if") && scanner::is_svelte_keyword_boundary(self.source, pos + 2)
     }
 
     fn looking_at_invalid_elseif(&self) -> bool {
@@ -1929,8 +1871,7 @@ impl<'a> TemplateParser<'a> {
     }
 
     fn skip_whitespace(&mut self) {
-        while self.pos < self.source.len() && self.source.as_bytes()[self.pos].is_ascii_whitespace()
-        {
+        while self.pos < self.source.len() && self.source.as_bytes()[self.pos].is_ascii_whitespace() {
             self.pos += 1;
         }
     }
@@ -1952,8 +1893,7 @@ impl<'a> TemplateParser<'a> {
             if scanner::starts_with_ascii_case_insensitive(self.remaining(), &close_prefix) {
                 let after_prefix = &self.source[self.pos + close_prefix.len()..];
                 let next_ch = after_prefix.chars().next();
-                if next_ch == Some('>') || next_ch.map(|c| c.is_ascii_whitespace()).unwrap_or(true)
-                {
+                if next_ch == Some('>') || next_ch.map(|c| c.is_ascii_whitespace()).unwrap_or(true) {
                     // Valid closing tag — eat to >
                     let end_tag_start = self.pos as u32;
                     self.eat_until(">");
@@ -1966,9 +1906,7 @@ impl<'a> TemplateParser<'a> {
                 // Not a valid closing tag (e.g., </textaread) — treat as text
             }
 
-            if tag_name.eq_ignore_ascii_case("textarea")
-                && (self.looking_at("{#") || self.looking_at("{@"))
-            {
+            if tag_name.eq_ignore_ascii_case("textarea") && (self.looking_at("{#") || self.looking_at("{@")) {
                 self.report_invalid_textarea_tag_placement();
             }
 
@@ -1982,13 +1920,10 @@ impl<'a> TemplateParser<'a> {
                     if parse_mustaches && self.looking_at("{") {
                         break;
                     }
-                    if scanner::starts_with_ascii_case_insensitive(self.remaining(), &close_prefix)
-                    {
+                    if scanner::starts_with_ascii_case_insensitive(self.remaining(), &close_prefix) {
                         let after_prefix = &self.source[self.pos + close_prefix.len()..];
                         let next_ch = after_prefix.chars().next();
-                        if next_ch == Some('>')
-                            || next_ch.map(|c| c.is_ascii_whitespace()).unwrap_or(true)
-                        {
+                        if next_ch == Some('>') || next_ch.map(|c| c.is_ascii_whitespace()).unwrap_or(true) {
                             break;
                         }
                     }
@@ -2016,8 +1951,7 @@ impl<'a> TemplateParser<'a> {
         };
         let marker = self.source.as_bytes()[name_start - 1];
         let mut name_end = name_start;
-        while name_end < self.source.len() && self.source.as_bytes()[name_end].is_ascii_alphabetic()
-        {
+        while name_end < self.source.len() && self.source.as_bytes()[name_end].is_ascii_alphabetic() {
             name_end += 1;
         }
         let name = &self.source[name_start..name_end];
@@ -2080,8 +2014,7 @@ impl<'a> TemplateParser<'a> {
 
         // Try exact match first, then prefix with whitespace
         loop {
-            if let Some(idx) = scanner::find_ascii_case_insensitive(self.remaining(), close_prefix)
-            {
+            if let Some(idx) = scanner::find_ascii_case_insensitive(self.remaining(), close_prefix) {
                 self.pos += idx;
             } else {
                 self.pos = self.source.len();
@@ -2174,9 +2107,7 @@ impl<'a> TemplateParser<'a> {
     fn skip_block_comment(&mut self) {
         self.pos += 2;
         while self.pos + 1 < self.source.len() {
-            if self.source.as_bytes()[self.pos] == b'*'
-                && self.source.as_bytes()[self.pos + 1] == b'/'
-            {
+            if self.source.as_bytes()[self.pos] == b'*' && self.source.as_bytes()[self.pos + 1] == b'/' {
                 self.pos += 2;
                 return;
             }
@@ -2208,9 +2139,7 @@ impl<'a> TemplateParser<'a> {
                 }
                 b'/' => {
                     self.pos += 1;
-                    while self.pos < self.source.len()
-                        && self.source.as_bytes()[self.pos].is_ascii_alphabetic()
-                    {
+                    while self.pos < self.source.len() && self.source.as_bytes()[self.pos].is_ascii_alphabetic() {
                         self.pos += 1;
                     }
                     return;
@@ -2288,23 +2217,21 @@ impl<'a> TemplateParser<'a> {
                             self.skip_string_literal(inner)?;
                             continue; // skip_string_literal already advanced pos
                         }
-                        b'/' if self.pos + 1 < self.source.len() => {
-                            match self.source.as_bytes()[self.pos + 1] {
-                                b'/' => {
-                                    self.skip_line_comment();
-                                    continue;
-                                }
-                                b'*' => {
-                                    self.skip_block_comment();
-                                    continue;
-                                }
-                                _ if self.slash_starts_regex(expr_start) => {
-                                    self.skip_regex_literal();
-                                    continue;
-                                }
-                                _ => {}
+                        b'/' if self.pos + 1 < self.source.len() => match self.source.as_bytes()[self.pos + 1] {
+                            b'/' => {
+                                self.skip_line_comment();
+                                continue;
                             }
-                        }
+                            b'*' => {
+                                self.skip_block_comment();
+                                continue;
+                            }
+                            _ if self.slash_starts_regex(expr_start) => {
+                                self.skip_regex_literal();
+                                continue;
+                            }
+                            _ => {}
+                        },
                         b'\\' => {
                             self.pos = (self.pos + 2).min(self.source.len());
                             continue;
@@ -2409,9 +2336,7 @@ impl<'a> TemplateParser<'a> {
         {
             self.validate_expression_syntax(&expression, expression_span);
         }
-        if let Some((has_expression, check_closing)) =
-            template_tag_metadata_from_mustache_expression(&expression)
-        {
+        if let Some((has_expression, check_closing)) = template_tag_metadata_from_mustache_expression(&expression) {
             self.record_template_tag(span, has_expression, check_closing);
         }
         let expression_ast = parse_expr_into(self.allocator, &expression);
@@ -2447,9 +2372,7 @@ impl<'a> TemplateParser<'a> {
         let identifiers_start = self.pos as u32;
         let idents_str = self.eat_until("}");
         if debug_tag_has_invalid_arguments(idents_str, self.allocator) {
-            self.report_error(
-                "{@debug ...} arguments must be identifiers, not arbitrary expressions",
-            );
+            self.report_error("{@debug ...} arguments must be identifiers, not arbitrary expressions");
         }
         let (identifiers, identifier_spans) =
             parse_debug_identifiers(Span::new(identifiers_start, self.pos as u32), idents_str);
@@ -2465,9 +2388,7 @@ impl<'a> TemplateParser<'a> {
     fn parse_const_tag(&mut self) -> Result<TemplateNode<'a>, OxcDiagnostic> {
         let start = self.pos as u32;
         let keyword_end = self.const_tag_keyword_end().expect("const tag dispatch");
-        let legacy = self.source[self.pos + 1..keyword_end]
-            .trim_start()
-            .starts_with('@');
+        let legacy = self.source[self.pos + 1..keyword_end].trim_start().starts_with('@');
         let kind = if self.source[self.pos + 1..keyword_end].trim_start() == "let" {
             TemplateDeclarationKind::Let
         } else {
@@ -2483,12 +2404,8 @@ impl<'a> TemplateParser<'a> {
                 self.report_error(message);
             }
         } else {
-            let wrapped = self
-                .allocator
-                .alloc_str(&format!("{} {declaration}", kind.keyword()));
-            let parsed =
-                oxc::parser::Parser::new(self.allocator, wrapped, oxc::span::SourceType::ts())
-                    .parse();
+            let wrapped = self.allocator.alloc_str(&format!("{} {declaration}", kind.keyword()));
+            let parsed = oxc::parser::Parser::new(self.allocator, wrapped, oxc::span::SourceType::ts()).parse();
             self.extend_expression_syntax_errors(
                 parsed.diagnostics.into_vec(),
                 declaration_span,
@@ -2560,9 +2477,7 @@ impl<'a> TemplateParser<'a> {
 
     fn parse_element(&mut self, frame: FragmentFrame) -> Result<FragmentStep<'a>, OxcDiagnostic> {
         let is_root = self.current_frame_is_root_scope(frame);
-        let parent_owned = self
-            .current_frame_parent_element_name()
-            .map(|s| s.to_string());
+        let parent_owned = self.current_frame_parent_element_name().map(|s| s.to_string());
         let start = self.pos as u32;
         self.eat("<")?;
 
@@ -2608,9 +2523,8 @@ impl<'a> TemplateParser<'a> {
 
         let is_void = is_void_element(&name);
         let parse_raw_text_mustaches = name.eq_ignore_ascii_case("textarea");
-        let is_raw_text = parse_raw_text_mustaches
-            || name.eq_ignore_ascii_case("script")
-            || name.eq_ignore_ascii_case("style");
+        let is_raw_text =
+            parse_raw_text_mustaches || name.eq_ignore_ascii_case("script") || name.eq_ignore_ascii_case("style");
         let context = self.enter_element_context(&name, &attributes);
 
         // Self-closing / void elements have no children — build immediately.
@@ -2624,9 +2538,7 @@ impl<'a> TemplateParser<'a> {
             }
             let mut end = self.pos as u32;
             if end as usize >= self.source.len() {
-                while end > start
-                    && self.source.as_bytes()[(end - 1) as usize].is_ascii_whitespace()
-                {
+                while end > start && self.source.as_bytes()[(end - 1) as usize].is_ascii_whitespace() {
                     end -= 1;
                 }
             }
@@ -2648,14 +2560,13 @@ impl<'a> TemplateParser<'a> {
         // scanner-based child reader; they don't produce normal template
         // children and don't participate in the open-element stack.
         if is_raw_text {
-            let (children, end_tag_span) =
-                match self.parse_raw_text_children(&name, parse_raw_text_mustaches) {
-                    Ok(pair) => pair,
-                    Err(err) => {
-                        self.exit_element_context(context);
-                        return Err(err);
-                    }
-                };
+            let (children, end_tag_span) = match self.parse_raw_text_children(&name, parse_raw_text_mustaches) {
+                Ok(pair) => pair,
+                Err(err) => {
+                    self.exit_element_context(context);
+                    return Err(err);
+                }
+            };
             if end_tag_span.is_none() {
                 self.report_unclosed_eof(format!("`<{name}>` was left open"));
             }
@@ -2667,9 +2578,7 @@ impl<'a> TemplateParser<'a> {
             }
             let mut end = self.pos as u32;
             if end as usize >= self.source.len() {
-                while end > start
-                    && self.source.as_bytes()[(end - 1) as usize].is_ascii_whitespace()
-                {
+                while end > start && self.source.as_bytes()[(end - 1) as usize].is_ascii_whitespace() {
                     end -= 1;
                 }
             }
@@ -2710,17 +2619,11 @@ impl<'a> TemplateParser<'a> {
     }
 
     fn validate_expression_syntax(&mut self, expression: &str, span: Span) {
-        let parsed =
-            crate::parser::expression::parse_template_expression(expression, self.allocator);
+        let parsed = crate::parser::expression::parse_template_expression(expression, self.allocator);
         self.extend_expression_syntax_errors(parsed.diagnostics.into_vec(), span, 6);
     }
 
-    fn extend_expression_syntax_errors(
-        &mut self,
-        errors: Vec<OxcDiagnostic>,
-        span: Span,
-        wrapper_prefix: usize,
-    ) {
+    fn extend_expression_syntax_errors(&mut self, errors: Vec<OxcDiagnostic>, span: Span, wrapper_prefix: usize) {
         for mut error in errors {
             if !error.labels.is_empty() {
                 let labels = std::mem::take(&mut error.labels);
@@ -2730,8 +2633,7 @@ impl<'a> TemplateParser<'a> {
                         let relative = (label.offset() as usize)
                             .saturating_sub(wrapper_prefix)
                             .min((span.end - span.start) as usize);
-                        let length =
-                            (label.len() as usize).min((span.end - span.start) as usize - relative);
+                        let length = (label.len() as usize).min((span.end - span.start) as usize - relative);
                         oxc_diagnostics::LabeledSpan::new(
                             label.label().map(str::to_owned),
                             span.start + relative as u32,
@@ -2744,33 +2646,22 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn validate_attribute_expression_syntax(
-        &mut self,
-        attributes: &[Attribute],
-        metadata: &[AttributeMeta<'a>],
-    ) {
+    fn validate_attribute_expression_syntax(&mut self, attributes: &[Attribute], metadata: &[AttributeMeta<'a>]) {
         for (attribute, meta) in attributes.iter().zip(metadata) {
             let expression_span = meta.expression_span.unwrap_or(meta.name_span);
             let value = match attribute {
                 Attribute::NormalAttribute { name, .. } if name.trim_start().starts_with("...") => {
                     // Whitespace after `{` can send a spread through the
                     // shorthand reader. A spread is valid inside an array.
-                    let parsed = crate::parser::expression::parse_template_expression(
-                        &format!("[{name}]"),
-                        self.allocator,
-                    );
+                    let parsed =
+                        crate::parser::expression::parse_template_expression(&format!("[{name}]"), self.allocator);
                     self.extend_expression_syntax_errors(parsed.diagnostics.into_vec(), expression_span, 7);
                     continue;
                 }
-                Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => {
-                    value
-                }
+                Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => value,
                 Attribute::Spread { .. } => {
                     if let Some(span) = meta.expression_span {
-                        self.validate_expression_syntax(
-                            &self.source[span.start as usize..span.end as usize].to_string(),
-                            span,
-                        );
+                        self.validate_expression_syntax(&self.source[span.start as usize..span.end as usize], span);
                     }
                     continue;
                 }
@@ -2782,10 +2673,7 @@ impl<'a> TemplateParser<'a> {
                 AttributeValue::Concat(parts) => {
                     for (part, meta) in parts.iter().zip(&meta.parts) {
                         if let AttributeValuePart::Expression(expression) = part {
-                            self.validate_expression_syntax(
-                                expression,
-                                meta.expression_span.unwrap_or(meta.span),
-                            );
+                            self.validate_expression_syntax(expression, meta.expression_span.unwrap_or(meta.span));
                         }
                     }
                 }
@@ -2794,11 +2682,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_head_title_diagnostics(
-        &mut self,
-        attributes: &[Attribute],
-        children: &[TemplateNode<'a>],
-    ) {
+    fn report_head_title_diagnostics(&mut self, attributes: &[Attribute], children: &[TemplateNode<'a>]) {
         if self.validation_mode == ValidationMode::Lint {
             return;
         }
@@ -2858,9 +2742,7 @@ impl<'a> TemplateParser<'a> {
             self.report_error(format!("A component can only have one `<{name}>` element"));
         }
         if !is_root {
-            self.report_error(format!(
-                "`<{name}>` tags cannot be inside elements or blocks"
-            ));
+            self.report_error(format!("`<{name}>` tags cannot be inside elements or blocks"));
         }
 
         self.seen_root_meta_tags.push(name.to_string());
@@ -2928,9 +2810,7 @@ impl<'a> TemplateParser<'a> {
 
             match attribute {
                 Attribute::NormalAttribute { name, .. }
-                    if is_regular_or_svelte_element
-                        && name != "@attach"
-                        && attribute_name_is_invalid(name) =>
+                    if is_regular_or_svelte_element && name != "@attach" && attribute_name_is_invalid(name) =>
                 {
                     self.report_error(format!("'{name}' is not a valid attribute name"));
                 }
@@ -2940,9 +2820,7 @@ impl<'a> TemplateParser<'a> {
                         && name.len() > 2
                         && !is_expression_attribute_value(value) =>
                 {
-                    self.report_error(
-                        "Event attribute must be a JavaScript expression, not a string",
-                    );
+                    self.report_error("Event attribute must be a JavaScript expression, not a string");
                 }
                 Attribute::Directive {
                     kind: DirectiveKind::EventHandler,
@@ -2950,9 +2828,7 @@ impl<'a> TemplateParser<'a> {
                     ..
                 } if is_component => {
                     if modifiers.len() > 1 || modifiers.iter().any(|modifier| modifier != "once") {
-                        self.report_error(
-                            "Event modifiers other than 'once' can only be used on DOM elements",
-                        );
+                        self.report_error("Event modifiers other than 'once' can only be used on DOM elements");
                     }
                 }
                 Attribute::Directive { kind, .. } if is_component => {
@@ -2970,7 +2846,6 @@ impl<'a> TemplateParser<'a> {
                 Attribute::Directive {
                     kind: DirectiveKind::Binding,
                     name: binding_name,
-                    value: _,
                     ..
                 } if uses_bind_target_rules => {
                     self.report_bind_directive_diagnostics(name, attributes, binding_name);
@@ -2979,12 +2854,8 @@ impl<'a> TemplateParser<'a> {
                     kind: DirectiveKind::StyleDirective,
                     modifiers,
                     ..
-                } if is_regular_or_svelte_element => {
-                    if modifiers.iter().any(|modifier| modifier != "important") {
-                        self.report_error(
-                            "`style:` directive can only use the `important` modifier",
-                        );
-                    }
+                } if is_regular_or_svelte_element && modifiers.iter().any(|modifier| modifier != "important") => {
+                    self.report_error("`style:` directive can only use the `important` modifier");
                 }
                 _ => {}
             }
@@ -2996,8 +2867,7 @@ impl<'a> TemplateParser<'a> {
             return;
         };
 
-        for diagnostic in bind_expression_diagnostics(raw_expression, binding_name, self.allocator)
-        {
+        for diagnostic in bind_expression_diagnostics(raw_expression, binding_name, self.allocator) {
             self.report_error(diagnostic);
         }
     }
@@ -3012,12 +2882,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_bind_directive_diagnostics(
-        &mut self,
-        element_name: &str,
-        attributes: &[Attribute],
-        binding_name: &str,
-    ) {
+    fn report_bind_directive_diagnostics(&mut self, element_name: &str, attributes: &[Attribute], binding_name: &str) {
         if !is_known_binding_property(binding_name) {
             let mut message = format!("`bind:{binding_name}` is not a valid binding");
             if let Some(suggestion) = binding_name_suggestion(binding_name, element_name) {
@@ -3059,13 +2924,9 @@ impl<'a> TemplateParser<'a> {
         }
 
         if element_name == "select" && binding_name != "this" {
-            if let Some(Attribute::NormalAttribute { value, .. }) =
-                find_normal_attribute(attributes, "multiple")
-            {
+            if let Some(Attribute::NormalAttribute { value, .. }) = find_normal_attribute(attributes, "multiple") {
                 if !matches!(value, AttributeValue::True | AttributeValue::Static(_)) {
-                    self.report_error(
-                        "'multiple' attribute must be static if select uses two-way binding",
-                    );
+                    self.report_error("'multiple' attribute must be static if select uses two-way binding");
                 }
             }
         }
@@ -3078,9 +2939,7 @@ impl<'a> TemplateParser<'a> {
                 Some(Attribute::NormalAttribute { value, .. })
                     if !matches!(value, AttributeValue::True | AttributeValue::Static(_)) =>
                 {
-                    self.report_error(
-                        "'contenteditable' attribute cannot be dynamic if element uses two-way binding",
-                    );
+                    self.report_error("'contenteditable' attribute cannot be dynamic if element uses two-way binding");
                 }
                 _ => {}
             }
@@ -3088,11 +2947,10 @@ impl<'a> TemplateParser<'a> {
     }
 
     fn report_input_binding_diagnostics(&mut self, attributes: &[Attribute], binding_name: &str) {
-        let type_value =
-            find_normal_attribute(attributes, "type").and_then(|attribute| match attribute {
-                Attribute::NormalAttribute { value, .. } => Some(value),
-                _ => None,
-            });
+        let type_value = find_normal_attribute(attributes, "type").and_then(|attribute| match attribute {
+            Attribute::NormalAttribute { value, .. } => Some(value),
+            _ => None,
+        });
 
         match type_value {
             Some(AttributeValue::Static(input_type)) => {
@@ -3108,22 +2966,14 @@ impl<'a> TemplateParser<'a> {
                 }
             }
             Some(AttributeValue::True) => {
-                self.report_error(
-                    "'type' attribute must be a static text value if input uses two-way binding",
-                );
+                self.report_error("'type' attribute must be a static text value if input uses two-way binding");
             }
-            Some(AttributeValue::Expression(_) | AttributeValue::Concat(_))
-                if binding_name != "value" =>
-            {
-                self.report_error(
-                    "'type' attribute must be a static text value if input uses two-way binding",
-                );
+            Some(AttributeValue::Expression(_) | AttributeValue::Concat(_)) if binding_name != "value" => {
+                self.report_error("'type' attribute must be a static text value if input uses two-way binding");
             }
             _ => {
                 if binding_name == "checked" {
-                    self.report_error(
-                        "`bind:checked` can only be used with `<input type=\"checkbox\">`",
-                    );
+                    self.report_error("`bind:checked` can only be used with `<input type=\"checkbox\">`");
                 }
                 if binding_name == "files" {
                     self.report_error("`bind:files` can only be used with `<input type=\"file\">`");
@@ -3153,11 +3003,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_svelte_special_element_attribute_diagnostics(
-        &mut self,
-        name: &str,
-        attributes: &[Attribute],
-    ) {
+    fn report_svelte_special_element_attribute_diagnostics(&mut self, name: &str, attributes: &[Attribute]) {
         if self.validation_mode == ValidationMode::Lint {
             return;
         }
@@ -3198,9 +3044,7 @@ impl<'a> TemplateParser<'a> {
             },
             "svelte:element" => match find_this_attribute_value(attributes) {
                 Some(AttributeValue::True) | None => {
-                    self.report_error(
-                        "`<svelte:element>` must have a 'this' attribute with a value",
-                    );
+                    self.report_error("`<svelte:element>` must have a 'this' attribute with a value");
                 }
                 Some(_) => {}
             },
@@ -3218,20 +3062,14 @@ impl<'a> TemplateParser<'a> {
                     match attribute {
                         Attribute::NormalAttribute { name, value, .. } => {
                             if !is_valid_svelte_boundary_attribute_name(name) {
-                                self.report_error(
-                                    "Valid attributes on `<svelte:boundary>` are `onerror` and `failed`",
-                                );
+                                self.report_error("Valid attributes on `<svelte:boundary>` are `onerror` and `failed`");
                             }
                             if !is_expression_attribute_value(value) {
-                                self.report_error(
-                                    "Attribute value must be a non-string expression",
-                                );
+                                self.report_error("Attribute value must be a non-string expression");
                             }
                         }
                         Attribute::Directive { .. } | Attribute::Spread { .. } => {
-                            self.report_error(
-                                "Valid attributes on `<svelte:boundary>` are `onerror` and `failed`",
-                            );
+                            self.report_error("Valid attributes on `<svelte:boundary>` are `onerror` and `failed`");
                         }
                     }
                 }
@@ -3264,9 +3102,7 @@ impl<'a> TemplateParser<'a> {
                                 | "http://www.w3.org/1998/Math/MathML"
                         ) => {}
                     _ => {
-                        self.report_error(
-                            "Value must be \"html\", \"mathml\" or \"svg\", if specified",
-                        );
+                        self.report_error("Value must be \"html\", \"mathml\" or \"svg\", if specified");
                     }
                 },
                 "css" => match static_option_value(value) {
@@ -3276,9 +3112,7 @@ impl<'a> TemplateParser<'a> {
                     }
                 },
                 "tag" => {
-                    self.report_error(
-                        "\"tag\" option is deprecated — use \"customElement\" instead",
-                    );
+                    self.report_error("\"tag\" option is deprecated — use \"customElement\" instead");
                 }
                 "customElement" => {
                     self.report_custom_element_option_diagnostics(value);
@@ -3306,17 +3140,16 @@ impl<'a> TemplateParser<'a> {
                         continue;
                     };
                     if slot_name == "default" {
-                        self.report_error(
-                            "`default` is a reserved word — it cannot be used as a slot name",
-                        );
+                        self.report_error("`default` is a reserved word — it cannot be used as a slot name");
                     }
                 }
                 Attribute::NormalAttribute { .. } | Attribute::Spread { .. } => {}
-                Attribute::Directive { kind, .. } if matches!(kind, DirectiveKind::Let) => {}
+                Attribute::Directive {
+                    kind: DirectiveKind::Let,
+                    ..
+                } => {}
                 Attribute::Directive { .. } => {
-                    self.report_error(
-                        "`<slot>` can only receive attributes and (optionally) let directives",
-                    );
+                    self.report_error("`<slot>` can only receive attributes and (optionally) let directives");
                 }
             }
         }
@@ -3407,21 +3240,13 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_const_tag_placement_diagnostics(
-        &mut self,
-        nodes: &[TemplateNode<'a>],
-        const_allowed: bool,
-    ) {
+    fn report_const_tag_placement_diagnostics(&mut self, nodes: &[TemplateNode<'a>], const_allowed: bool) {
         for node in nodes {
             self.report_const_tag_placement_node_diagnostics(node, const_allowed);
         }
     }
 
-    fn report_const_tag_placement_node_diagnostics(
-        &mut self,
-        node: &TemplateNode<'a>,
-        const_allowed: bool,
-    ) {
+    fn report_const_tag_placement_node_diagnostics(&mut self, node: &TemplateNode<'a>, const_allowed: bool) {
         match node {
             TemplateNode::ConstTag(tag)
                 if !const_allowed
@@ -3432,10 +3257,7 @@ impl<'a> TemplateParser<'a> {
                 self.report_error(const_tag_invalid_placement_message());
             }
             TemplateNode::Element(element) => {
-                self.report_const_tag_placement_diagnostics(
-                    &element.children,
-                    const_tag_allowed_in_element(element),
-                );
+                self.report_const_tag_placement_diagnostics(&element.children, const_tag_allowed_in_element(element));
             }
             TemplateNode::IfBlock(block) => {
                 self.report_const_tag_placement_diagnostics(&block.consequent.nodes, true);
@@ -3470,21 +3292,13 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_text_placement_diagnostics(
-        &mut self,
-        nodes: &[TemplateNode<'a>],
-        parent_element: Option<&str>,
-    ) {
+    fn report_text_placement_diagnostics(&mut self, nodes: &[TemplateNode<'a>], parent_element: Option<&str>) {
         for node in nodes {
             self.report_text_placement_node_diagnostics(node, parent_element);
         }
     }
 
-    fn report_text_placement_node_diagnostics(
-        &mut self,
-        node: &TemplateNode<'a>,
-        parent_element: Option<&str>,
-    ) {
+    fn report_text_placement_node_diagnostics(&mut self, node: &TemplateNode<'a>, parent_element: Option<&str>) {
         match node {
             TemplateNode::Text(text) if !text.data.trim().is_empty() => {
                 self.report_html_text_placement(parent_element);
@@ -3560,9 +3374,7 @@ impl<'a> TemplateParser<'a> {
 
                 if element.name == "slot" || element.name == "svelte:boundary" {
                     self.report_element_placement_diagnostics(&element.children, ancestors);
-                } else if element.name.starts_with("svelte:")
-                    || is_regular_component_element_name(&element.name)
-                {
+                } else if element.name.starts_with("svelte:") || is_regular_component_element_name(&element.name) {
                     self.report_element_placement_diagnostics(&element.children, &[]);
                 } else {
                     let mut next_ancestors = Vec::with_capacity(ancestors.len() + 1);
@@ -3611,11 +3423,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_html_element_placement(
-        &mut self,
-        child: &str,
-        ancestors: &[HtmlPlacementAncestor<'_>],
-    ) {
+    fn report_html_element_placement(&mut self, child: &str, ancestors: &[HtmlPlacementAncestor<'_>]) {
         if let Some(parent) = ancestors.first() {
             if !parent.blocked_by_block {
                 if let Some(message) = html_tag_invalid_parent_message(child, parent.name) {
@@ -3693,11 +3501,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_element_motion_directives(
-        &mut self,
-        attributes: &[Attribute],
-        each_context: Option<EachMotionContext>,
-    ) {
+    fn report_element_motion_directives(&mut self, attributes: &[Attribute], each_context: Option<EachMotionContext>) {
         self.report_animation_directive_diagnostics(attributes, each_context);
         self.report_transition_directive_diagnostics(attributes);
     }
@@ -3751,8 +3555,7 @@ impl<'a> TemplateParser<'a> {
             let outro = matches!(current, "transition" | "out");
             // Vendor: (intro && in_transition) || (outro && out_transition) —
             // a `transition:` directive conflicts with a stored `out:` too.
-            let existing = (if intro { in_transition } else { None })
-                .or(if outro { out_transition } else { None });
+            let existing = (if intro { in_transition } else { None }).or(if outro { out_transition } else { None });
 
             if let Some(existing) = existing {
                 if existing == current {
@@ -3812,8 +3615,7 @@ impl<'a> TemplateParser<'a> {
         collect_slot_snippet_usage(nodes, &mut usage, false, self.allocator);
 
         if usage.uses_render_tags
-            && (usage.uses_slots_identifier
-                || (!root_custom_element_option_enabled(nodes) && usage.uses_slot_element))
+            && (usage.uses_slots_identifier || (!root_custom_element_option_enabled(nodes) && usage.uses_slot_element))
         {
             self.report_error(slot_snippet_conflict_message());
         }
@@ -3835,10 +3637,7 @@ impl<'a> TemplateParser<'a> {
         walk_template_nodes(nodes, &mut |node| match node {
             TemplateNode::Element(element) => {
                 for attribute in &element.attributes {
-                    if attribute_value_has_await_outside_functions(
-                        attribute_value(attribute),
-                        allocator,
-                    ) {
+                    if attribute_value_has_await_outside_functions(attribute_value(attribute), allocator) {
                         self.report_error(experimental_async_message());
                     }
                 }
@@ -3870,9 +3669,10 @@ impl<'a> TemplateParser<'a> {
             }
             TemplateNode::EachBlock(block) => {
                 if expression_text_has_await_outside_functions(&block.expression, allocator)
-                    || block.key.as_ref().is_some_and(|key| {
-                        expression_text_has_await_outside_functions(key, allocator)
-                    })
+                    || block
+                        .key
+                        .as_ref()
+                        .is_some_and(|key| expression_text_has_await_outside_functions(key, allocator))
                 {
                     self.report_error(experimental_async_message());
                 }
@@ -3899,10 +3699,7 @@ impl<'a> TemplateParser<'a> {
         walk_template_nodes(nodes, &mut |node| match node {
             TemplateNode::Element(element) => {
                 for attribute in &element.attributes {
-                    if attribute_value_has_invalid_arguments_usage(
-                        attribute_value(attribute),
-                        allocator,
-                    ) {
+                    if attribute_value_has_invalid_arguments_usage(attribute_value(attribute), allocator) {
                         self.report_error(invalid_arguments_usage_message());
                     }
                 }
@@ -3923,11 +3720,7 @@ impl<'a> TemplateParser<'a> {
                 }
             }
             TemplateNode::DebugTag(tag) => {
-                if tag
-                    .identifiers
-                    .iter()
-                    .any(|identifier| identifier == "arguments")
-                {
+                if tag.identifiers.iter().any(|identifier| identifier == "arguments") {
                     self.report_error(invalid_arguments_usage_message());
                 }
             }
@@ -3943,9 +3736,10 @@ impl<'a> TemplateParser<'a> {
             }
             TemplateNode::EachBlock(block) => {
                 if expression_text_has_invalid_arguments_usage(&block.expression, allocator)
-                    || block.key.as_ref().is_some_and(|key| {
-                        expression_text_has_invalid_arguments_usage(key, allocator)
-                    })
+                    || block
+                        .key
+                        .as_ref()
+                        .is_some_and(|key| expression_text_has_invalid_arguments_usage(key, allocator))
                 {
                     self.report_error(invalid_arguments_usage_message());
                 }
@@ -3964,11 +3758,7 @@ impl<'a> TemplateParser<'a> {
         });
     }
 
-    fn report_slot_attribute_diagnostics(
-        &mut self,
-        element: &Element<'a>,
-        ancestors: &[SlotAncestor],
-    ) {
+    fn report_slot_attribute_diagnostics(&mut self, element: &Element<'a>, ancestors: &[SlotAncestor]) {
         if element.name == "slot" {
             return;
         }
@@ -4013,9 +3803,7 @@ impl<'a> TemplateParser<'a> {
                 }
             }
             SlotAncestorKind::SvelteElement | SlotAncestorKind::CustomElement => {}
-            SlotAncestorKind::RegularElement
-            | SlotAncestorKind::Block
-            | SlotAncestorKind::SnippetBlock => {}
+            SlotAncestorKind::RegularElement | SlotAncestorKind::Block | SlotAncestorKind::SnippetBlock => {}
         }
     }
 
@@ -4037,11 +3825,8 @@ impl<'a> TemplateParser<'a> {
                 continue;
             };
 
-            if seen_slots.iter().any(|seen| *seen == slot_name) {
-                self.report_error(format!(
-                    "Duplicate slot name '{slot_name}' in <{}>",
-                    owner.name
-                ));
+            if seen_slots.contains(&slot_name) {
+                self.report_error(format!("Duplicate slot name '{slot_name}' in <{}>", owner.name));
             } else {
                 seen_slots.push(slot_name);
             }
@@ -4098,10 +3883,8 @@ impl<'a> TemplateParser<'a> {
             return;
         };
 
-        let parsed =
-            crate::parser::expression::parse_template_expression(expression.trim(), self.allocator);
-        let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed)
-        else {
+        let parsed = crate::parser::expression::parse_template_expression(expression.trim(), self.allocator);
+        let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
             self.report_error(custom_element_invalid_message());
             return;
         };
@@ -4124,11 +3907,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn report_svelte_special_element_content_diagnostics(
-        &mut self,
-        name: &str,
-        children: &[TemplateNode<'a>],
-    ) {
+    fn report_svelte_special_element_content_diagnostics(&mut self, name: &str, children: &[TemplateNode<'a>]) {
         if self.validation_mode == ValidationMode::Lint {
             return;
         }
@@ -4148,8 +3927,7 @@ impl<'a> TemplateParser<'a> {
                     TemplateNode::IfBlock(block) => {
                         // Plain `{:else}` uses a synthetic IfBlock with no test.
                         if !block.elseif
-                            && self.source
-                                [block.header_span.start as usize..block.header_span.end as usize]
+                            && self.source[block.header_span.start as usize..block.header_span.end as usize]
                                 .strip_prefix('{')
                                 .is_some_and(|body| body.trim_start().starts_with(":else"))
                         {
@@ -4166,17 +3944,11 @@ impl<'a> TemplateParser<'a> {
                     TemplateNode::AwaitBlock(block) => (&block.expression, block.expression_span),
                     TemplateNode::KeyBlock(block) => (&block.expression, block.expression_span),
                     TemplateNode::ConstTag(tag) => {
-                        let declaration = self.allocator.alloc_str(&format!(
-                            "{} {};",
-                            tag.kind.keyword(),
-                            tag.declaration
-                        ));
-                        let parsed = oxc::parser::Parser::new(
-                            self.allocator,
-                            declaration,
-                            oxc::span::SourceType::ts(),
-                        )
-                        .parse();
+                        let declaration =
+                            self.allocator
+                                .alloc_str(&format!("{} {};", tag.kind.keyword(), tag.declaration));
+                        let parsed =
+                            oxc::parser::Parser::new(self.allocator, declaration, oxc::span::SourceType::ts()).parse();
                         self.extend_expression_syntax_errors(
                             parsed.diagnostics.into_vec(),
                             tag.declaration_span,
@@ -4206,9 +3978,7 @@ impl<'a> TemplateParser<'a> {
         self.report_slot_attribute_tree_diagnostics(nodes, &mut ancestors);
     }
 
-    fn parse_attributes<'b>(
-        &'b mut self,
-    ) -> Result<(Vec<Attribute>, Vec<AttributeMeta<'a>>), OxcDiagnostic>
+    fn parse_attributes<'b>(&'b mut self) -> Result<(Vec<Attribute>, Vec<AttributeMeta<'a>>), OxcDiagnostic>
     where
         'a: 'b,
     {
@@ -4222,8 +3992,7 @@ impl<'a> TemplateParser<'a> {
             loop {
                 if self.looking_at("//") {
                     // Line comment: skip to end of line
-                    while self.pos < self.source.len() && self.source.as_bytes()[self.pos] != b'\n'
-                    {
+                    while self.pos < self.source.len() && self.source.as_bytes()[self.pos] != b'\n' {
                         self.pos += 1;
                     }
                     self.skip_whitespace();
@@ -4231,9 +4000,7 @@ impl<'a> TemplateParser<'a> {
                     // Block comment: skip to */
                     self.pos += 2;
                     while self.pos + 1 < self.source.len() {
-                        if self.source.as_bytes()[self.pos] == b'*'
-                            && self.source.as_bytes()[self.pos + 1] == b'/'
-                        {
+                        if self.source.as_bytes()[self.pos] == b'*' && self.source.as_bytes()[self.pos + 1] == b'/' {
                             self.pos += 2;
                             break;
                         }
@@ -4380,16 +4147,10 @@ impl<'a> TemplateParser<'a> {
             // Check if this is a directive
             if let Some(directive) = parse_directive_name(attr_name) {
                 // Check for value
-                let directive_subject_end = attr_name
-                    .find('|')
-                    .map(|idx| attr_name_start + idx)
-                    .unwrap_or(name_end);
-                let directive_subject_span = attr_name.find(':').map(|colon| {
-                    Span::new(
-                        (attr_name_start + colon + 1) as u32,
-                        directive_subject_end as u32,
-                    )
-                });
+                let directive_subject_end = attr_name.find('|').map(|idx| attr_name_start + idx).unwrap_or(name_end);
+                let directive_subject_span = attr_name
+                    .find(':')
+                    .map(|colon| Span::new((attr_name_start + colon + 1) as u32, directive_subject_end as u32));
                 let name_span = Span::new(attr_start, name_end as u32);
                 if directive.1.is_empty() {
                     self.report_error(format!("`{attr_name}` name cannot be empty"));
@@ -4401,17 +4162,12 @@ impl<'a> TemplateParser<'a> {
                     let mut parsed = self.parse_attribute_value()?;
                     parsed.meta.equals_span = Some(Span::new(
                         name_span.end,
-                        parsed
-                            .meta
-                            .value_full_span
-                            .map_or(self.pos as u32, |span| span.start),
+                        parsed.meta.value_full_span.map_or(self.pos as u32, |span| span.start),
                     ));
                     if self.validation_mode == ValidationMode::Compiler
                         && directive_value_is_invalid(&directive.0, &parsed.value)
                     {
-                        self.report_error(
-                            "Directive value must be a JavaScript expression enclosed in curly braces",
-                        );
+                        self.report_error("Directive value must be a JavaScript expression enclosed in curly braces");
                     }
                     attributes.push(Attribute::Directive {
                         kind: directive.0,
@@ -4458,10 +4214,7 @@ impl<'a> TemplateParser<'a> {
                 let mut parsed = self.parse_attribute_value()?;
                 parsed.meta.equals_span = Some(Span::new(
                     name_end as u32,
-                    parsed
-                        .meta
-                        .value_full_span
-                        .map_or(self.pos as u32, |span| span.start),
+                    parsed.meta.value_full_span.map_or(self.pos as u32, |span| span.start),
                 ));
                 (parsed.value, parsed.meta)
             } else {
@@ -4581,9 +4334,7 @@ impl<'a> TemplateParser<'a> {
         }
     }
 
-    fn parse_unquoted_attribute_value<'b>(
-        &'b mut self,
-    ) -> Result<ParsedAttributeValue<'a>, OxcDiagnostic>
+    fn parse_unquoted_attribute_value<'b>(&'b mut self) -> Result<ParsedAttributeValue<'a>, OxcDiagnostic>
     where
         'a: 'b,
     {
@@ -4873,8 +4624,7 @@ impl<'a> TemplateParser<'a> {
         let expression;
         if let Some(then_pos) = scanner::find_top_level_spaced_word(&header, "then") {
             expression = header[..then_pos].trim().to_string();
-            let (binding, binding_span) =
-                header_binding_after_word(header_span, raw_header, "then");
+            let (binding, binding_span) = header_binding_after_word(header_span, raw_header, "then");
             if !binding.is_empty() {
                 self.report_reserved_binding_identifier_diagnostic(&binding);
                 then_arm.binding = Some(binding);
@@ -4883,8 +4633,7 @@ impl<'a> TemplateParser<'a> {
             active = AwaitArmKind::Then;
         } else if let Some(catch_pos) = scanner::find_top_level_spaced_word(&header, "catch") {
             expression = header[..catch_pos].trim().to_string();
-            let (binding, binding_span) =
-                header_binding_after_word(header_span, raw_header, "catch");
+            let (binding, binding_span) = header_binding_after_word(header_span, raw_header, "catch");
             if !binding.is_empty() {
                 self.report_reserved_binding_identifier_diagnostic(&binding);
                 catch_arm.binding = Some(binding);
@@ -4896,17 +4645,16 @@ impl<'a> TemplateParser<'a> {
         }
         let expression_span = span_for_header_part(header_span, raw_header, &expression);
 
-        self.open_nodes
-            .push(OpenNode::Block(OpenBlock::Await(OpenAwaitBlock {
-                block_start: start,
-                expression,
-                expression_span,
-                pending: None,
-                then_arm,
-                catch_arm,
-                active,
-                active_fragment_start: body_start,
-            })));
+        self.open_nodes.push(OpenNode::Block(OpenBlock::Await(OpenAwaitBlock {
+            block_start: start,
+            expression,
+            expression_span,
+            pending: None,
+            then_arm,
+            catch_arm,
+            active,
+            active_fragment_start: body_start,
+        })));
         self.enter_fragment();
         Ok(FragmentStep::Continue)
     }
@@ -5035,8 +4783,7 @@ fn template_tag_metadata_from_mustache_expression(expression: &str) -> Option<(b
         return Some((false, true));
     }
     if let Some(rest) = tag_keyword_after_marker(inner, ':', &["else"]) {
-        let has_expression = tag_keyword(rest.trim_start(), "if")
-            .is_some_and(|after_if| !after_if.trim().is_empty());
+        let has_expression = tag_keyword(rest.trim_start(), "if").is_some_and(|after_if| !after_if.trim().is_empty());
         return Some((has_expression, true));
     }
     for keyword in ["then", "catch"] {
@@ -5053,9 +4800,7 @@ fn template_tag_metadata_from_mustache_expression(expression: &str) -> Option<(b
 
 fn tag_keyword_after_marker<'a>(text: &'a str, marker: char, keywords: &[&str]) -> Option<&'a str> {
     let rest = text.strip_prefix(marker)?;
-    keywords
-        .iter()
-        .find_map(|keyword| tag_keyword(rest, keyword))
+    keywords.iter().find_map(|keyword| tag_keyword(rest, keyword))
 }
 
 fn tag_keyword<'a>(text: &'a str, keyword: &str) -> Option<&'a str> {
@@ -5160,15 +4905,13 @@ fn each_header_has_empty_index_binding(raw_header: &str) -> bool {
     let Some(rest) = each_header_context_rest(raw_header) else {
         return false;
     };
-    let rest_without_key =
-        if let Some((paren_start, _)) = scanner::find_trailing_top_level_parens(rest) {
-            &rest[..paren_start]
-        } else {
-            rest
-        };
+    let rest_without_key = if let Some((paren_start, _)) = scanner::find_trailing_top_level_parens(rest) {
+        &rest[..paren_start]
+    } else {
+        rest
+    };
 
-    scanner::find_top_level_comma(rest_without_key)
-        .is_some_and(|comma| rest_without_key[comma + 1..].trim().is_empty())
+    scanner::find_top_level_comma(rest_without_key).is_some_and(|comma| rest_without_key[comma + 1..].trim().is_empty())
 }
 
 fn each_header_context_rest(raw_header: &str) -> Option<&str> {
@@ -5195,12 +4938,7 @@ fn parse_each_header(header_span: Span, raw_header: &str) -> EachHeaderParts {
         let expression = header.trim().to_string();
         EachHeaderParts {
             expression,
-            expression_span: span_for_trimmed_range(
-                header_span,
-                raw_header,
-                trimmed_start,
-                trimmed_end,
-            ),
+            expression_span: span_for_trimmed_range(header_span, raw_header, trimmed_start, trimmed_end),
             context: String::new(),
             context_span: Span::new(
                 header_span.start + trimmed_end as u32,
@@ -5218,12 +4956,7 @@ fn parse_each_header(header_span: Span, raw_header: &str) -> EachHeaderParts {
     };
 
     let expression = header[..as_idx].trim().to_string();
-    let expression_span = span_for_trimmed_range(
-        header_span,
-        raw_header,
-        trimmed_start,
-        trimmed_start + as_idx,
-    );
+    let expression_span = span_for_trimmed_range(header_span, raw_header, trimmed_start, trimmed_start + as_idx);
 
     let mut rest_start = trimmed_start + as_idx + "as".len();
     let rest_limit = trimmed_start + header.len();
@@ -5252,12 +4985,7 @@ fn parse_each_header(header_span: Span, raw_header: &str) -> EachHeaderParts {
             let key_span = if key.is_empty() {
                 None
             } else {
-                Some(span_for_trimmed_range(
-                    header_span,
-                    raw_header,
-                    key_start,
-                    key_end,
-                ))
+                Some(span_for_trimmed_range(header_span, raw_header, key_start, key_end))
             };
             (
                 rest_start,
@@ -5270,38 +4998,32 @@ fn parse_each_header(header_span: Span, raw_header: &str) -> EachHeaderParts {
         };
 
     let rest_without_key = &raw_header[rest_without_key_start..rest_without_key_end];
-    let (context, context_span, index, index_span) = if let Some(comma_idx) =
-        scanner::find_top_level_comma(rest_without_key)
-    {
-        let context_start = rest_without_key_start;
-        let context_end = rest_without_key_start + comma_idx;
-        let index_start = rest_without_key_start + comma_idx + 1;
-        let index_end = rest_without_key_end;
-        let context = raw_header[context_start..context_end].trim().to_string();
-        let index = raw_header[index_start..index_end].trim().to_string();
-        (
-            context,
-            span_for_trimmed_range(header_span, raw_header, context_start, context_end),
-            (!index.is_empty()).then_some(index),
-            (!raw_header[index_start..index_end].trim().is_empty())
-                .then(|| span_for_trimmed_range(header_span, raw_header, index_start, index_end)),
-        )
-    } else {
-        let context = raw_header[rest_without_key_start..rest_without_key_end]
-            .trim()
-            .to_string();
-        (
-            context,
-            span_for_trimmed_range(
-                header_span,
-                raw_header,
-                rest_without_key_start,
-                rest_without_key_end,
-            ),
-            None,
-            None,
-        )
-    };
+    let (context, context_span, index, index_span) =
+        if let Some(comma_idx) = scanner::find_top_level_comma(rest_without_key) {
+            let context_start = rest_without_key_start;
+            let context_end = rest_without_key_start + comma_idx;
+            let index_start = rest_without_key_start + comma_idx + 1;
+            let index_end = rest_without_key_end;
+            let context = raw_header[context_start..context_end].trim().to_string();
+            let index = raw_header[index_start..index_end].trim().to_string();
+            (
+                context,
+                span_for_trimmed_range(header_span, raw_header, context_start, context_end),
+                (!index.is_empty()).then_some(index),
+                (!raw_header[index_start..index_end].trim().is_empty())
+                    .then(|| span_for_trimmed_range(header_span, raw_header, index_start, index_end)),
+            )
+        } else {
+            let context = raw_header[rest_without_key_start..rest_without_key_end]
+                .trim()
+                .to_string();
+            (
+                context,
+                span_for_trimmed_range(header_span, raw_header, rest_without_key_start, rest_without_key_end),
+                None,
+                None,
+            )
+        };
 
     EachHeaderParts {
         expression,
@@ -5360,14 +5082,7 @@ fn parse_debug_identifiers(raw_span: Span, raw_identifiers: &str) -> (Vec<String
         if ch != ',' {
             continue;
         }
-        push_debug_identifier(
-            raw_span,
-            raw_identifiers,
-            part_start,
-            idx,
-            &mut identifiers,
-            &mut spans,
-        );
+        push_debug_identifier(raw_span, raw_identifiers, part_start, idx, &mut identifiers, &mut spans);
         part_start = idx + ch.len_utf8();
     }
 
@@ -5399,22 +5114,15 @@ fn debug_tag_has_invalid_arguments(raw_identifiers: &str, allocator: &Allocator)
 
     match strip_parentheses(expression) {
         oxc::ast::ast::Expression::Identifier(_) => false,
-        oxc::ast::ast::Expression::SequenceExpression(sequence) => {
-            sequence.expressions.iter().any(|expression| {
-                !matches!(
-                    strip_parentheses(expression),
-                    oxc::ast::ast::Expression::Identifier(_)
-                )
-            })
-        }
+        oxc::ast::ast::Expression::SequenceExpression(sequence) => sequence
+            .expressions
+            .iter()
+            .any(|expression| !matches!(strip_parentheses(expression), oxc::ast::ast::Expression::Identifier(_))),
         _ => true,
     }
 }
 
-fn render_tag_expression_diagnostics(
-    raw_expression: &str,
-    allocator: &Allocator,
-) -> Vec<&'static str> {
+fn render_tag_expression_diagnostics(raw_expression: &str, allocator: &Allocator) -> Vec<&'static str> {
     use oxc::ast::ast::Argument;
 
     let trimmed = raw_expression.trim();
@@ -5476,9 +5184,7 @@ fn render_tag_callee_uses_forbidden_helper(callee: &oxc::ast::ast::Expression<'_
             ChainElement::StaticMemberExpression(member) => {
                 matches!(member.property.name.as_str(), "apply" | "bind" | "call")
             }
-            ChainElement::CallExpression(call) => {
-                render_tag_callee_uses_forbidden_helper(&call.callee)
-            }
+            ChainElement::CallExpression(call) => render_tag_callee_uses_forbidden_helper(&call.callee),
             _ => false,
         },
         _ => false,
@@ -5560,18 +5266,14 @@ fn directive_value_is_invalid(kind: &DirectiveKind, value: &AttributeValue) -> b
 
     match value {
         AttributeValue::True | AttributeValue::Expression(_) => false,
-        AttributeValue::Concat(parts) => {
-            !matches!(parts.as_slice(), [AttributeValuePart::Expression(_)])
-        }
+        AttributeValue::Concat(parts) => !matches!(parts.as_slice(), [AttributeValuePart::Expression(_)]),
         AttributeValue::Static(_) => true,
     }
 }
 
 fn duplicate_attribute_key(attribute: &Attribute) -> Option<String> {
     match attribute {
-        Attribute::NormalAttribute { name, .. } if name != "this" => {
-            Some(format!("Attribute{name}"))
-        }
+        Attribute::NormalAttribute { name, .. } if name != "this" => Some(format!("Attribute{name}")),
         Attribute::Directive {
             kind: DirectiveKind::Binding,
             name,
@@ -5600,10 +5302,7 @@ fn duplicate_attribute_key(attribute: &Attribute) -> Option<String> {
 /// `crate::parser::expression::parse_template_expression` on the raw text —
 /// that wrapper surfaces `ParserReturn.program.comments`, which
 /// `parse_expression` alone doesn't expose.
-fn parse_expr_into<'a>(
-    allocator: &'a Allocator,
-    text: &str,
-) -> Option<&'a oxc::ast::ast::Expression<'a>> {
+fn parse_expr_into<'a>(allocator: &'a Allocator, text: &str) -> Option<&'a oxc::ast::ast::Expression<'a>> {
     use oxc::allocator::CloneIn;
     let trimmed = text.trim();
     if trimmed.is_empty() {
@@ -5640,14 +5339,9 @@ fn parse_concat_value<'a>(
         if parser.looking_at("{") {
             report_invalid_attribute_value_tag(value, parser.pos, errors);
             if parser.pos > static_start {
-                parts.push(AttributeValuePart::Static(
-                    value[static_start..parser.pos].to_string(),
-                ));
+                parts.push(AttributeValuePart::Static(value[static_start..parser.pos].to_string()));
                 part_meta.push(AttributePartMeta {
-                    span: Span::new(
-                        value_start + static_start as u32,
-                        value_start + parser.pos as u32,
-                    ),
+                    span: Span::new(value_start + static_start as u32, value_start + parser.pos as u32),
                     expression_span: None,
                     mustache_span: None,
                     expression_ast: None,
@@ -5680,14 +5374,9 @@ fn parse_concat_value<'a>(
     }
 
     if static_start < value.len() {
-        parts.push(AttributeValuePart::Static(
-            value[static_start..].to_string(),
-        ));
+        parts.push(AttributeValuePart::Static(value[static_start..].to_string()));
         part_meta.push(AttributePartMeta {
-            span: Span::new(
-                value_start + static_start as u32,
-                value_start + value.len() as u32,
-            ),
+            span: Span::new(value_start + static_start as u32, value_start + value.len() as u32),
             expression_span: None,
             mustache_span: None,
             expression_ast: None,
@@ -5711,11 +5400,7 @@ fn parse_concat_value<'a>(
     )
 }
 
-fn report_invalid_attribute_value_tag(
-    source: &str,
-    brace_pos: usize,
-    errors: &mut Vec<OxcDiagnostic>,
-) {
+fn report_invalid_attribute_value_tag(source: &str, brace_pos: usize, errors: &mut Vec<OxcDiagnostic>) {
     let Some(marker) = source.as_bytes().get(brace_pos + 1).copied() else {
         return;
     };
@@ -5872,9 +5557,7 @@ fn is_namespaced_element_name(name: &str) -> bool {
     is_ascii_alnum_name(prefix)
         && prefix.as_bytes()[0].is_ascii_alphabetic()
         && local.as_bytes()[0].is_ascii_alphabetic()
-        && local
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        && local.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
 fn is_ascii_alnum_name(name: &str) -> bool {
@@ -5995,9 +5678,7 @@ impl SlotAncestorKind {
     fn is_slot_owner(self) -> bool {
         matches!(
             self,
-            SlotAncestorKind::Component
-                | SlotAncestorKind::SvelteElement
-                | SlotAncestorKind::CustomElement
+            SlotAncestorKind::Component | SlotAncestorKind::SvelteElement | SlotAncestorKind::CustomElement
         )
     }
 }
@@ -6063,10 +5744,7 @@ fn is_component_slot_owner_name(name: &str) -> bool {
 }
 
 fn is_regular_element_for_attribute_validation(name: &str) -> bool {
-    name != "slot"
-        && !name.starts_with('!')
-        && !name.starts_with("svelte:")
-        && !is_regular_component_element_name(name)
+    name != "slot" && !name.starts_with('!') && !name.starts_with("svelte:") && !is_regular_component_element_name(name)
 }
 
 fn uses_regular_element_attribute_rules(name: &str) -> bool {
@@ -6074,8 +5752,7 @@ fn uses_regular_element_attribute_rules(name: &str) -> bool {
 }
 
 fn uses_bind_target_rules(name: &str) -> bool {
-    uses_regular_element_attribute_rules(name)
-        || matches!(name, "svelte:window" | "svelte:document" | "svelte:body")
+    uses_regular_element_attribute_rules(name) || matches!(name, "svelte:window" | "svelte:document" | "svelte:body")
 }
 
 fn component_directive_is_invalid(kind: &DirectiveKind) -> bool {
@@ -6144,9 +5821,7 @@ fn event_handler_invalid_modifier_message() -> &'static str {
 }
 
 fn mixed_event_handler_syntax_message(name: &str) -> String {
-    format!(
-        "Mixing old (on:{name}) and new syntaxes for event handling is not allowed. Use only the on{name} syntax"
-    )
+    format!("Mixing old (on:{name}) and new syntaxes for event handling is not allowed. Use only the on{name} syntax")
 }
 
 fn invalid_arguments_usage_message() -> &'static str {
@@ -6170,9 +5845,9 @@ fn expected_identifier_message() -> &'static str {
 }
 
 fn find_normal_attribute<'a>(attributes: &'a [Attribute], wanted: &str) -> Option<&'a Attribute> {
-    attributes.iter().find(
-        |attribute| matches!(attribute, Attribute::NormalAttribute { name, .. } if name == wanted),
-    )
+    attributes
+        .iter()
+        .find(|attribute| matches!(attribute, Attribute::NormalAttribute { name, .. } if name == wanted))
 }
 
 fn is_known_binding_property(name: &str) -> bool {
@@ -6181,17 +5856,13 @@ fn is_known_binding_property(name: &str) -> bool {
 
 fn binding_valid_elements(name: &str) -> Option<&'static [&'static str]> {
     match name {
-        "currentTime" | "duration" | "paused" | "buffered" | "seekable" | "played" | "volume"
-        | "muted" | "playbackRate" | "seeking" | "ended" | "readyState" => {
-            Some(&["audio", "video"])
-        }
+        "currentTime" | "duration" | "paused" | "buffered" | "seekable" | "played" | "volume" | "muted"
+        | "playbackRate" | "seeking" | "ended" | "readyState" => Some(&["audio", "video"]),
         "videoHeight" | "videoWidth" => Some(&["video"]),
         "naturalWidth" | "naturalHeight" => Some(&["img"]),
-        "activeElement" | "fullscreenElement" | "pointerLockElement" | "visibilityState" => {
-            Some(&["svelte:document"])
-        }
-        "innerWidth" | "innerHeight" | "outerWidth" | "outerHeight" | "scrollX" | "scrollY"
-        | "online" | "devicePixelRatio" => Some(&["svelte:window"]),
+        "activeElement" | "fullscreenElement" | "pointerLockElement" | "visibilityState" => Some(&["svelte:document"]),
+        "innerWidth" | "innerHeight" | "outerWidth" | "outerHeight" | "scrollX" | "scrollY" | "online"
+        | "devicePixelRatio" => Some(&["svelte:window"]),
         "indeterminate" | "checked" | "group" | "files" => Some(&["input"]),
         "open" => Some(&["details"]),
         "value" => Some(&["input", "textarea", "select"]),
@@ -6221,9 +5892,8 @@ fn possible_bindings_for_element(element_name: &str) -> Vec<&'static str> {
         .iter()
         .copied()
         .filter(|binding| {
-            binding_valid_elements(binding).map_or(true, |valid| valid.contains(&element_name))
-                && binding_invalid_elements(binding)
-                    .map_or(true, |invalid| !invalid.contains(&element_name))
+            binding_valid_elements(binding).is_none_or(|valid| valid.contains(&element_name))
+                && binding_invalid_elements(binding).is_none_or(|invalid| !invalid.contains(&element_name))
         })
         .collect::<Vec<_>>();
     bindings.sort_unstable();
@@ -6234,9 +5904,7 @@ fn binding_name_suggestion(name: &str, element_name: &str) -> Option<&'static st
     KNOWN_BINDING_PROPERTIES
         .iter()
         .copied()
-        .filter(|binding| {
-            binding_valid_elements(binding).map_or(true, |valid| valid.contains(&element_name))
-        })
+        .filter(|binding| binding_valid_elements(binding).is_none_or(|valid| valid.contains(&element_name)))
         .filter_map(|binding| {
             let score = levenshtein_similarity(name, binding);
             (score > 0.7).then_some((score, binding))
@@ -6467,9 +6135,7 @@ fn custom_element_option_value_enables(value: &AttributeValue) -> bool {
         AttributeValue::Static(value) => !value.trim().is_empty(),
         AttributeValue::Expression(expression) => custom_element_expression_enables(expression),
         AttributeValue::Concat(parts) => match parts.as_slice() {
-            [AttributeValuePart::Expression(expression)] => {
-                custom_element_expression_enables(expression)
-            }
+            [AttributeValuePart::Expression(expression)] => custom_element_expression_enables(expression),
             _ => false,
         },
         AttributeValue::True => false,
@@ -6499,9 +6165,7 @@ fn static_option_bool(value: &AttributeValue) -> Option<bool> {
         AttributeValue::True => Some(true),
         AttributeValue::Expression(expression) => expression_static_option_bool(expression),
         AttributeValue::Concat(parts) => match parts.as_slice() {
-            [AttributeValuePart::Expression(expression)] => {
-                expression_static_option_bool(expression)
-            }
+            [AttributeValuePart::Expression(expression)] => expression_static_option_bool(expression),
             _ => None,
         },
         AttributeValue::Static(_) => None,
@@ -6567,16 +6231,10 @@ where
     }
 }
 
-fn await_block_fragments<'node, 'a>(
-    block: &'node AwaitBlock<'a>,
-) -> impl Iterator<Item = &'node Fragment<'a>> {
-    [
-        block.pending.as_ref(),
-        block.then.as_ref(),
-        block.catch.as_ref(),
-    ]
-    .into_iter()
-    .flatten()
+fn await_block_fragments<'node, 'a>(block: &'node AwaitBlock<'a>) -> impl Iterator<Item = &'node Fragment<'a>> {
+    [block.pending.as_ref(), block.then.as_ref(), block.catch.as_ref()]
+        .into_iter()
+        .flatten()
 }
 
 fn collect_slot_snippet_usage(
@@ -6591,167 +6249,108 @@ fn collect_slot_snippet_usage(
     stack.extend(nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
     while let Some((node, in_shadowroot_template)) = stack.pop() {
         match node {
-        TemplateNode::Element(element) => {
-            if element.name == "slot" && !in_shadowroot_template {
-                usage.uses_slot_element = true;
+            TemplateNode::Element(element) => {
+                if element.name == "slot" && !in_shadowroot_template {
+                    usage.uses_slot_element = true;
+                }
+                for attribute in &element.attributes {
+                    if attribute_value_uses_slots_identifier(attribute_value(attribute), allocator) {
+                        usage.uses_slots_identifier = true;
+                    }
+                }
+
+                let next_shadowroot_template =
+                    in_shadowroot_template || is_shadowroot_template_element(&element.name, &element.attributes);
+                stack.extend(element.children.iter().rev().map(|n| (n, next_shadowroot_template)));
             }
-            for attribute in &element.attributes {
-                if attribute_value_uses_slots_identifier(attribute_value(attribute), allocator) {
+            TemplateNode::MustacheTag(tag) => {
+                if expression_uses_slots_identifier(&tag.expression, allocator) {
                     usage.uses_slots_identifier = true;
                 }
             }
-
-            let next_shadowroot_template = in_shadowroot_template
-                || is_shadowroot_template_element(&element.name, &element.attributes);
-            stack.extend(
-                element
-                    .children
-                    .iter()
-                    .rev()
-                    .map(|n| (n, next_shadowroot_template)),
-            );
-        }
-        TemplateNode::MustacheTag(tag) => {
-            if expression_uses_slots_identifier(&tag.expression, allocator) {
-                usage.uses_slots_identifier = true;
+            TemplateNode::RawMustacheTag(tag) => {
+                if expression_uses_slots_identifier(&tag.expression, allocator) {
+                    usage.uses_slots_identifier = true;
+                }
             }
-        }
-        TemplateNode::RawMustacheTag(tag) => {
-            if expression_uses_slots_identifier(&tag.expression, allocator) {
-                usage.uses_slots_identifier = true;
+            TemplateNode::DebugTag(tag) => {
+                if tag.identifiers.iter().any(|identifier| identifier == "$$slots") {
+                    usage.uses_slots_identifier = true;
+                }
             }
-        }
-        TemplateNode::DebugTag(tag) => {
-            if tag
-                .identifiers
-                .iter()
-                .any(|identifier| identifier == "$$slots")
-            {
-                usage.uses_slots_identifier = true;
+            TemplateNode::ConstTag(tag) => {
+                if const_declaration_uses_slots_identifier(&tag.declaration) {
+                    usage.uses_slots_identifier = true;
+                }
             }
-        }
-        TemplateNode::ConstTag(tag) => {
-            if const_declaration_uses_slots_identifier(&tag.declaration) {
-                usage.uses_slots_identifier = true;
+            TemplateNode::RenderTag(tag) => {
+                usage.uses_render_tags = true;
+                if expression_uses_slots_identifier(&tag.expression, allocator) {
+                    usage.uses_slots_identifier = true;
+                }
             }
-        }
-        TemplateNode::RenderTag(tag) => {
-            usage.uses_render_tags = true;
-            if expression_uses_slots_identifier(&tag.expression, allocator) {
-                usage.uses_slots_identifier = true;
+            TemplateNode::IfBlock(block) => {
+                if expression_uses_slots_identifier(&block.test, allocator) {
+                    usage.uses_slots_identifier = true;
+                }
+                if let Some(alternate) = &block.alternate {
+                    stack.push((alternate.as_ref(), in_shadowroot_template));
+                }
+                stack.extend(block.consequent.nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
             }
-        }
-        TemplateNode::IfBlock(block) => {
-            if expression_uses_slots_identifier(&block.test, allocator) {
-                usage.uses_slots_identifier = true;
+            TemplateNode::EachBlock(block) => {
+                if expression_uses_slots_identifier(&block.expression, allocator)
+                    || block
+                        .key
+                        .as_ref()
+                        .is_some_and(|key| expression_uses_slots_identifier(key, allocator))
+                {
+                    usage.uses_slots_identifier = true;
+                }
+                if let Some(fallback) = &block.fallback {
+                    stack.extend(fallback.nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
+                }
+                stack.extend(block.body.nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
             }
-            if let Some(alternate) = &block.alternate {
-                stack.push((alternate.as_ref(), in_shadowroot_template));
+            TemplateNode::AwaitBlock(block) => {
+                if expression_uses_slots_identifier(&block.expression, allocator) {
+                    usage.uses_slots_identifier = true;
+                }
+                let fragments: Vec<&Fragment> = await_block_fragments(block).collect();
+                for fragment in fragments.into_iter().rev() {
+                    stack.extend(fragment.nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
+                }
             }
-            stack.extend(
-                block
-                    .consequent
-                    .nodes
-                    .iter()
-                    .rev()
-                    .map(|n| (n, in_shadowroot_template)),
-            );
-        }
-        TemplateNode::EachBlock(block) => {
-            if expression_uses_slots_identifier(&block.expression, allocator)
-                || block
-                    .key
-                    .as_ref()
-                    .is_some_and(|key| expression_uses_slots_identifier(key, allocator))
-            {
-                usage.uses_slots_identifier = true;
+            TemplateNode::KeyBlock(block) => {
+                if expression_uses_slots_identifier(&block.expression, allocator) {
+                    usage.uses_slots_identifier = true;
+                }
+                stack.extend(block.body.nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
             }
-            if let Some(fallback) = &block.fallback {
-                stack.extend(
-                    fallback
-                        .nodes
-                        .iter()
-                        .rev()
-                        .map(|n| (n, in_shadowroot_template)),
-                );
+            TemplateNode::SnippetBlock(block) => {
+                stack.extend(block.body.nodes.iter().rev().map(|n| (n, in_shadowroot_template)));
             }
-            stack.extend(
-                block
-                    .body
-                    .nodes
-                    .iter()
-                    .rev()
-                    .map(|n| (n, in_shadowroot_template)),
-            );
-        }
-        TemplateNode::AwaitBlock(block) => {
-            if expression_uses_slots_identifier(&block.expression, allocator) {
-                usage.uses_slots_identifier = true;
-            }
-            let fragments: Vec<&Fragment> = await_block_fragments(block).collect();
-            for fragment in fragments.into_iter().rev() {
-                stack.extend(
-                    fragment
-                        .nodes
-                        .iter()
-                        .rev()
-                        .map(|n| (n, in_shadowroot_template)),
-                );
-            }
-        }
-        TemplateNode::KeyBlock(block) => {
-            if expression_uses_slots_identifier(&block.expression, allocator) {
-                usage.uses_slots_identifier = true;
-            }
-            stack.extend(
-                block
-                    .body
-                    .nodes
-                    .iter()
-                    .rev()
-                    .map(|n| (n, in_shadowroot_template)),
-            );
-        }
-        TemplateNode::SnippetBlock(block) => {
-            stack.extend(
-                block
-                    .body
-                    .nodes
-                    .iter()
-                    .rev()
-                    .map(|n| (n, in_shadowroot_template)),
-            );
-        }
-        TemplateNode::Text(_) | TemplateNode::Comment(_) => {}
+            TemplateNode::Text(_) | TemplateNode::Comment(_) => {}
         }
     }
 }
 
 fn attribute_value(attribute: &Attribute) -> Option<&AttributeValue> {
     match attribute {
-        Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => {
-            Some(value)
-        }
+        Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => Some(value),
         Attribute::Spread { .. } => None,
     }
 }
 
-fn attribute_value_uses_slots_identifier(
-    value: Option<&AttributeValue>,
-    allocator: &Allocator,
-) -> bool {
+fn attribute_value_uses_slots_identifier(value: Option<&AttributeValue>, allocator: &Allocator) -> bool {
     let Some(value) = value else {
         return false;
     };
 
     match value {
-        AttributeValue::Expression(expression) => {
-            expression_uses_slots_identifier(expression, allocator)
-        }
+        AttributeValue::Expression(expression) => expression_uses_slots_identifier(expression, allocator),
         AttributeValue::Concat(parts) => parts.iter().any(|part| match part {
-            AttributeValuePart::Expression(expression) => {
-                expression_uses_slots_identifier(expression, allocator)
-            }
+            AttributeValuePart::Expression(expression) => expression_uses_slots_identifier(expression, allocator),
             AttributeValuePart::Static(_) => false,
         }),
         AttributeValue::Static(_) | AttributeValue::True => false,
@@ -6823,13 +6422,10 @@ fn collect_element_event_syntax_usage(attributes: &[Attribute], usage: &mut Even
                 name,
                 ..
             } => {
-                usage
-                    .first_event_directive_name
-                    .get_or_insert_with(|| name.clone());
+                usage.first_event_directive_name.get_or_insert_with(|| name.clone());
             }
             Attribute::NormalAttribute { name, value, .. }
-                if is_event_attribute_name(name)
-                    && single_expression_attribute_text(value).is_some() =>
+                if is_event_attribute_name(name) && single_expression_attribute_text(value).is_some() =>
             {
                 usage.uses_event_attribute = true;
             }
@@ -6846,18 +6442,13 @@ fn is_event_attribute_name(name: &str) -> bool {
     name.starts_with("on")
 }
 
-fn attribute_value_has_invalid_arguments_usage(
-    value: Option<&AttributeValue>,
-    allocator: &Allocator,
-) -> bool {
+fn attribute_value_has_invalid_arguments_usage(value: Option<&AttributeValue>, allocator: &Allocator) -> bool {
     let Some(value) = value else {
         return false;
     };
 
     match value {
-        AttributeValue::Expression(expression) => {
-            expression_text_has_invalid_arguments_usage(expression, allocator)
-        }
+        AttributeValue::Expression(expression) => expression_text_has_invalid_arguments_usage(expression, allocator),
         AttributeValue::Concat(parts) => parts.iter().any(|part| match part {
             AttributeValuePart::Expression(expression) => {
                 expression_text_has_invalid_arguments_usage(expression, allocator)
@@ -6868,18 +6459,13 @@ fn attribute_value_has_invalid_arguments_usage(
     }
 }
 
-fn attribute_value_has_await_outside_functions(
-    value: Option<&AttributeValue>,
-    allocator: &Allocator,
-) -> bool {
+fn attribute_value_has_await_outside_functions(value: Option<&AttributeValue>, allocator: &Allocator) -> bool {
     let Some(value) = value else {
         return false;
     };
 
     match value {
-        AttributeValue::Expression(expression) => {
-            expression_text_has_await_outside_functions(expression, allocator)
-        }
+        AttributeValue::Expression(expression) => expression_text_has_await_outside_functions(expression, allocator),
         AttributeValue::Concat(parts) => parts.iter().any(|part| match part {
             AttributeValuePart::Expression(expression) => {
                 expression_text_has_await_outside_functions(expression, allocator)
@@ -6890,10 +6476,7 @@ fn attribute_value_has_await_outside_functions(
     }
 }
 
-fn expression_text_has_invalid_arguments_usage(
-    raw_expression: &str,
-    allocator: &Allocator,
-) -> bool {
+fn expression_text_has_invalid_arguments_usage(raw_expression: &str, allocator: &Allocator) -> bool {
     let trimmed = raw_expression.trim();
     if trimmed.is_empty() {
         return false;
@@ -6952,21 +6535,11 @@ impl<'a> oxc::ast_visit::Visit<'a> for InvalidArgumentsUsageVisitor {
         }
     }
 
-    fn visit_function(
-        &mut self,
-        _it: &oxc::ast::ast::Function<'a>,
-        _flags: oxc::syntax::scope::ScopeFlags,
-    ) {
-    }
+    fn visit_function(&mut self, _it: &oxc::ast::ast::Function<'a>, _flags: oxc::syntax::scope::ScopeFlags) {}
 }
 
-fn attribute_value_is_unquoted_sequence(
-    source: &str,
-    value: &AttributeValue,
-    meta: &AttributeMeta,
-) -> bool {
-    matches!(value, AttributeValue::Concat(parts) if parts.len() > 1)
-        && !attribute_value_is_quoted(source, meta)
+fn attribute_value_is_unquoted_sequence(source: &str, value: &AttributeValue, meta: &AttributeMeta) -> bool {
+    matches!(value, AttributeValue::Concat(parts) if parts.len() > 1) && !attribute_value_is_quoted(source, meta)
 }
 
 fn attribute_value_is_quoted(source: &str, meta: &AttributeMeta) -> bool {
@@ -6984,10 +6557,7 @@ fn attribute_value_is_quoted(source: &str, meta: &AttributeMeta) -> bool {
     matches!(previous, b'\'' | b'"')
 }
 
-fn attribute_value_is_unparenthesized_sequence_expression(
-    value: &AttributeValue,
-    allocator: &Allocator,
-) -> bool {
+fn attribute_value_is_unparenthesized_sequence_expression(value: &AttributeValue, allocator: &Allocator) -> bool {
     let Some(raw_expression) = single_expression_attribute_text(value) else {
         return false;
     };
@@ -7012,11 +6582,7 @@ fn attribute_invalid_sequence_expression_message() -> &'static str {
     "Comma-separated expressions are not allowed as attribute/directive values in runes mode, unless wrapped in parentheses"
 }
 
-fn bind_expression_diagnostics(
-    raw_expression: &str,
-    binding_name: &str,
-    allocator: &Allocator,
-) -> Vec<String> {
+fn bind_expression_diagnostics(raw_expression: &str, binding_name: &str, allocator: &Allocator) -> Vec<String> {
     let trimmed = raw_expression.trim();
     if trimmed.is_empty() {
         return Vec::new();
@@ -7041,11 +6607,7 @@ fn bind_expression_diagnostics(
             return vec![bind_invalid_expression_message().to_string()];
         }
 
-        if sequence
-            .expressions
-            .iter()
-            .any(binding_sequence_part_has_illegal_await)
-        {
+        if sequence.expressions.iter().any(binding_sequence_part_has_illegal_await) {
             return vec![illegal_await_expression_message().to_string()];
         }
 
@@ -7096,10 +6658,7 @@ fn bind_expression_is_identifier_or_member(expression: &oxc::ast::ast::Expressio
     )
 }
 
-fn expression_text_has_await_outside_functions(
-    raw_expression: &str,
-    allocator: &Allocator,
-) -> bool {
+fn expression_text_has_await_outside_functions(raw_expression: &str, allocator: &Allocator) -> bool {
     let trimmed = raw_expression.trim();
     if trimmed.is_empty() {
         return false;
@@ -7121,9 +6680,7 @@ fn expression_contains_await_outside_functions(expression: &oxc::ast::ast::Expre
     visitor.found
 }
 
-fn function_body_contains_await_outside_nested_functions(
-    body: &oxc::ast::ast::ArrowFunctionBody<'_>,
-) -> bool {
+fn function_body_contains_await_outside_nested_functions(body: &oxc::ast::ast::ArrowFunctionBody<'_>) -> bool {
     use oxc::ast_visit::Visit;
 
     let mut visitor = AwaitExpressionVisitor { found: false };
@@ -7140,18 +6697,9 @@ impl<'a> oxc::ast_visit::Visit<'a> for AwaitExpressionVisitor {
         self.found = true;
     }
 
-    fn visit_function(
-        &mut self,
-        _it: &oxc::ast::ast::Function<'a>,
-        _flags: oxc::syntax::scope::ScopeFlags,
-    ) {
-    }
+    fn visit_function(&mut self, _it: &oxc::ast::ast::Function<'a>, _flags: oxc::syntax::scope::ScopeFlags) {}
 
-    fn visit_arrow_function_expression(
-        &mut self,
-        _it: &oxc::ast::ast::ArrowFunctionExpression<'a>,
-    ) {
-    }
+    fn visit_arrow_function_expression(&mut self, _it: &oxc::ast::ast::ArrowFunctionExpression<'a>) {}
 }
 
 fn bind_invalid_expression_message() -> &'static str {
@@ -7237,8 +6785,7 @@ fn default_slot_child_is_allowed(node: &TemplateNode<'_>) -> bool {
     match node {
         TemplateNode::Text(text) if text.data.trim().is_empty() => true,
         TemplateNode::Element(element)
-            if (is_regular_element_for_default_slot_check(&element.name)
-                || element.name == "svelte:fragment")
+            if (is_regular_element_for_default_slot_check(&element.name) || element.name == "svelte:fragment")
                 && has_slot_attribute(&element.attributes) =>
         {
             true
@@ -7250,8 +6797,7 @@ fn default_slot_child_is_allowed(node: &TemplateNode<'_>) -> bool {
 fn component_has_attribute_or_binding(owner: &Element<'_>, name: &str) -> bool {
     owner.attributes.iter().any(|attribute| match attribute {
         Attribute::NormalAttribute {
-            name: attribute_name,
-            ..
+            name: attribute_name, ..
         } => attribute_name == name,
         Attribute::Directive {
             kind: DirectiveKind::Binding,
@@ -7291,8 +6837,7 @@ fn const_tag_allowed_in_element(element: &Element<'_>) -> bool {
         || element.name == "svelte:boundary"
         || element.name == "svelte:component"
         || is_regular_component_element_name(&element.name)
-        || ((element.name == "svelte:element"
-            || is_regular_element_for_default_slot_check(&element.name))
+        || ((element.name == "svelte:element" || is_regular_element_for_default_slot_check(&element.name))
             && has_slot_attribute(&element.attributes))
 }
 
@@ -7300,10 +6845,7 @@ fn const_tag_invalid_placement_message() -> &'static str {
     "`{@const}` must be the immediate child of `{#snippet}`, `{#if}`, `{:else if}`, `{:else}`, `{#each}`, `{:then}`, `{:catch}`, `<svelte:fragment>`, `<svelte:boundary>` or `<Component>`"
 }
 
-fn text_placement_parent_for_element<'a>(
-    element: &'a Element<'_>,
-    current_parent: Option<&'a str>,
-) -> Option<&'a str> {
+fn text_placement_parent_for_element<'a>(element: &'a Element<'_>, current_parent: Option<&'a str>) -> Option<&'a str> {
     if element.name == "slot" || element.name == "svelte:boundary" {
         return current_parent;
     }
@@ -7314,15 +6856,10 @@ fn text_placement_parent_for_element<'a>(
 }
 
 fn element_participates_in_html_placement(name: &str) -> bool {
-    name != "slot"
-        && !name.starts_with('!')
-        && !name.starts_with("svelte:")
-        && !is_regular_component_element_name(name)
+    name != "slot" && !name.starts_with('!') && !name.starts_with("svelte:") && !is_regular_component_element_name(name)
 }
 
-fn html_placement_ancestors_blocked<'a>(
-    ancestors: &[HtmlPlacementAncestor<'a>],
-) -> Vec<HtmlPlacementAncestor<'a>> {
+fn html_placement_ancestors_blocked<'a>(ancestors: &[HtmlPlacementAncestor<'a>]) -> Vec<HtmlPlacementAncestor<'a>> {
     ancestors
         .iter()
         .map(|ancestor| HtmlPlacementAncestor {
@@ -7346,13 +6883,10 @@ fn html_tag_invalid_parent_message(child: &str, parent: &str) -> Option<String> 
     }
 
     if html_direct_disallowed_children(parent).is_some_and(|children| children.contains(&child)) {
-        return Some(format!(
-            "`<{child}>` cannot be a direct child of `<{parent}>`"
-        ));
+        return Some(format!("`<{child}>` cannot be a direct child of `<{parent}>`"));
     }
 
-    if html_descendant_disallowed_children(parent).is_some_and(|children| children.contains(&child))
-    {
+    if html_descendant_disallowed_children(parent).is_some_and(|children| children.contains(&child)) {
         return Some(format!("`<{child}>` cannot be a child of `<{parent}>`"));
     }
 
@@ -7373,9 +6907,7 @@ fn html_tag_invalid_parent_message(child: &str, parent: &str) -> Option<String> 
         "thead" | "tbody" | "tfoot" => Some(format!(
             "`<{child}>` must be the child of a `<table>`, not a `<{parent}>`"
         )),
-        "td" | "th" => Some(format!(
-            "`<{child}>` must be the child of a `<tr>`, not a `<{parent}>`"
-        )),
+        "td" | "th" => Some(format!("`<{child}>` must be the child of a `<tr>`, not a `<{parent}>`")),
         "tr" => Some(format!(
             "`<tr>` must be the child of a `<thead>`, `<tbody>`, or `<tfoot>`, not a `<{parent}>`"
         )),
@@ -7411,9 +6943,7 @@ fn html_tag_invalid_ancestor_message(
         }
     }
 
-    Some(format!(
-        "`<{child}>` cannot be a descendant of `<{ancestor}>`"
-    ))
+    Some(format!("`<{child}>` cannot be a descendant of `<{ancestor}>`"))
 }
 
 fn html_direct_disallowed_children(parent: &str) -> Option<&'static [&'static str]> {
@@ -7487,8 +7017,8 @@ fn html_only_allowed_children(parent: &str) -> Option<&'static [&'static str]> {
             "caption", "colgroup", "tbody", "thead", "tfoot", "style", "script", "template",
         ]),
         "head" => Some(&[
-            "base", "basefont", "bgsound", "link", "meta", "title", "noscript", "noframes",
-            "style", "script", "template",
+            "base", "basefont", "bgsound", "link", "meta", "title", "noscript", "noframes", "style", "script",
+            "template",
         ]),
         "html" => Some(&["head", "body", "frameset"]),
         "frameset" => Some(&["frame"]),
@@ -7504,7 +7034,9 @@ fn html_tag_list(tags: &[&str]) -> String {
 }
 
 fn node_invalid_placement_message(message: String) -> String {
-    format!("{message}. The browser will 'repair' the HTML (by moving, removing, or inserting elements) which breaks Svelte's assumptions about the structure of your components.")
+    format!(
+        "{message}. The browser will 'repair' the HTML (by moving, removing, or inserting elements) which breaks Svelte's assumptions about the structure of your components."
+    )
 }
 
 enum StaticOptionValue {
@@ -7520,9 +7052,7 @@ fn static_option_value(value: &AttributeValue) -> Option<StaticOptionValue> {
         AttributeValue::Expression(expression) => expression_static_option_value(expression),
         AttributeValue::Concat(parts) => match parts.as_slice() {
             [AttributeValuePart::Static(value)] => Some(StaticOptionValue::String(value.clone())),
-            [AttributeValuePart::Expression(expression)] => {
-                expression_static_option_value(expression)
-            }
+            [AttributeValuePart::Expression(expression)] => expression_static_option_value(expression),
             _ => None,
         },
     }
@@ -7553,18 +7083,14 @@ fn static_text_attribute_value(value: &AttributeValue) -> Option<&str> {
     }
 }
 
-fn strip_parentheses<'a>(
-    mut expression: &'a oxc::ast::ast::Expression<'a>,
-) -> &'a oxc::ast::ast::Expression<'a> {
+fn strip_parentheses<'a>(mut expression: &'a oxc::ast::ast::Expression<'a>) -> &'a oxc::ast::ast::Expression<'a> {
     while let oxc::ast::ast::Expression::ParenthesizedExpression(parenthesized) = expression {
         expression = &parenthesized.expression;
     }
     expression
 }
 
-fn custom_element_object_error(
-    object: &oxc::ast::ast::ObjectExpression<'_>,
-) -> Option<&'static str> {
+fn custom_element_object_error(object: &oxc::ast::ast::ObjectExpression<'_>) -> Option<&'static str> {
     let mut tag = None;
     let mut props = None;
     let mut shadow = None;
@@ -7668,9 +7194,7 @@ fn object_property_identifier_value<'node, 'a>(
     Some((key.name.as_str(), &property.value))
 }
 
-fn expression_string_literal_value<'a>(
-    expression: &'a oxc::ast::ast::Expression<'a>,
-) -> Option<&'a str> {
+fn expression_string_literal_value<'a>(expression: &'a oxc::ast::ast::Expression<'a>) -> Option<&'a str> {
     match expression {
         oxc::ast::ast::Expression::StringLiteral(literal) => literal.value.as_str(),
         _ => None,
@@ -7686,9 +7210,9 @@ fn expression_boolean_literal_value(expression: &oxc::ast::ast::Expression<'_>) 
 
 fn is_shadowroot_template_element(name: &str, attributes: &[Attribute]) -> bool {
     name == "template"
-        && attributes.iter().any(|attribute| {
-            matches!(attribute, Attribute::NormalAttribute { name, .. } if name == "shadowrootmode")
-        })
+        && attributes
+            .iter()
+            .any(|attribute| matches!(attribute, Attribute::NormalAttribute { name, .. } if name == "shadowrootmode"))
 }
 
 fn is_valid_custom_element_tag(tag: &str) -> bool {
@@ -7698,9 +7222,9 @@ fn is_valid_custom_element_tag(tag: &str) -> bool {
     };
     first.is_ascii_lowercase()
         && tag.contains('-')
-        && tag.chars().all(|ch| {
-            ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '-' | '_' | '.')
-        })
+        && tag
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '-' | '_' | '.'))
 }
 
 fn is_reserved_custom_element_tag(tag: &str) -> bool {
@@ -7742,21 +7266,12 @@ fn custom_element_shadow_invalid_message() -> &'static str {
 }
 
 fn is_component_like_element_name(name: &str) -> bool {
-    name == "svelte:component"
-        || name
-            .chars()
-            .next()
-            .is_some_and(|first| first.is_uppercase())
-        || name.contains('.')
+    name == "svelte:component" || name.chars().next().is_some_and(|first| first.is_uppercase()) || name.contains('.')
 }
 
 fn is_regular_component_element_name(name: &str) -> bool {
     !name.starts_with("svelte:")
-        && (name
-            .chars()
-            .next()
-            .is_some_and(|first| first.is_uppercase())
-            || name.contains('.'))
+        && (name.chars().next().is_some_and(|first| first.is_uppercase()) || name.contains('.'))
 }
 
 fn valid_svelte_meta_tag_list() -> &'static str {
@@ -7809,9 +7324,7 @@ fn should_implicitly_close(parent: &str, child: &str) -> bool {
         child_is("optgroup")
     } else if parent_is("option") {
         child_is_any(&["option", "optgroup"])
-    } else if parent_is("thead") {
-        child_is_any(&["tbody", "tfoot"])
-    } else if parent_is("tbody") {
+    } else if parent_is("thead") || parent_is("tbody") {
         child_is_any(&["tbody", "tfoot"])
     } else if parent_is("tfoot") {
         child_is("tbody")
@@ -8167,9 +7680,7 @@ mod tests {
             .count();
         assert_eq!(expected_tag_errors, 2, "{errors:?}");
         assert_eq!(fragment.nodes.len(), 3);
-        assert!(
-            matches!(&fragment.nodes[2], TemplateNode::Element(element) if element.name == "p")
-        );
+        assert!(matches!(&fragment.nodes[2], TemplateNode::Element(element) if element.name == "p"));
     }
 
     #[test]
@@ -8206,9 +7717,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("Expected token {:else} or {:else if}")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Expected token {:else} or {:else if}"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8222,9 +7735,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("'elseif' should be 'else if'")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("'elseif' should be 'else if'"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8238,9 +7753,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("Unexpected block closing tag")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Unexpected block closing tag"))
+        );
         assert_eq!(fragment.nodes.len(), 1);
         match &fragment.nodes[0] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8254,9 +7771,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("attempted to close an element that was not open")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("attempted to close an element that was not open")
+        }));
         assert_eq!(fragment.nodes.len(), 1);
         match &fragment.nodes[0] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8270,9 +7789,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("Void elements cannot have children or closing tags")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("Void elements cannot have children or closing tags")
+        }));
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8336,9 +7857,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("Expected token if")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Expected token if"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8369,9 +7892,7 @@ mod tests {
                 let idx = el
                     .attributes
                     .iter()
-                    .position(|a| {
-                        matches!(a, Attribute::NormalAttribute { name, .. } if name == "@attach")
-                    })
+                    .position(|a| matches!(a, Attribute::NormalAttribute { name, .. } if name == "@attach"))
                     .expect("an @attach attribute");
                 let meta = &el.attribute_meta[idx];
                 assert_eq!(
@@ -8389,9 +7910,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("Attributes need to be unique")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Attributes need to be unique"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8405,9 +7928,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("Attributes need to be unique")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Attributes need to be unique"))
+        );
     }
 
     #[test]
@@ -8425,9 +7950,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("Attribute shorthand cannot be empty")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Attribute shorthand cannot be empty"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[0] {
             TemplateNode::Element(el) => {
@@ -8451,9 +7978,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("`bind:` name cannot be empty")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("`bind:` name cannot be empty"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8484,12 +8013,16 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("{#if ...} block cannot be in attribute value")));
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("{@html ...} tag cannot be in attribute value")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("{#if ...} block cannot be in attribute value")
+        }));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("{@html ...} tag cannot be in attribute value")
+        }));
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8503,9 +8036,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("Valid `<svelte:...>` tag names are")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Valid `<svelte:...>` tag names are"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8519,12 +8054,16 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("A component can only have one `<svelte:head>` element")));
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("`<svelte:head>` tags cannot be inside elements or blocks")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("A component can only have one `<svelte:head>` element")
+        }));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("`<svelte:head>` tags cannot be inside elements or blocks")
+        }));
     }
 
     #[test]
@@ -8562,11 +8101,7 @@ mod tests {
 
         let invalid_let_directives = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains("`let:` directive at invalid position")
-            })
+            .filter(|error| error.to_string().contains("`let:` directive at invalid position"))
             .count();
         assert_eq!(invalid_let_directives, 3);
     }
@@ -8590,9 +8125,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("`<svelte:component>` must have a 'this' attribute")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("`<svelte:component>` must have a 'this' attribute")
+        }));
         let invalid_this_errors = errors
             .iter()
             .filter(|error| error.to_string().contains("Invalid component definition"))
@@ -8643,9 +8180,9 @@ mod tests {
         let attribute_errors = errors
             .iter()
             .filter(|error| {
-                error.to_string().contains(
-                    "`<svelte:fragment>` can only have a slot attribute and (optionally) a let: directive",
-                )
+                error
+                    .to_string()
+                    .contains("`<svelte:fragment>` can only have a slot attribute and (optionally) a let: directive")
             })
             .count();
         assert_eq!(attribute_errors, 2);
@@ -8658,9 +8195,9 @@ mod tests {
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
         assert!(
-            !errors.iter().any(|error| error
-                .to_string()
-                .contains("`<svelte:self>` components can only exist")),
+            !errors
+                .iter()
+                .any(|error| error.to_string().contains("`<svelte:self>` components can only exist")),
             "{errors:?}"
         );
     }
@@ -8673,11 +8210,7 @@ mod tests {
 
         let invalid_placement_errors = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains("`<svelte:self>` components can only exist")
-            })
+            .filter(|error| error.to_string().contains("`<svelte:self>` components can only exist"))
             .count();
         assert_eq!(invalid_placement_errors, 4);
     }
@@ -8694,9 +8227,7 @@ mod tests {
             "`<slot>` can only receive attributes and (optionally) let directives",
         ] {
             assert!(
-                errors
-                    .iter()
-                    .any(|error| error.to_string().contains(message)),
+                errors.iter().any(|error| error.to_string().contains(message)),
                 "missing diagnostic: {message}; got {errors:?}"
             );
         }
@@ -8731,9 +8262,7 @@ mod tests {
             "Found default slot content alongside an explicit slot=\"default\"",
         ] {
             assert!(
-                errors
-                    .iter()
-                    .any(|error| error.to_string().contains(message)),
+                errors.iter().any(|error| error.to_string().contains(message)),
                 "missing diagnostic: {message}; got {errors:?}"
             );
         }
@@ -8757,9 +8286,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains("This snippet is shadowing the prop"))
+                .filter(|error| error.to_string().contains("This snippet is shadowing the prop"))
                 .count(),
             2,
             "{errors:?}"
@@ -8897,9 +8424,7 @@ mod tests {
             "Tag name is reserved",
         ] {
             assert!(
-                errors
-                    .iter()
-                    .any(|error| error.to_string().contains(message)),
+                errors.iter().any(|error| error.to_string().contains(message)),
                 "missing diagnostic: {message}; got {errors:?}"
             );
         }
@@ -8918,9 +8443,7 @@ mod tests {
             custom_element_shadow_invalid_message(),
         ] {
             assert!(
-                errors
-                    .iter()
-                    .any(|error| error.to_string().contains(message)),
+                errors.iter().any(|error| error.to_string().contains(message)),
                 "missing diagnostic: {message}; got {errors:?}"
             );
         }
@@ -8948,9 +8471,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("Expected token {:else}")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Expected token {:else}"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -8990,14 +8515,15 @@ mod tests {
 
     #[test]
     fn test_await_duplicate_then_reports_diagnostic_and_recovers() {
-        let source =
-            "{#await p}<p>pending</p>{:then a}<p>a</p>{:then b}<p>b</p>{/await}<p>after</p>";
+        let source = "{#await p}<p>pending</p>{:then a}<p>a</p>{:then b}<p>b</p>{/await}<p>after</p>";
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("{:then} cannot appear more than once within a block")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("{:then} cannot appear more than once within a block")
+        }));
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -9011,9 +8537,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("Expected token {:then ...} or {:catch ...}")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Expected token {:then ...} or {:catch ...}"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -9087,11 +8615,7 @@ mod tests {
 
         let invalid_content_errors = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains("`<title>` can only contain text and {tags}")
-            })
+            .filter(|error| error.to_string().contains("`<title>` can only contain text and {tags}"))
             .count();
         assert_eq!(invalid_content_errors, 2);
     }
@@ -9118,9 +8642,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("{@html ...} tag cannot be inside <textarea>")));
+        assert!(errors.iter().any(|error| {
+            error
+                .to_string()
+                .contains("{@html ...} tag cannot be inside <textarea>")
+        }));
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -9130,7 +8656,8 @@ mod tests {
 
     #[test]
     fn test_textarea_value_and_content_diagnostic() {
-        let source = r#"<textarea value="x"> </textarea><textarea value></textarea><textarea bind:value={x}>text</textarea>"#;
+        let source =
+            r#"<textarea value="x"> </textarea><textarea value></textarea><textarea bind:value={x}>text</textarea>"#;
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
@@ -9156,9 +8683,7 @@ mod tests {
                 assert_eq!(el.name, "textarea");
                 assert_eq!(el.children.len(), 3);
                 assert!(matches!(&el.children[0], TemplateNode::Text(t) if t.data == "<b>"));
-                assert!(
-                    matches!(&el.children[1], TemplateNode::MustacheTag(tag) if tag.expression == "value")
-                );
+                assert!(matches!(&el.children[1], TemplateNode::MustacheTag(tag) if tag.expression == "value"));
                 assert!(matches!(&el.children[2], TemplateNode::Text(t) if t.data == "</b>"));
             }
             other => panic!("expected textarea element, got {other:?}"),
@@ -9194,9 +8719,7 @@ mod tests {
                 assert_eq!(el.name, "TEXTAREA");
                 assert_eq!(el.children.len(), 3);
                 assert!(matches!(&el.children[0], TemplateNode::Text(t) if t.data == "<b>"));
-                assert!(
-                    matches!(&el.children[1], TemplateNode::MustacheTag(tag) if tag.expression == "value")
-                );
+                assert!(matches!(&el.children[1], TemplateNode::MustacheTag(tag) if tag.expression == "value"));
                 assert!(matches!(&el.children[2], TemplateNode::Text(t) if t.data == "</b>"));
             }
             other => panic!("expected TEXTAREA element, got {other:?}"),
@@ -9252,9 +8775,7 @@ mod tests {
             "`</p>` attempted to close element that was already automatically closed by `<div>` (cannot nest `<div>` inside `<p>`)"
         )));
         assert_eq!(fragment.nodes.len(), 3);
-        assert!(
-            matches!(&fragment.nodes[2], TemplateNode::Element(element) if element.name == "span")
-        );
+        assert!(matches!(&fragment.nodes[2], TemplateNode::Element(element) if element.name == "span"));
     }
 
     #[test]
@@ -9268,9 +8789,7 @@ mod tests {
                 assert_eq!(table.name, "table");
                 assert_eq!(table.children.len(), 2);
                 assert!(matches!(&table.children[0], TemplateNode::Element(tr) if tr.name == "tr"));
-                assert!(
-                    matches!(&table.children[1], TemplateNode::Element(tbody) if tbody.name == "tbody")
-                );
+                assert!(matches!(&table.children[1], TemplateNode::Element(tbody) if tbody.name == "tbody"));
             }
             other => panic!("expected table element, got {other:?}"),
         }
@@ -9303,8 +8822,7 @@ mod tests {
 
     #[test]
     fn test_snippet_rest_parameter_diagnostics() {
-        let source =
-            "{#snippet a(...args)}{/snippet}{#snippet b(first, ...rest)}{/snippet}{#snippet c({ ...rest })}{/snippet}{#snippet d([first, ...rest])}{/snippet}";
+        let source = "{#snippet a(...args)}{/snippet}{#snippet b(first, ...rest)}{/snippet}{#snippet c({ ...rest })}{/snippet}{#snippet d([first, ...rest])}{/snippet}";
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
@@ -9329,11 +8847,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| {
-                    error
-                        .to_string()
-                        .contains("'if' is a reserved word in JavaScript")
-                })
+                .filter(|error| { error.to_string().contains("'if' is a reserved word in JavaScript") })
                 .count(),
             7,
             "{errors:?}"
@@ -9387,10 +8901,7 @@ mod tests {
                     r#"T extends { bracket: "<" } | "<" | Set<"<>">"#
                 );
                 let params_span = s.params_span.expect("params span");
-                assert_eq!(
-                    &source[params_span.start as usize..params_span.end as usize],
-                    "val: T"
-                );
+                assert_eq!(&source[params_span.start as usize..params_span.end as usize], "val: T");
             }
             _ => panic!("expected SnippetBlock"),
         }
@@ -9409,18 +8920,13 @@ mod tests {
 
     #[test]
     fn test_special_tag_expression_diagnostics() {
-        let source =
-            "{@debug foo, bar.baz}{@debug foo, bar}{@render snippet}{@render snippet()}{@render snippet?.()}";
+        let source = "{@debug foo, bar.baz}{@debug foo, bar}{@render snippet}{@render snippet()}{@render snippet?.()}";
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
         let invalid_debug_errors = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains("{@debug ...} arguments must be identifiers")
-            })
+            .filter(|error| error.to_string().contains("{@debug ...} arguments must be identifiers"))
             .count();
         assert_eq!(invalid_debug_errors, 1, "{errors:?}");
 
@@ -9464,8 +8970,7 @@ mod tests {
 
     #[test]
     fn test_const_tag_declaration_diagnostics() {
-        let source =
-            "{#if ok}{@const a}{@const a = b, c}{@const a = (b, c)}{@const { value } = item}{/if}";
+        let source = "{#if ok}{@const a}{@const a = b, c}{@const a = (b, c)}{@const { value } = item}{/if}";
         let alloc = oxc::allocator::Allocator::default();
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
@@ -9495,11 +9000,7 @@ mod tests {
 
         let placement_errors = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains(const_tag_invalid_placement_message())
-            })
+            .filter(|error| error.to_string().contains(const_tag_invalid_placement_message()))
             .count();
         assert_eq!(placement_errors, 3, "{errors:?}");
     }
@@ -9511,9 +9012,9 @@ mod tests {
         let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
         assert!(
-            !errors.iter().any(|error| error
-                .to_string()
-                .contains(const_tag_invalid_placement_message())),
+            !errors
+                .iter()
+                .any(|error| error.to_string().contains(const_tag_invalid_placement_message())),
             "{errors:?}"
         );
     }
@@ -9530,15 +9031,21 @@ mod tests {
             .count();
         assert_eq!(placement_errors, 6, "{errors:?}");
 
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("`<table>` only allows these children")));
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("`<tr>` only allows these children")));
-        assert!(errors.iter().any(|error| error
-            .to_string()
-            .contains("`<tbody>` only allows these children")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("`<table>` only allows these children"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("`<tr>` only allows these children"))
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("`<tbody>` only allows these children"))
+        );
     }
 
     #[test]
@@ -9556,31 +9063,31 @@ mod tests {
             .count();
         assert_eq!(placement_errors, 5, "{errors:?}");
 
-        assert!(errors.iter().any(|error| {
-            error
-                .to_string()
-                .contains("`<div>` cannot be a child of `<table>`")
-        }));
+        assert!(
+            errors
+                .iter()
+                .any(|error| { error.to_string().contains("`<div>` cannot be a child of `<table>`") })
+        );
         assert!(errors.iter().any(|error| {
             error
                 .to_string()
                 .contains("`<tr>` must be the child of a `<thead>`, `<tbody>`, or `<tfoot>`")
         }));
-        assert!(errors.iter().any(|error| {
-            error
-                .to_string()
-                .contains("`<div>` cannot be a descendant of `<p>`")
-        }));
-        assert!(errors.iter().any(|error| {
-            error
-                .to_string()
-                .contains("`<a>` cannot be a descendant of `<a>`")
-        }));
-        assert!(errors.iter().any(|error| {
-            error
-                .to_string()
-                .contains("`<div>` cannot be a child of `<tbody>`")
-        }));
+        assert!(
+            errors
+                .iter()
+                .any(|error| { error.to_string().contains("`<div>` cannot be a descendant of `<p>`") })
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| { error.to_string().contains("`<a>` cannot be a descendant of `<a>`") })
+        );
+        assert!(
+            errors
+                .iter()
+                .any(|error| { error.to_string().contains("`<div>` cannot be a child of `<tbody>`") })
+        );
     }
 
     #[test]
@@ -9591,20 +9098,16 @@ mod tests {
 
         let invalid_event_modifiers = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains(event_handler_invalid_modifier_message())
-            })
+            .filter(|error| error.to_string().contains(event_handler_invalid_modifier_message()))
             .count();
         assert_eq!(invalid_event_modifiers, 1, "{errors:?}");
 
         let modifier_combinations = errors
             .iter()
             .filter(|error| {
-                error.to_string().contains(
-                    "The 'passive' and 'preventDefault' modifiers cannot be used together",
-                )
+                error
+                    .to_string()
+                    .contains("The 'passive' and 'preventDefault' modifiers cannot be used together")
             })
             .count();
         assert_eq!(modifier_combinations, 1, "{errors:?}");
@@ -9641,11 +9144,7 @@ mod tests {
 
         let invalid_component_directives = errors
             .iter()
-            .filter(|error| {
-                error
-                    .to_string()
-                    .contains(component_invalid_directive_message())
-            })
+            .filter(|error| error.to_string().contains(component_invalid_directive_message()))
             .count();
         assert_eq!(invalid_component_directives, 5, "{errors:?}");
     }
@@ -9659,9 +9158,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains("Mixing old (on:click) and new syntaxes"))
+                .filter(|error| error.to_string().contains("Mixing old (on:click) and new syntaxes"))
                 .count(),
             1,
             "{errors:?}"
@@ -9674,9 +9171,7 @@ mod tests {
         ] {
             let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
             assert!(
-                !errors
-                    .iter()
-                    .any(|error| error.to_string().contains("Mixing old (on:")),
+                !errors.iter().any(|error| error.to_string().contains("Mixing old (on:")),
                 "{source}: {errors:?}"
             );
         }
@@ -9697,9 +9192,9 @@ mod tests {
         ] {
             let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
             assert!(
-                errors.iter().any(|error| error
-                    .to_string()
-                    .contains(invalid_arguments_usage_message())),
+                errors
+                    .iter()
+                    .any(|error| error.to_string().contains(invalid_arguments_usage_message())),
                 "{source}: {errors:?}"
             );
         }
@@ -9711,9 +9206,9 @@ mod tests {
         ] {
             let (_fragment, errors) = parse_fragment_with_errors(source, &alloc);
             assert!(
-                !errors.iter().any(|error| error
-                    .to_string()
-                    .contains(invalid_arguments_usage_message())),
+                !errors
+                    .iter()
+                    .any(|error| error.to_string().contains(invalid_arguments_usage_message())),
                 "{source}: {errors:?}"
             );
         }
@@ -9773,9 +9268,9 @@ mod tests {
         assert_eq!(invalid_names, 5, "{errors:?}");
 
         assert!(
-            !errors.iter().any(|error| error
-                .to_string()
-                .contains("'foo.bar' is not a valid attribute name")),
+            !errors
+                .iter()
+                .any(|error| error.to_string().contains("'foo.bar' is not a valid attribute name")),
             "{errors:?}"
         );
     }
@@ -9858,9 +9353,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains("`bind:foo` is not a valid binding"))
+                .filter(|error| error.to_string().contains("`bind:foo` is not a valid binding"))
                 .count(),
             1,
             "{errors:?}"
@@ -9898,9 +9391,9 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error.to_string().contains(
-                    "'type' attribute must be a static text value if input uses two-way binding"
-                ))
+                .filter(|error| error
+                    .to_string()
+                    .contains("'type' attribute must be a static text value if input uses two-way binding"))
                 .count(),
             1,
             "{errors:?}"
@@ -9928,9 +9421,9 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error.to_string().contains(
-                    "'contenteditable' attribute cannot be dynamic if element uses two-way binding"
-                ))
+                .filter(|error| error
+                    .to_string()
+                    .contains("'contenteditable' attribute cannot be dynamic if element uses two-way binding"))
                 .count(),
             1,
             "{errors:?}"
@@ -9946,9 +9439,9 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error.to_string().contains(
-                    "`bind:value` can only be used with `<input>`, `<textarea>`, `<select>`"
-                ))
+                .filter(|error| error
+                    .to_string()
+                    .contains("`bind:value` can only be used with `<input>`, `<textarea>`, `<select>`"))
                 .count(),
             1,
             "{errors:?}"
@@ -9956,9 +9449,9 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error.to_string().contains(
-                    "`bind:clientWidth` is not a valid binding. Possible bindings for <svelte:window>"
-                ))
+                .filter(|error| error
+                    .to_string()
+                    .contains("`bind:clientWidth` is not a valid binding. Possible bindings for <svelte:window>"))
                 .count(),
             1,
             "{errors:?}"
@@ -9966,9 +9459,9 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error.to_string().contains(
-                    "`bind:clientWidth` is not a valid binding. Possible bindings for <svelte:document>"
-                ))
+                .filter(|error| error
+                    .to_string()
+                    .contains("`bind:clientWidth` is not a valid binding. Possible bindings for <svelte:document>"))
                 .count(),
             1,
             "{errors:?}"
@@ -9997,17 +9490,14 @@ mod tests {
             "`bind:innerWidht` is not a valid binding. Did you mean 'innerWidth'?",
         ] {
             assert!(
-                errors
-                    .iter()
-                    .any(|error| error.to_string().contains(message)),
+                errors.iter().any(|error| error.to_string().contains(message)),
                 "{message}: {errors:?}"
             );
         }
 
         assert!(errors.iter().any(|error| {
             let message = error.to_string();
-            message.contains("`bind:cheked` is not a valid binding")
-                && !message.contains("Did you mean 'checked'?")
+            message.contains("`bind:cheked` is not a valid binding") && !message.contains("Did you mean 'checked'?")
         }));
     }
 
@@ -10020,9 +9510,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains(attribute_unquoted_sequence_message()))
+                .filter(|error| error.to_string().contains(attribute_unquoted_sequence_message()))
                 .count(),
             3,
             "{errors:?}"
@@ -10060,9 +9548,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains(bind_invalid_expression_message()))
+                .filter(|error| error.to_string().contains(bind_invalid_expression_message()))
                 .count(),
             2,
             "{errors:?}"
@@ -10080,9 +9566,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains(bind_group_invalid_expression_message()))
+                .filter(|error| error.to_string().contains(bind_group_invalid_expression_message()))
                 .count(),
             1,
             "{errors:?}"
@@ -10090,9 +9574,7 @@ mod tests {
         assert_eq!(
             errors
                 .iter()
-                .filter(|error| error
-                    .to_string()
-                    .contains(illegal_await_expression_message()))
+                .filter(|error| error.to_string().contains(illegal_await_expression_message()))
                 .count(),
             6,
             "{errors:?}"
@@ -10109,10 +9591,7 @@ mod tests {
                 assert_eq!(el.attributes.len(), 1);
                 match &el.attributes[0] {
                     Attribute::Directive {
-                        kind,
-                        name,
-                        modifiers,
-                        ..
+                        kind, name, modifiers, ..
                     } => {
                         assert!(matches!(kind, DirectiveKind::EventHandler));
                         assert_eq!(name, "click");
@@ -10160,12 +9639,8 @@ mod tests {
                         assert_eq!(span.end, 19);
                         match value {
                             AttributeValue::Concat(parts) => {
-                                assert!(
-                                    matches!(&parts[0], AttributeValuePart::Expression(v) if v == "bar")
-                                );
-                                assert!(
-                                    matches!(&parts[1], AttributeValuePart::Static(v) if v == "foo")
-                                );
+                                assert!(matches!(&parts[0], AttributeValuePart::Expression(v) if v == "bar"));
+                                assert!(matches!(&parts[1], AttributeValuePart::Static(v) if v == "foo"));
                             }
                             other => panic!("expected concat value, got {other:?}"),
                         }
@@ -10183,9 +9658,11 @@ mod tests {
         let alloc = oxc::allocator::Allocator::default();
         let (fragment, errors) = parse_fragment_with_errors(source, &alloc);
 
-        assert!(errors
-            .iter()
-            .any(|error| error.to_string().contains("Expected attribute value")));
+        assert!(
+            errors
+                .iter()
+                .any(|error| error.to_string().contains("Expected attribute value"))
+        );
         assert_eq!(fragment.nodes.len(), 2);
         match &fragment.nodes[1] {
             TemplateNode::Element(el) => assert_eq!(el.name, "p"),
@@ -10203,9 +9680,7 @@ mod tests {
                 Attribute::NormalAttribute { value, .. } => match value {
                     AttributeValue::Concat(parts) => {
                         assert!(matches!(&parts[0], AttributeValuePart::Static(v) if v == "a "));
-                        assert!(
-                            matches!(&parts[1], AttributeValuePart::Expression(v) if v == "format('}')")
-                        );
+                        assert!(matches!(&parts[1], AttributeValuePart::Expression(v) if v == "format('}')"));
                         assert!(matches!(&parts[2], AttributeValuePart::Static(v) if v == " b"));
                     }
                     _ => panic!("expected concat value"),
@@ -10255,15 +9730,9 @@ mod modern_const_tag_tests {
             ("{const value = 1; call()}", "Expected a const declaration"),
         ] {
             let alloc = Allocator::default();
-            for parsed in [
-                parser::parse(source, &alloc),
-                parser::parse_for_lint(source, &alloc),
-            ] {
+            for parsed in [parser::parse(source, &alloc), parser::parse_for_lint(source, &alloc)] {
                 assert!(
-                    parsed
-                        .errors
-                        .iter()
-                        .any(|error| error.message.contains(expected)),
+                    parsed.errors.iter().any(|error| error.message.contains(expected)),
                     "{source}: {:?}",
                     parsed.errors
                 );
@@ -10289,10 +9758,7 @@ mod modern_const_tag_tests {
             let parsed = parser::parse(source, &alloc);
             assert!(parsed.errors.is_empty(), "{source}: {:?}", parsed.errors);
         }
-        for source in [
-            "{@const value = count}",
-            "<div>{@const value = count}</div>",
-        ] {
+        for source in ["{@const value = count}", "<div>{@const value = count}</div>"] {
             let alloc = Allocator::default();
             let parsed = parser::parse(source, &alloc);
             assert!(
@@ -10306,8 +9772,7 @@ mod modern_const_tag_tests {
     }
     #[test]
     fn control_tags_retain_original_spans_when_brace_and_sigil_are_separated() {
-        let source =
-            "<!-- 😀 -->{\r\n #if ok}<p />{\n :else\n if other}<b />{\n :else}<i />{\n /if}";
+        let source = "<!-- 😀 -->{\r\n #if ok}<p />{\n :else\n if other}<b />{\n :else}<i />{\n /if}";
         let alloc = Allocator::default();
         let parsed = parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
@@ -10344,10 +9809,7 @@ mod modern_const_tag_tests {
     #[test]
     fn spaced_control_prefixes_dispatch_every_template_tag_kind() {
         for (source, expected) in [
-            (
-                "{\n #each rows as row}{row}{\n :else}empty{\n /each}",
-                "each",
-            ),
+            ("{\n #each rows as row}{row}{\n :else}empty{\n /each}", "each"),
             (
                 "{\n #await promise}wait{\n :then value}{value}{\n :catch error}{error}{\n /await}",
                 "await",
@@ -10385,18 +9847,12 @@ mod modern_const_tag_tests {
         let TemplateNode::Element(element) = &parsed.ast.html.nodes[0] else {
             panic!();
         };
-        assert!(matches!(
-            element.attributes[0],
-            crate::ast::Attribute::Spread { .. }
-        ));
+        assert!(matches!(element.attributes[0], crate::ast::Attribute::Spread { .. }));
         let meta = &element.attribute_meta[0];
         let span = meta.expression_span.unwrap();
         assert_eq!(&source[span.start as usize..span.end as usize], "props\n");
         let span = meta.mustache_span.unwrap();
-        assert_eq!(
-            &source[span.start as usize..span.end as usize],
-            "{\r\n ...props\n}"
-        );
+        assert_eq!(&source[span.start as usize..span.end as usize], "{\r\n ...props\n}");
     }
 
     #[test]

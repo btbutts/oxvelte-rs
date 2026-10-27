@@ -2,7 +2,7 @@
 //! 🔧 Fixable
 
 use crate::ast::{Attribute, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 
 pub struct NoSpacesAroundEqualSignsInAttribute;
 

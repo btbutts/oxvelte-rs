@@ -42,11 +42,7 @@ impl Options {
             ignored_nodes: value
                 .and_then(|v| v.get("ignoredNodes"))
                 .and_then(|v| v.as_array())
-                .map(|a| {
-                    a.iter()
-                        .filter_map(|v| v.as_str().map(str::to_owned))
-                        .collect()
-                })
+                .map(|a| a.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect())
                 .unwrap_or_default(),
         }
     }
@@ -146,10 +142,7 @@ impl<'s> Layout<'s> {
     pub fn first_last(&self, s: Span, border: u32) -> Option<(usize, usize)> {
         let (mut first, mut last) = (self.first(s)?, self.last(s)?);
         while let (Some(left), Some(right)) = (self.before(first), self.after(last)) {
-            if self.tokens[left].span.start < border
-                || self.text(left) != "("
-                || self.text(right) != ")"
-            {
+            if self.tokens[left].span.start < border || self.text(left) != "(" || self.text(right) != ")" {
                 break;
             }
             first = left;
@@ -166,8 +159,7 @@ impl<'s> Layout<'s> {
         }
     }
     pub fn start(&mut self, i: usize, offset: i32) {
-        self.offsets
-            .insert(self.tokens[i].span.start, Offset::Start(offset));
+        self.offsets.insert(self.tokens[i].span.start, Offset::Start(offset));
     }
     pub fn align(&mut self, i: usize, columns: usize, base: usize) {
         if i != base {
@@ -186,9 +178,7 @@ impl<'s> Layout<'s> {
         self.ignores.push(s);
     }
     pub fn line_of(&self, offset: u32) -> usize {
-        self.lines
-            .partition_point(|&v| v <= offset)
-            .saturating_sub(1)
+        self.lines.partition_point(|&v| v <= offset).saturating_sub(1)
     }
     pub fn column(&self, offset: u32) -> usize {
         self.source[self.lines[self.line_of(offset)] as usize..offset as usize]
@@ -197,19 +187,11 @@ impl<'s> Layout<'s> {
     }
     pub fn is_beginning(&self, s: Span) -> bool {
         self.first(s).is_some_and(|i| {
-            self.before(i).is_none_or(|prev| {
-                self.line_of(self.tokens[prev].span.end) < self.line_of(self.tokens[i].span.start)
-            })
+            self.before(i)
+                .is_none_or(|prev| self.line_of(self.tokens[prev].span.end) < self.line_of(self.tokens[i].span.start))
         })
     }
-    pub fn list(
-        &mut self,
-        nodes: &[Span],
-        base: Span,
-        end: Option<Span>,
-        offset: i32,
-        align: bool,
-    ) {
+    pub fn list(&mut self, nodes: &[Span], base: Span, end: Option<Span>, offset: i32, align: bool) {
         let (Some(anchor), Some(mut previous)) = (self.first(base), self.last(base)) else {
             return;
         };
@@ -287,16 +269,21 @@ impl<'s> Layout<'s> {
             let actual_unit = if wrong { "whitespace" } else { unit };
             let plural = |n| if n == 1 { "" } else { "s" };
             let span = Span::new(start, token.span.start);
-            ctx.diagnostic_with_fix(format!("Expected indentation of {expected} {unit}{} but found {actual} {actual_unit}{}.",plural(expected),plural(actual)),span,Fix{span,replacement:self.options.indent_char.to_string().repeat(expected)});
+            ctx.diagnostic_with_fix(
+                format!(
+                    "Expected indentation of {expected} {unit}{} but found {actual} {actual_unit}{}.",
+                    plural(expected),
+                    plural(actual)
+                ),
+                span,
+                Fix {
+                    span,
+                    replacement: self.options.indent_char.to_string().repeat(expected),
+                },
+            );
         } else {
-            for (offset, ch) in prefix
-                .char_indices()
-                .filter(|(_, c)| *c != self.options.indent_char)
-            {
-                let span = Span::new(
-                    start + offset as u32,
-                    start + (offset + ch.len_utf8()) as u32,
-                );
+            for (offset, ch) in prefix.char_indices().filter(|(_, c)| *c != self.options.indent_char) {
+                let span = Span::new(start + offset as u32, start + (offset + ch.len_utf8()) as u32);
                 ctx.diagnostic_with_fix(
                     format!(
                         "Expected {} character, but found {} character.",
@@ -319,8 +306,7 @@ impl<'s> Layout<'s> {
         while cursor < self.tokens.len() {
             let line = self.line_of(self.tokens[cursor].span.start);
             let start = cursor;
-            while cursor < self.tokens.len() && self.line_of(self.tokens[cursor].span.start) == line
-            {
+            while cursor < self.tokens.len() && self.line_of(self.tokens[cursor].span.start) == line {
                 cursor += 1;
             }
             let indexes = (start..cursor).collect::<Vec<_>>();
@@ -330,9 +316,11 @@ impl<'s> Layout<'s> {
             }
             let mut expected = None;
             for &i in &indexes {
-                if self.ignores.iter().any(|s| {
-                    s.start <= self.tokens[i].span.start && self.tokens[i].span.start < s.end
-                }) {
+                if self
+                    .ignores
+                    .iter()
+                    .any(|s| s.start <= self.tokens[i].span.start && self.tokens[i].span.start < s.end)
+                {
                     break;
                 }
                 if let Some(v) = self.get(i) {
@@ -354,8 +342,7 @@ impl<'s> Layout<'s> {
             if let Some(expected) = expected {
                 if let Some(&first) = comments.first() {
                     if previous.is_some_and(|p| {
-                        self.line_of(self.tokens[p].span.end)
-                            < self.line_of(self.tokens[first].span.start)
+                        self.line_of(self.tokens[p].span.end) < self.line_of(self.tokens[first].span.start)
                     }) {
                         self.validate(first, expected, ctx);
                     }

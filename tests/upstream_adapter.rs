@@ -62,11 +62,9 @@ fn independent_matrix_runs_require_explicit_baseline_handling() {
 
 #[test]
 fn type_aware_fixture_configuration_uses_the_imported_suite_project() {
-    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/linter");
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/linter");
     let manifest: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(root.join("manifest.json")).unwrap())
-            .unwrap();
+        serde_json::from_str(&std::fs::read_to_string(root.join("manifest.json")).unwrap()).unwrap();
     let rule = "@typescript-eslint/no-unnecessary-condition";
     let cases: Vec<_> = manifest["cases"]
         .as_array()
@@ -76,8 +74,7 @@ fn type_aware_fixture_configuration_uses_the_imported_suite_project() {
         .collect();
     assert_eq!(cases.len(), 7);
     let expected = root.join("upstream/tsconfig.json");
-    let project: serde_json::Value =
-        serde_json::from_str(&std::fs::read_to_string(&expected).unwrap()).unwrap();
+    let project: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&expected).unwrap()).unwrap();
     assert_eq!(project["compilerOptions"]["strict"], true);
     for case in cases {
         let settings = parity::fixture_settings(&case["config"], None, &root, rule).unwrap();
@@ -100,19 +97,12 @@ fn explicit_typescript_projects_resolve_paths_and_preserve_other_settings() {
         "settings": {"typescript": {"strictNullChecks": true}, "svelte": {"ignoreWarnings": ["test"]}},
         "languageOptions": {"parserOptions": {"project": ["custom/tsconfig.json", absolute]}}
     });
-    let settings = parity::fixture_settings(
-        &config,
-        None,
-        root,
-        "@typescript-eslint/no-unnecessary-condition",
-    )
-    .unwrap();
+    let settings =
+        parity::fixture_settings(&config, None, root, "@typescript-eslint/no-unnecessary-condition").unwrap();
     assert_eq!(
         settings["typescript"]["project"],
         json!([
-            root.join("custom/tsconfig.json")
-                .to_string_lossy()
-                .replace('\\', "/"),
+            root.join("custom/tsconfig.json").to_string_lossy().replace('\\', "/"),
             absolute.to_string_lossy().replace('\\', "/")
         ])
     );
@@ -120,13 +110,8 @@ fn explicit_typescript_projects_resolve_paths_and_preserve_other_settings() {
     assert_eq!(settings["svelte"]["ignoreWarnings"], json!(["test"]));
     let disabled = json!({"languageOptions": {"parserOptions": {"project": false}}});
     assert_eq!(
-        parity::fixture_settings(
-            &disabled,
-            None,
-            root,
-            "@typescript-eslint/no-unnecessary-condition"
-        )
-        .unwrap()["typescript"]["project"],
+        parity::fixture_settings(&disabled, None, root, "@typescript-eslint/no-unnecessary-condition").unwrap()["typescript"]
+            ["project"],
         false
     );
 }
@@ -141,20 +126,14 @@ fn compiler_configuration_preserves_settings_and_executable_module_paths() {
         }}
     });
     let settings = parity::compiler_settings(&config, Some("/fixtures/_config.cjs")).unwrap();
-    assert_eq!(
-        settings["compiler"]["executableConfigPath"],
-        "/fixtures/_config.cjs"
-    );
+    assert_eq!(settings["compiler"]["executableConfigPath"], "/fixtures/_config.cjs");
     assert_eq!(settings["compiler"]["parser"], "@babel/eslint-parser");
     assert_eq!(settings["compiler"]["customElement"], true);
     assert_eq!(
         settings["compiler"]["svelteConfig"],
         config["languageOptions"]["parserOptions"]["svelteConfig"]
     );
-    assert_eq!(
-        settings["svelte"]["kit"]["files"]["routes"],
-        "custom/routes"
-    );
+    assert_eq!(settings["svelte"]["kit"]["files"]["routes"], "custom/routes");
     assert_eq!(settings["svelte"]["ignoreWarnings"], json!(["example"]));
     assert_eq!(parity::compiler_settings(&json!({}), None), None);
 }
@@ -166,11 +145,12 @@ fn script_parse_errors_distinguish_modifier_checks_from_syntax_errors() {
     let allocator = Allocator::default();
     let parsed = Parser::new(&allocator, source, SourceType::ts()).parse();
     assert_eq!(parsed.program.body.len(), 1);
-    assert!(parsed
-        .diagnostics
-        .iter()
-        .any(|error| error.code.scope.as_deref() == Some("TS")
-            && error.code.number.as_deref() == Some("1029")));
+    assert!(
+        parsed
+            .diagnostics
+            .iter()
+            .any(|error| error.code.scope.as_deref() == Some("TS") && error.code.number.as_deref() == Some("1029"))
+    );
     assert!(parity::script_parse_errors(source, true).is_empty());
     // The same sequence is not JavaScript, and invalid TS stays a parse gap.
     assert!(!parity::script_parse_errors(source, false).is_empty());
@@ -182,10 +162,7 @@ fn script_parse_errors_distinguish_modifier_checks_from_syntax_errors() {
         assert!(!errors.is_empty(), "{invalid}");
         assert!(errors.iter().all(|error| !error.contains("must precede")));
     }
-    assert!(
-        !parity::script_parse_errors("class Box { readonly readonly value: number; }", true)
-            .is_empty()
-    );
+    assert!(!parity::script_parse_errors("class Box { readonly readonly value: number; }", true).is_empty());
 }
 
 #[test]
@@ -220,10 +197,7 @@ fn fixture_messages_normalize_only_the_evaluated_filename() {
                 filename.replace("input.svelte", "other.svelte"),
             ] {
                 let message = format!("Error: \"{other}:4:11: Unknown word red\"");
-                assert_eq!(
-                    parity::fixture_message(&message, absolute, cwd, original),
-                    message
-                );
+                assert_eq!(parity::fixture_message(&message, absolute, cwd, original), message);
             }
         }
     }
@@ -242,10 +216,7 @@ fn fixture_messages_normalize_only_the_evaluated_filename() {
 #[test]
 fn locations_use_utf16_and_javascript_line_breaks() {
     let source = "a😀b\r\nç\rX\u{2028}Y\u{2029}Z";
-    assert_eq!(
-        parity::location(source, "a😀".len() as u32).unwrap(),
-        (1, 4)
-    );
+    assert_eq!(parity::location(source, "a😀".len() as u32).unwrap(), (1, 4));
     for (needle, line) in [("ç", 2), ("X", 3), ("Y", 4), ("Z", 5)] {
         assert_eq!(
             parity::location(source, source.find(needle).unwrap() as u32).unwrap(),
@@ -296,14 +267,16 @@ fn fixes_sort_and_skip_conflicts_in_a_single_pass() {
     ];
     assert_eq!(parity::apply_fixes("abcdef", &fixes).unwrap(), "aBCdEf");
     assert_eq!(parity::apply_fixes("unchanged", &[]).unwrap(), "unchanged");
-    assert!(parity::apply_fixes(
-        "😀",
-        &[Fix {
-            span: Span::new(1, 2),
-            replacement: "bad".into()
-        }]
-    )
-    .is_err());
+    assert!(
+        parity::apply_fixes(
+            "😀",
+            &[Fix {
+                span: Span::new(1, 2),
+                replacement: "bad".into()
+            }]
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -312,13 +285,7 @@ fn baseline_rejects_new_and_changed_gaps_but_allows_improvements() {
         "known": {"diagnostics": "old", "version_skip": "gate"}
     }))
     .unwrap();
-    assert!(!parity::is_regression(
-        &baseline,
-        "known",
-        "diagnostics",
-        "old",
-        false
-    ));
+    assert!(!parity::is_regression(&baseline, "known", "diagnostics", "old", false));
     assert!(parity::is_regression(
         &baseline,
         "known",
@@ -326,34 +293,10 @@ fn baseline_rejects_new_and_changed_gaps_but_allows_improvements() {
         "changed",
         false
     ));
-    assert!(parity::is_regression(
-        &baseline,
-        "new",
-        "diagnostics",
-        "old",
-        false
-    ));
-    assert!(parity::is_regression(
-        &baseline,
-        "known",
-        "fix_output",
-        "old",
-        false
-    ));
-    assert!(parity::is_regression(
-        &baseline,
-        "known",
-        "diagnostics",
-        "old",
-        true
-    ));
-    assert!(!parity::is_regression(
-        &baseline,
-        "known",
-        "version_skip",
-        "gate",
-        true
-    ));
+    assert!(parity::is_regression(&baseline, "new", "diagnostics", "old", false));
+    assert!(parity::is_regression(&baseline, "known", "fix_output", "old", false));
+    assert!(parity::is_regression(&baseline, "known", "diagnostics", "old", true));
+    assert!(!parity::is_regression(&baseline, "known", "version_skip", "gate", true));
 }
 
 fn alternative(description: &str, start: u32, end: u32, replacement: &str) -> Suggestion {
@@ -378,10 +321,7 @@ fn suggestions_keep_diagnostic_association_and_apply_alternatives_independently(
                 span: Span::new(0, 3),
                 replacement: "automatic".into(),
             }),
-            suggestions: vec![
-                alternative("first", 0, 2, "X"),
-                alternative("second", 1, 3, "Y"),
-            ],
+            suggestions: vec![alternative("first", 0, 2, "X"), alternative("second", 1, 3, "Y")],
         },
         LintDiagnostic {
             rule_name: "test",
@@ -407,14 +347,7 @@ fn suggestions_keep_diagnostic_association_and_apply_alternatives_independently(
         ]
     );
     assert_eq!(
-        parity::apply_fixes(
-            source,
-            &diags
-                .iter()
-                .filter_map(|d| d.fix.clone())
-                .collect::<Vec<_>>()
-        )
-        .unwrap(),
+        parity::apply_fixes(source, &diags.iter().filter_map(|d| d.fix.clone()).collect::<Vec<_>>()).unwrap(),
         "automatic"
     );
 }
@@ -456,16 +389,11 @@ fn suggestion_only_diagnostics_follow_ignore_filtering_without_becoming_fixes() 
     let disabled = json!({"rules": linter.rules().iter()
         .map(|rule| (rule.name().to_string(), json!("off")))
         .collect::<serde_json::Map<_, _>>()});
-    linter.remove_disabled_rules(
-        &oxvelte::config::OxvelteConfig::parse(&disabled.to_string()).unwrap(),
-    );
+    linter.remove_disabled_rules(&oxvelte::config::OxvelteConfig::parse(&disabled.to_string()).unwrap());
     let linter = linter.with_custom_rules(vec![Box::new(SuggestingRule)]);
     for (source, expected) in [
         ("<p>x</p>", 1),
-        (
-            "<!-- eslint-disable-next-line svelte/test-suggestions -->\n<p>x</p>",
-            0,
-        ),
+        ("<!-- eslint-disable-next-line svelte/test-suggestions -->\n<p>x</p>", 0),
     ] {
         let allocator = oxc::allocator::Allocator::default();
         let result = oxvelte::parser::parse(source, &allocator);

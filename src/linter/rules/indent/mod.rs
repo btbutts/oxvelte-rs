@@ -19,11 +19,7 @@ impl Rule for Indent {
         "svelte/indent"
     }
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
-        if !ctx
-            .file_path
-            .as_ref()
-            .is_some_and(|p| p.ends_with(".svelte"))
-        {
+        if !ctx.file_path.as_ref().is_some_and(|p| p.ends_with(".svelte")) {
             return;
         }
         let mut layout = Layout::new(ctx.source, Options::parse(ctx.config.options.as_ref()));
@@ -83,31 +79,28 @@ impl Rule for Indent {
                     .iter()
                     .chain(ctx.ast.module.iter())
                     .find(|script| script.content_span == span)
-                    .and_then(|script| {
-                        layout.first(Span::new(script.span.start, script.content_span.start))
-                    })
+                    .and_then(|script| layout.first(Span::new(script.span.start, script.content_span.start)))
                 {
                     for statement in &parsed.program.body {
                         let s = statement.span();
-                        if let Some(first) = layout.first(Span::new(
-                            (base + s.start as i64) as u32,
-                            (base + s.end as i64) as u32,
-                        )) {
+                        if let Some(first) =
+                            layout.first(Span::new((base + s.start as i64) as u32, (base + s.end as i64) as u32))
+                        {
                             layout.set(first, i32::from(layout.options.indent_script), anchor);
                         }
                     }
                 }
             }
-            let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+            let semantic = SemanticBuilder::new()
+                .with_build_nodes(true)
+                .build(&parsed.program)
+                .semantic;
             for node in semantic.nodes().iter() {
                 let kind = node.kind();
                 let s = kind.span();
                 let start = base + s.start as i64;
                 let end = base + s.end as i64;
-                if start < span.start as i64
-                    || end > span.end as i64
-                    || matches!(kind, AstKind::Program(_))
-                {
+                if start < span.start as i64 || end > span.end as i64 || matches!(kind, AstKind::Program(_)) {
                     continue;
                 }
                 let ancestors = semantic
@@ -163,10 +156,7 @@ mod tests {
         let source = "<!-- 😀 -->\r\n<script data-note=\"<\">\r\nlet x = 1;\r\n</script>";
         let d = lint(source, serde_json::json!([]));
         assert_eq!(d.len(), 1);
-        assert_eq!(
-            d[0].message,
-            "Expected indentation of 2 spaces but found 0 spaces."
-        );
+        assert_eq!(d[0].message, "Expected indentation of 2 spaces but found 0 spaces.");
         assert_eq!(d[0].span.start, source.find("let x").unwrap() as u32);
     }
     #[test]
@@ -174,14 +164,8 @@ mod tests {
         let source = "<script>\n \tlet x = 1;\n</script>";
         let d = lint(source, serde_json::json!([]));
         assert_eq!(d.len(), 1);
-        assert_eq!(
-            d[0].message,
-            "Expected \" \" character, but found \"\\t\" character."
-        );
-        assert_eq!(
-            &source[d[0].span.start as usize..d[0].span.end as usize],
-            "\t"
-        );
+        assert_eq!(d[0].message, "Expected \" \" character, but found \"\\t\" character.");
+        assert_eq!(&source[d[0].span.start as usize..d[0].span.end as usize], "\t");
         assert_eq!(d[0].fix.as_ref().unwrap().replacement, " ");
     }
     #[test]
@@ -195,10 +179,7 @@ mod tests {
     #[test]
     fn ignored_node_types_preserve_their_actual_indentation() {
         let source = "<script>\nconst x = [\n1,\n2\n];\n</script>";
-        let d = lint(
-            source,
-            serde_json::json!([{"ignoredNodes":["ArrayExpression"]}]),
-        );
+        let d = lint(source, serde_json::json!([{"ignoredNodes":["ArrayExpression"]}]));
         assert_eq!(d.len(), 1);
         assert_eq!(d[0].span.start, source.find("const x").unwrap() as u32);
     }

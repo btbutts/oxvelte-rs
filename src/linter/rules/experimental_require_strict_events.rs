@@ -22,10 +22,7 @@ impl Rule for ExperimentalRequireStrictEvents {
             )
         };
         let scripts = [&ctx.ast.instance, &ctx.ast.module];
-        if !scripts
-            .iter()
-            .any(|s| s.as_ref().map_or(false, |s| is_ts(s)))
-        {
+        if !scripts.iter().any(|s| s.as_ref().is_some_and(is_ts)) {
             return;
         }
         let Some(script) = ctx.ast.instance.as_ref() else {

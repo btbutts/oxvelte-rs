@@ -1,7 +1,7 @@
 //! `svelte/prefer-attribute-interpolation` prefers markup interpolation for string templates.
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use crate::parser::expression::{parse_template_expression, unwrap_template_expression};
 use oxc::allocator::Allocator;
 use oxc::ast::ast::Expression;
@@ -50,10 +50,7 @@ impl Rule for PreferAttributeInterpolation {
                 {
                     continue;
                 }
-                ctx.diagnostic(
-                    "Prefer attribute interpolation over a template literal.",
-                    span,
-                );
+                ctx.diagnostic("Prefer attribute interpolation over a template literal.", span);
             }
         });
     }
@@ -90,8 +87,6 @@ mod tests {
             &source[diagnostics[0].span.start as usize..diagnostics[0].span.end as usize],
             "{`prefix${value}`}"
         );
-        assert!(diagnostics
-            .iter()
-            .all(|d| d.fix.is_none() && d.suggestions.is_empty()));
+        assert!(diagnostics.iter().all(|d| d.fix.is_none() && d.suggestions.is_empty()));
     }
 }

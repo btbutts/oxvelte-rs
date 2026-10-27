@@ -1,7 +1,7 @@
 //! `svelte/no-bind-value-on-checkable-inputs` suggests checked/group bindings.
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule, Suggestion};
+use crate::linter::{Fix, LintContext, Rule, Suggestion, walk_template_nodes};
 use oxc::ast::ast::Expression;
 use oxc::span::Span;
 
@@ -27,24 +27,17 @@ impl Rule for NoBindValueOnCheckableInputs {
             let input_type = match value {
                 AttributeValue::Static(value) => Some(value.clone()),
                 AttributeValue::Expression(_) => meta.expression_ast.and_then(|expression| {
-                    static_string(
-                        expression,
-                        ctx,
-                        meta.expression_span.unwrap_or(meta.name_span),
-                        0,
-                    )
+                    static_string(expression, ctx, meta.expression_span.unwrap_or(meta.name_span), 0)
                 }),
                 AttributeValue::Concat(parts) if parts.len() == 1 => match &parts[0] {
-                    AttributeValuePart::Expression(_) => {
-                        meta.parts[0].expression_ast.and_then(|expression| {
-                            static_string(
-                                expression,
-                                ctx,
-                                meta.parts[0].expression_span.unwrap_or(meta.parts[0].span),
-                                0,
-                            )
-                        })
-                    }
+                    AttributeValuePart::Expression(_) => meta.parts[0].expression_ast.and_then(|expression| {
+                        static_string(
+                            expression,
+                            ctx,
+                            meta.parts[0].expression_span.unwrap_or(meta.parts[0].span),
+                            0,
+                        )
+                    }),
                     AttributeValuePart::Static(value) => Some(value.clone()),
                 },
                 _ => None,
@@ -60,10 +53,7 @@ impl Rule for NoBindValueOnCheckableInputs {
                 return;
             };
             let shorthand = meta.equals_span.is_none();
-            let key_span = Span::new(
-                span.start,
-                meta.directive_subject_span.unwrap_or(meta.name_span).end,
-            );
+            let key_span = Span::new(span.start, meta.directive_subject_span.unwrap_or(meta.name_span).end);
             let suggestions = if input_type == "checkbox" {
                 &["checked", "group"][..]
             } else {
@@ -93,20 +83,12 @@ impl Rule for NoBindValueOnCheckableInputs {
     }
 }
 
-fn static_string<'a>(
-    expression: &'a Expression<'a>,
-    ctx: &LintContext<'a>,
-    span: Span,
-    depth: u8,
-) -> Option<String> {
+fn static_string<'a>(expression: &'a Expression<'a>, ctx: &LintContext<'a>, span: Span, depth: u8) -> Option<String> {
     if depth > 16 {
         return None;
     }
-    let expression = super::no_not_function_handler::resolve_handler_expression(
-        expression.without_parentheses(),
-        ctx,
-        span,
-    );
+    let expression =
+        super::no_not_function_handler::resolve_handler_expression(expression.without_parentheses(), ctx, span);
     match expression.without_parentheses() {
         Expression::StringLiteral(literal) => Some(literal.value.display().to_string()),
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
@@ -116,9 +98,7 @@ fn static_string<'a>(
             .cooked
             .as_ref()
             .map(|c| c.display().to_string()),
-        Expression::BinaryExpression(binary)
-            if binary.operator == oxc::syntax::operator::BinaryOperator::Addition =>
-        {
+        Expression::BinaryExpression(binary) if binary.operator == oxc::syntax::operator::BinaryOperator::Addition => {
             Some(format!(
                 "{}{}",
                 static_string(&binary.left, ctx, span, depth + 1)?,
@@ -149,15 +129,9 @@ mod tests {
         assert_eq!(diagnostics[0].suggestions.len(), 2);
         assert_eq!(diagnostics[1].suggestions.len(), 1);
         let fix = &diagnostics[0].suggestions[0].fix;
-        assert_eq!(
-            &source[fix.span.start as usize..fix.span.end as usize],
-            "bind:value"
-        );
+        assert_eq!(&source[fix.span.start as usize..fix.span.end as usize], "bind:value");
         assert_eq!(fix.replacement, "bind:checked");
-        assert_eq!(
-            diagnostics[1].suggestions[0].fix.replacement,
-            "bind:group={value}"
-        );
+        assert_eq!(diagnostics[1].suggestions[0].fix.replacement, "bind:group={value}");
         assert!(diagnostics.iter().all(|d| d.fix.is_none()));
     }
 }

@@ -2,7 +2,7 @@
 //! 🔧 Fixable
 
 use crate::ast::{Attribute, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 
 pub struct MaxAttributesPerLine;
 
@@ -46,11 +46,8 @@ impl Rule for MaxAttributesPerLine {
             )
             .collect();
 
-        let offset_to_line = |offset: usize| -> usize {
-            line_starts
-                .partition_point(|&start| start <= offset)
-                .saturating_sub(1)
-        };
+        let offset_to_line =
+            |offset: usize| -> usize { line_starts.partition_point(|&start| start <= offset).saturating_sub(1) };
 
         walk_template_nodes(&ctx.ast.html, &mut |node| {
             if let TemplateNode::Element(el) = node {
@@ -117,10 +114,7 @@ fn attr_name(attr: &Attribute, source: &str) -> String {
             }
         }
         Attribute::Directive {
-            kind,
-            name,
-            modifiers,
-            ..
+            kind, name, modifiers, ..
         } => {
             let mut label = format!("{}:{name}", directive_prefix(kind));
             for modifier in modifiers {
@@ -149,9 +143,9 @@ fn directive_prefix(kind: &DirectiveKind) -> &'static str {
 
 fn attr_span(attr: &Attribute) -> oxc::span::Span {
     match attr {
-        Attribute::NormalAttribute { span, .. }
-        | Attribute::Spread { span }
-        | Attribute::Directive { span, .. } => *span,
+        Attribute::NormalAttribute { span, .. } | Attribute::Spread { span } | Attribute::Directive { span, .. } => {
+            *span
+        }
     }
 }
 
@@ -165,9 +159,7 @@ where
         let same = groups
             .last()
             .and_then(|g| g.first())
-            .map_or(false, |&first| {
-                offset_to_line(attr_span(&attrs[first]).end as usize) == start_line
-            });
+            .is_some_and(|&first| offset_to_line(attr_span(&attrs[first]).end as usize) == start_line);
         if same {
             groups.last_mut().unwrap().push(index);
         } else {

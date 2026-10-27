@@ -16,8 +16,8 @@
 
 use cssparser::{CowRcStr, Parser as CssParser, ParserInput, SourceLocation, ToCss};
 use selectors::parser::{
-    Component as SelComponent, NonTSPseudoClass, ParseRelative, Parser as SelParser, PseudoElement,
-    Selector, SelectorImpl, SelectorList, SelectorParseErrorKind,
+    Component as SelComponent, NonTSPseudoClass, ParseRelative, Parser as SelParser, PseudoElement, Selector,
+    SelectorImpl, SelectorList, SelectorParseErrorKind,
 };
 
 /// Tiny string wrapper satisfying `selectors`' identifier / atom bounds.
@@ -35,7 +35,7 @@ pub struct OxAtom {
 impl OxAtom {
     fn new(s: &str) -> Self {
         use std::hash::{BuildHasher, Hasher};
-        let mut hasher = rustc_hash::FxBuildHasher::default().build_hasher();
+        let mut hasher = rustc_hash::FxBuildHasher.build_hasher();
         hasher.write(s.as_bytes());
         OxAtom {
             value: s.into(),
@@ -267,10 +267,7 @@ where
     type QualifiedRule = ();
     type Error = ();
 
-    fn parse_prelude<'t>(
-        &mut self,
-        input: &mut CssParser<'i, 't>,
-    ) -> Result<Self::Prelude, WalkError<'i>> {
+    fn parse_prelude<'t>(&mut self, input: &mut CssParser<'i, 't>) -> Result<Self::Prelude, WalkError<'i>> {
         let start = input.position();
         // `input` is already delimited to stop at the upcoming `{` — the
         // `next_including_whitespace` loop just drains to the end of that
@@ -359,12 +356,8 @@ where
     }
 }
 
-fn visit_component<F>(
-    component: &SelComponent<OxSelector>,
-    visit_global: bool,
-    in_global: bool,
-    f: &mut F,
-) where
+fn visit_component<F>(component: &SelComponent<OxSelector>, visit_global: bool, in_global: bool, f: &mut F)
+where
     F: FnMut(&SelComponent<OxSelector>, bool),
 {
     f(component, in_global);
@@ -423,11 +416,7 @@ mod tests {
                 local.push(a.as_str().to_string());
             }
         });
-        assert_eq!(
-            local,
-            vec!["bar"],
-            "with visit_global=false, :global body is hidden"
-        );
+        assert_eq!(local, vec!["bar"], "with visit_global=false, :global body is hidden");
 
         let mut all = Vec::new();
         walk_components(&list, true, &mut |c, in_global| {
@@ -478,10 +467,7 @@ mod tests {
         for_each_rule_prelude(css, 0, |text, _, in_global| {
             got.push((text.trim().to_string(), in_global));
         });
-        assert_eq!(
-            got,
-            vec![(".a".to_string(), true), (".b".to_string(), true)]
-        );
+        assert_eq!(got, vec![(".a".to_string(), true), (".b".to_string(), true)]);
     }
 
     #[test]

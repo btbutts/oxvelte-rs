@@ -2,7 +2,7 @@
 //! defined in the `<style>` block.
 
 use crate::ast::{Attribute, AttributeValue, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use std::collections::HashSet;
 pub struct NoUnusedClassName;
 
@@ -20,11 +20,7 @@ impl Rule for NoUnusedClassName {
             .and_then(|arr| arr.first())
             .and_then(|v| v.get("allowedClassNames"))
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_default();
 
         let (mut allowed_plain, mut allowed_patterns) = (HashSet::new(), Vec::new());
@@ -65,10 +61,12 @@ impl Rule for NoUnusedClassName {
 
                 for attr in &el.attributes {
                     match attr {
-                        Attribute::NormalAttribute { name, value, .. } if name == "class" => {
-                            if let AttributeValue::Static(val) = value {
-                                element_classes.extend(val.split_whitespace().map(String::from));
-                            }
+                        Attribute::NormalAttribute {
+                            name,
+                            value: AttributeValue::Static(val),
+                            ..
+                        } if name == "class" => {
+                            element_classes.extend(val.split_whitespace().map(String::from));
                         }
                         Attribute::Directive {
                             kind: DirectiveKind::Class,
@@ -134,12 +132,10 @@ where
             | cssparser::Token::ParenthesisBlock
             | cssparser::Token::CurlyBracketBlock
             | cssparser::Token::SquareBracketBlock => {
-                let _ = parser.parse_nested_block(
-                    |inner| -> Result<(), cssparser::ParseError<'_, ()>> {
-                        walk_tokens(inner, f);
-                        Ok(())
-                    },
-                );
+                let _ = parser.parse_nested_block(|inner| -> Result<(), cssparser::ParseError<'_, ()>> {
+                    walk_tokens(inner, f);
+                    Ok(())
+                });
             }
             _ => {}
         }
@@ -163,19 +159,9 @@ fn simple_regex_match(pattern: &str, text: &str) -> bool {
     false
 }
 
-fn regex_match_inner_impl(
-    pattern: &str,
-    text: &str,
-    pi: usize,
-    ti: usize,
-    must_consume_all: bool,
-) -> bool {
+fn regex_match_inner_impl(pattern: &str, text: &str, pi: usize, ti: usize, must_consume_all: bool) -> bool {
     if pi >= pattern.len() {
-        return if must_consume_all {
-            ti >= text.len()
-        } else {
-            true
-        };
+        return if must_consume_all { ti >= text.len() } else { true };
     }
     let pb = pattern.as_bytes();
     let tb = text.as_bytes();
@@ -206,20 +192,11 @@ fn regex_match_inner_impl(
                 while count < max && t < tb.len() && matches_char(tb[t]) {
                     count += 1;
                     t += 1;
-                    if count >= min
-                        && regex_match_inner_impl(pattern, text, next_pi, t, must_consume_all)
-                    {
+                    if count >= min && regex_match_inner_impl(pattern, text, next_pi, t, must_consume_all) {
                         return true;
                     }
                 }
-                return count >= min
-                    && regex_match_inner_impl(
-                        pattern,
-                        text,
-                        next_pi,
-                        ti + count,
-                        must_consume_all,
-                    );
+                return count >= min && regex_match_inner_impl(pattern, text, next_pi, ti + count, must_consume_all);
             }
         }
         if ti < tb.len() && matches_char(tb[ti]) {

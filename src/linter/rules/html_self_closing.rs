@@ -12,7 +12,7 @@
 //! the template parser — no byte scanning at rule time.
 
 use crate::ast::{Element, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 
 fn is_svg_element(name: &str) -> bool {
@@ -144,8 +144,8 @@ fn is_math_element(name: &str) -> bool {
 }
 
 const VOID_ELEMENTS: &[&str] = &[
-    "area", "base", "br", "col", "embed", "hr", "img", "input", "keygen", "link", "menuitem",
-    "meta", "param", "source", "track", "wbr",
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "keygen", "link", "menuitem", "meta", "param",
+    "source", "track", "wbr",
 ];
 
 pub struct HtmlSelfClosing;
@@ -168,36 +168,35 @@ impl Rule for HtmlSelfClosing {
             .and_then(|arr| arr.first());
         let preset = opts.and_then(|v| v.as_str());
 
-        let (component_opt, normal_opt, void_opt, svg_opt, math_opt, svelte_opt) =
-            if let Some(p) = preset {
-                match p {
-                    "html" => ("never", "never", "always", "always", "never", "always"),
-                    "none" => ("never", "never", "never", "never", "never", "never"),
-                    "all" => ("always", "always", "always", "always", "always", "always"),
-                    _ => ("always", "never", "always", "always", "always", "always"),
-                }
-            } else {
-                (
-                    opts.and_then(|o| o.get("component"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("always"),
-                    opts.and_then(|o| o.get("normal"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("never"),
-                    opts.and_then(|o| o.get("void"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("always"),
-                    opts.and_then(|o| o.get("svg"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("always"),
-                    opts.and_then(|o| o.get("math"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("never"),
-                    opts.and_then(|o| o.get("svelte"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("always"),
-                )
-            };
+        let (component_opt, normal_opt, void_opt, svg_opt, math_opt, svelte_opt) = if let Some(p) = preset {
+            match p {
+                "html" => ("never", "never", "always", "always", "never", "always"),
+                "none" => ("never", "never", "never", "never", "never", "never"),
+                "all" => ("always", "always", "always", "always", "always", "always"),
+                _ => ("always", "never", "always", "always", "always", "always"),
+            }
+        } else {
+            (
+                opts.and_then(|o| o.get("component"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("always"),
+                opts.and_then(|o| o.get("normal"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("never"),
+                opts.and_then(|o| o.get("void"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("always"),
+                opts.and_then(|o| o.get("svg"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("always"),
+                opts.and_then(|o| o.get("math"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("never"),
+                opts.and_then(|o| o.get("svelte"))
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("always"),
+            )
+        };
         let component_opt = component_opt.to_string();
         let normal_opt = normal_opt.to_string();
         let void_opt = void_opt.to_string();
@@ -238,9 +237,10 @@ impl Rule for HtmlSelfClosing {
 
 fn is_element_empty(el: &Element) -> bool {
     el.children.is_empty()
-        || el.children.iter().all(
-            |c| matches!(c, TemplateNode::Text(t) if t.data.chars().all(|ch| ch.is_whitespace())),
-        )
+        || el
+            .children
+            .iter()
+            .all(|c| matches!(c, TemplateNode::Text(t) if t.data.chars().all(|ch| ch.is_whitespace())))
 }
 
 fn classify<'o>(
@@ -253,9 +253,7 @@ fn classify<'o>(
     svelte_opt: &'o str,
 ) -> (&'o str, &'static str) {
     match el.kind() {
-        crate::ast::ElementKind::SvelteSpecial(_) => {
-            return (svelte_opt, "Svelte special elements")
-        }
+        crate::ast::ElementKind::SvelteSpecial(_) => return (svelte_opt, "Svelte special elements"),
         crate::ast::ElementKind::Component => return (component_opt, "Svelte custom components"),
         crate::ast::ElementKind::Html => {}
     }
@@ -285,10 +283,7 @@ fn report(el: &Element, label: &str, should_be_closed: bool, ctx: &mut LintConte
         let (fix_span, replacement) = if let Some(end) = el.end_tag_span {
             (Span::new(el.start_tag_end, end.end), "/>".to_string())
         } else {
-            (
-                Span::new(el.start_tag_end, el.start_tag_end),
-                "/".to_string(),
-            )
+            (Span::new(el.start_tag_end, el.start_tag_end), "/".to_string())
         };
         ctx.diagnostic_with_fix(
             format!("Require self-closing on {}.", label),

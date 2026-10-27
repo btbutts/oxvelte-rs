@@ -13,8 +13,8 @@
 //! and `ctx.module_semantic`, where the `Program` node IS the script body.
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::VariableDeclarationKind;
 use oxc::ast::AstKind;
+use oxc::ast::ast::VariableDeclarationKind;
 use oxc::semantic::{AstNodes, NodeId};
 use oxc::span::Span;
 
@@ -104,13 +104,7 @@ impl Rule for NoInnerDeclarations {
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first())
             .and_then(|v| v.as_str())
-            .map(|s| {
-                if s == "both" {
-                    Mode::Both
-                } else {
-                    Mode::Functions
-                }
-            })
+            .map(|s| if s == "both" { Mode::Both } else { Mode::Functions })
             .unwrap_or(Mode::Functions);
 
         // We collect (message, span) before reporting because `ctx.diagnostic`
@@ -119,8 +113,7 @@ impl Rule for NoInnerDeclarations {
         let mut findings: Vec<(String, Span)> = Vec::new();
 
         for (semantic, content_offset) in [
-            ctx.instance_semantic
-                .map(|s| (s, ctx.instance_content_offset)),
+            ctx.instance_semantic.map(|s| (s, ctx.instance_content_offset)),
             ctx.module_semantic.map(|s| (s, ctx.module_content_offset)),
         ]
         .into_iter()
@@ -131,22 +124,14 @@ impl Rule for NoInnerDeclarations {
                 let parent_kind = nodes.parent_kind(node.id());
                 match node.kind() {
                     AstKind::Function(f) if f.is_declaration() => {
-                        if allow_block_scoped
-                            && semantic
-                                .scoping()
-                                .scope_flags(node.scope_id())
-                                .is_strict_mode()
-                        {
+                        if allow_block_scoped && semantic.scoping().scope_flags(node.scope_id()).is_strict_mode() {
                             continue;
                         }
                         if is_root_scope_kind(parent_kind) {
                             continue;
                         }
                         let target = nearest_target(node.id(), nodes);
-                        let msg = format!(
-                            "Move function declaration to {} root.",
-                            target.body_phrase()
-                        );
+                        let msg = format!("Move function declaration to {} root.", target.body_phrase());
                         let s = content_offset + f.span.start;
                         let e = content_offset + f.span.end;
                         findings.push((msg, Span::new(s, e)));
@@ -159,18 +144,13 @@ impl Rule for NoInnerDeclarations {
                         if is_root_scope_kind(parent_kind)
                             || matches!(
                                 parent_kind,
-                                AstKind::ForStatement(_)
-                                    | AstKind::ForInStatement(_)
-                                    | AstKind::ForOfStatement(_)
+                                AstKind::ForStatement(_) | AstKind::ForInStatement(_) | AstKind::ForOfStatement(_)
                             )
                         {
                             continue;
                         }
                         let target = nearest_target(node.id(), nodes);
-                        let msg = format!(
-                            "Move variable declaration to {} root.",
-                            target.body_phrase()
-                        );
+                        let msg = format!("Move variable declaration to {} root.", target.body_phrase());
                         let s = content_offset + vd.span.start;
                         let e = content_offset + vd.span.end;
                         findings.push((msg, Span::new(s, e)));

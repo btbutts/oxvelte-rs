@@ -19,17 +19,15 @@
 //! - `ignoreReadBeforeAssign` is currently a no-op — implementing it
 //!   faithfully needs read/write-ordering analysis we don't have yet.
 
-use crate::ast::{
-    Attribute, AttributeValue, AttributeValuePart, DirectiveKind, Fragment, TemplateNode,
-};
+use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, Fragment, TemplateNode};
 use crate::linter::walk_template_nodes;
 use crate::linter::{Fix, LintContext, Rule};
-use oxc::ast::ast::{
-    ArrayAssignmentTarget, AssignmentTarget, AssignmentTargetMaybeDefault,
-    AssignmentTargetProperty, BindingPattern, Expression, IdentifierReference, ModuleExportName,
-    ObjectAssignmentTarget, SimpleAssignmentTarget, VariableDeclarationKind,
-};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{
+    ArrayAssignmentTarget, AssignmentTarget, AssignmentTargetMaybeDefault, AssignmentTargetProperty, BindingPattern,
+    Expression, IdentifierReference, ModuleExportName, ObjectAssignmentTarget, SimpleAssignmentTarget,
+    VariableDeclarationKind,
+};
 use oxc::semantic::{AstNodes, NodeId, Scoping, Semantic, SymbolId};
 use oxc::span::Span;
 use std::collections::HashSet;
@@ -76,29 +74,16 @@ impl Rule for PreferConst {
         let excluded_runes: Vec<String> = opts
             .and_then(|o| o.get("excludedRunes"))
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
+            .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
             .unwrap_or_else(|| vec!["$props".into(), "$derived".into()]);
-        let destructuring_all = opts
-            .and_then(|o| o.get("destructuring"))
-            .and_then(|v| v.as_str())
-            == Some("all");
+        let destructuring_all = opts.and_then(|o| o.get("destructuring")).and_then(|v| v.as_str()) == Some("all");
 
         let mut findings: Vec<Finding> = Vec::new();
         let template_writes = collect_template_writes(ctx);
         collect_template_findings(ctx, &excluded_runes, destructuring_all, &mut findings);
 
-        let instance_writes = ctx
-            .instance_semantic
-            .map(collect_semantic_writes)
-            .unwrap_or_default();
-        let module_writes = ctx
-            .module_semantic
-            .map(collect_semantic_writes)
-            .unwrap_or_default();
+        let instance_writes = ctx.instance_semantic.map(collect_semantic_writes).unwrap_or_default();
+        let module_writes = ctx.module_semantic.map(collect_semantic_writes).unwrap_or_default();
         let mut module_external_writes = instance_writes.unresolved_names.clone();
         module_external_writes.extend(template_writes.iter().cloned());
 
@@ -229,17 +214,11 @@ fn collect<'a>(
         // eligible (matches ESLint core's behavior — partial declarations
         // would leave the keyword inconsistent with the un-fixed members).
         let whole_declaration_eligible = total_bindings > 0 && total_eligible == total_bindings;
-        let let_keyword_span = Span::new(
-            content_offset + vd.span.start,
-            content_offset + vd.span.start + 3,
-        );
+        let let_keyword_span = Span::new(content_offset + vd.span.start, content_offset + vd.span.start + 3);
 
         for eligible in &per_declarator {
             for (name, binding_span) in eligible {
-                let abs_span = Span::new(
-                    content_offset + binding_span.start,
-                    content_offset + binding_span.end,
-                );
+                let abs_span = Span::new(content_offset + binding_span.start, content_offset + binding_span.end);
                 let message = format!("'{}' is never reassigned. Use 'const' instead.", name);
                 let fix = whole_declaration_eligible.then(|| Fix {
                     span: let_keyword_span,
@@ -256,9 +235,12 @@ fn collect<'a>(
 }
 
 fn is_inside_export_named_decl(nodes: &AstNodes, node_id: NodeId) -> bool {
-    nodes
-        .ancestor_ids(node_id)
-        .any(|ancestor| matches!(nodes.kind(ancestor), AstKind::ExportNamedDeclaration(_) | AstKind::ExportDeclaration(_) | AstKind::ExportFromDeclaration(_)))
+    nodes.ancestor_ids(node_id).any(|ancestor| {
+        matches!(
+            nodes.kind(ancestor),
+            AstKind::ExportNamedDeclaration(_) | AstKind::ExportDeclaration(_) | AstKind::ExportFromDeclaration(_)
+        )
+    })
 }
 
 fn collect_exported_specifier_symbols<'a>(semantic: &'a Semantic<'a>) -> HashSet<SymbolId> {
@@ -292,13 +274,7 @@ fn collect_template_findings<'a>(
     findings: &mut Vec<Finding>,
 ) {
     visit_template_expressions(&ctx.ast.html, &mut |text, expression_span| {
-        collect_expression_findings(
-            text,
-            expression_span.start,
-            excluded_runes,
-            destructuring_all,
-            findings,
-        );
+        collect_expression_findings(text, expression_span.start, excluded_runes, destructuring_all, findings);
     });
 }
 
@@ -320,7 +296,10 @@ fn collect_expression_findings(
     if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
     collect(
         &semantic,
         text_start.saturating_sub(1),
@@ -373,13 +352,13 @@ fn collect_template_writes(ctx: &LintContext<'_>) -> HashSet<String> {
                             writes.insert(name.clone());
                         }
                         AttributeValue::Expression(text) => {
-                            if let Some(name) = el
-                                .attribute_expression_ast(idx)
-                                .and_then(bare_identifier_expr)
-                                .or_else(|| {
-                                    let trimmed = text.trim();
-                                    is_identifier_text(trimmed).then_some(trimmed)
-                                })
+                            if let Some(name) =
+                                el.attribute_expression_ast(idx)
+                                    .and_then(bare_identifier_expr)
+                                    .or_else(|| {
+                                        let trimmed = text.trim();
+                                        is_identifier_text(trimmed).then_some(trimmed)
+                                    })
                             {
                                 writes.insert(name.to_string());
                             }
@@ -402,12 +381,9 @@ fn visit_template_expressions(fragment: &Fragment, visitor: &mut impl FnMut(&str
         TemplateNode::Element(el) => {
             for (idx, attr) in el.attributes.iter().enumerate() {
                 match attr {
-                    Attribute::NormalAttribute { value, .. }
-                    | Attribute::Directive { value, .. } => match value {
+                    Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => match value {
                         AttributeValue::Expression(text) => {
-                            if let Some(span) =
-                                el.attribute_meta.get(idx).and_then(|m| m.expression_span)
-                            {
+                            if let Some(span) = el.attribute_meta.get(idx).and_then(|m| m.expression_span) {
                                 visitor(text.as_str(), span);
                             }
                         }
@@ -445,9 +421,7 @@ fn visit_template_expressions(fragment: &Fragment, visitor: &mut impl FnMut(&str
                 }
             }
         }
-        TemplateNode::AwaitBlock(block) => {
-            visitor(block.expression.as_str(), block.expression_span)
-        }
+        TemplateNode::AwaitBlock(block) => visitor(block.expression.as_str(), block.expression_span),
         TemplateNode::KeyBlock(block) => visitor(block.expression.as_str(), block.expression_span),
         TemplateNode::Text(_)
         | TemplateNode::DebugTag(_)
@@ -469,7 +443,10 @@ fn collect_expression_writes(text: &str, writes: &mut HashSet<String>) {
     if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
     let scoping = semantic.scoping();
 
     for node in semantic.nodes().iter() {
@@ -635,25 +612,13 @@ fn collect_maybe_default_write_facts<'a>(
     }
 }
 
-fn collect_unresolved_write(
-    id: &IdentifierReference<'_>,
-    scoping: &Scoping,
-    writes: &mut HashSet<String>,
-) {
-    if scoping
-        .get_reference(id.reference_id())
-        .symbol_id()
-        .is_none()
-    {
+fn collect_unresolved_write(id: &IdentifierReference<'_>, scoping: &Scoping, writes: &mut HashSet<String>) {
+    if scoping.get_reference(id.reference_id()).symbol_id().is_none() {
         writes.insert(id.name.to_string());
     }
 }
 
-fn collect_write_fact(
-    id: &IdentifierReference<'_>,
-    scoping: &Scoping,
-    writes: &mut SemanticWrites,
-) {
+fn collect_write_fact(id: &IdentifierReference<'_>, scoping: &Scoping, writes: &mut SemanticWrites) {
     match scoping.get_reference(id.reference_id()).symbol_id() {
         Some(symbol_id) => {
             writes.symbols.insert(symbol_id);

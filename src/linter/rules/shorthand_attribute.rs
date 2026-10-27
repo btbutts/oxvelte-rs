@@ -2,7 +2,7 @@
 //! 🔧 Fixable
 
 use crate::ast::{Attribute, AttributeValue, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::ast::ast::Expression;
 
 pub struct ShorthandAttribute;
@@ -40,10 +40,7 @@ impl Rule for ShorthandAttribute {
                             let crate::ast::AttributeValuePart::Expression(expr) = &parts[0] else {
                                 continue;
                             };
-                            (
-                                expr,
-                                meta.parts.first().and_then(|part| part.expression_ast),
-                            )
+                            (expr, meta.parts.first().and_then(|part| part.expression_ast))
                         }
                         _ => continue,
                     };
@@ -70,12 +67,9 @@ impl Rule for ShorthandAttribute {
                                 replacement: {
                                     let mustache = meta
                                         .mustache_span
-                                        .or_else(|| {
-                                            meta.parts.first().and_then(|part| part.mustache_span)
-                                        })
+                                        .or_else(|| meta.parts.first().and_then(|part| part.mustache_span))
                                         .unwrap();
-                                    ctx.source[mustache.start as usize..mustache.end as usize]
-                                        .to_string()
+                                    ctx.source[mustache.start as usize..mustache.end as usize].to_string()
                                 },
                             },
                         );
@@ -128,10 +122,7 @@ mod tests {
         let source = "<!-- 😀 --><div value = \"{ /* keep */ value }\" />";
         let diagnostics = lint(source, serde_json::json!([]));
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(
-            diagnostics[0].fix.as_ref().unwrap().replacement,
-            "{ /* keep */ value }"
-        );
+        assert_eq!(diagnostics[0].fix.as_ref().unwrap().replacement, "{ /* keep */ value }");
         let source = "<div { /* keep */ value } />";
         let diagnostics = lint(source, serde_json::json!([{"prefer":"never"}]));
         let fix = diagnostics[0].fix.as_ref().unwrap();

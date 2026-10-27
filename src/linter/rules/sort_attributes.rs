@@ -1,6 +1,6 @@
 //! `svelte/sort-attributes` — enforce attribute sorting order.
 use crate::ast::{Attribute, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 use regex::{Regex, RegexBuilder};
 use std::cmp::Ordering;
@@ -30,7 +30,8 @@ impl Rule for SortAttributes {
                     compare(keys[previous].as_ref().unwrap(), key, &rules) == Ordering::Greater
                 });
                 if let Some(mut previous) = invalid {
-                    let normal = matches!(&el.attributes[index], Attribute::NormalAttribute { name, .. } if name != "@attach");
+                    let normal =
+                        matches!(&el.attributes[index], Attribute::NormalAttribute { name, .. } if name != "@attach");
                     if normal
                         && el.attributes[previous..index]
                             .iter()
@@ -42,8 +43,7 @@ impl Rule for SortAttributes {
                             .map_or(0, |i| i + 1);
                         let Some(local) = (start..index).find(|&i| {
                             keys[i].as_ref().is_some_and(|k| {
-                                rules.iter().any(|r| r.matches(k))
-                                    && compare(k, key, &rules) == Ordering::Greater
+                                rules.iter().any(|r| r.matches(k)) && compare(k, key, &rules) == Ordering::Greater
                             })
                         }) else {
                             continue;
@@ -52,16 +52,13 @@ impl Rule for SortAttributes {
                     }
                     let span = attribute_span(&el.attributes[index], ctx.source);
                     let first = attribute_span(&el.attributes[previous], ctx.source);
-                    let mut replacement =
-                        ctx.source[span.start as usize..span.end as usize].to_string();
+                    let mut replacement = ctx.source[span.start as usize..span.end as usize].to_string();
                     // Rotate whole attributes, retaining whitespace in each original slot.
                     for i in previous..index {
                         let current = attribute_span(&el.attributes[i], ctx.source);
                         let next = attribute_span(&el.attributes[i + 1], ctx.source);
-                        replacement
-                            .push_str(&ctx.source[current.end as usize..next.start as usize]);
-                        replacement
-                            .push_str(&ctx.source[current.start as usize..current.end as usize]);
+                        replacement.push_str(&ctx.source[current.end as usize..next.start as usize]);
+                        replacement.push_str(&ctx.source[current.start as usize..current.end as usize]);
                     }
                     ctx.diagnostic_with_fix(
                         format!(
@@ -84,9 +81,9 @@ impl Rule for SortAttributes {
 }
 fn attribute_span(attribute: &Attribute, source: &str) -> Span {
     let span = match attribute {
-        Attribute::NormalAttribute { span, .. }
-        | Attribute::Directive { span, .. }
-        | Attribute::Spread { span } => *span,
+        Attribute::NormalAttribute { span, .. } | Attribute::Directive { span, .. } | Attribute::Spread { span } => {
+            *span
+        }
     };
     // Mustache attribute spans can include whitespace consumed after the closing brace.
     let text = &source[span.start as usize..span.end as usize];
@@ -96,9 +93,7 @@ fn attribute_key(attribute: &Attribute) -> Option<String> {
     match attribute {
         Attribute::NormalAttribute { name, .. } => Some(name.clone()),
         Attribute::Spread { .. } => None,
-        Attribute::Directive { kind, name, .. } => {
-            Some(format!("{}:{}", directive_prefix(kind), name))
-        }
+        Attribute::Directive { kind, name, .. } => Some(format!("{}:{}", directive_prefix(kind), name)),
     }
 }
 fn directive_prefix(kind: &DirectiveKind) -> &'static str {
@@ -127,9 +122,7 @@ impl OrderRule {
     fn matches(&self, name: &str) -> bool {
         let mut result = self.patterns.first().is_some_and(|p| p.negative);
         for pattern in &self.patterns {
-            if result == pattern.negative
-                && pattern.regex.as_ref().is_some_and(|r| r.is_match(name))
-            {
+            if result == pattern.negative && pattern.regex.as_ref().is_some_and(|r| r.is_match(name)) {
                 result = !pattern.negative;
             }
         }
@@ -144,7 +137,7 @@ fn compare(a: &str, b: &str, rules: &[OrderRule]) -> Ordering {
                     a.encode_utf16().cmp(b.encode_utf16())
                 } else {
                     Ordering::Equal
-                }
+                };
             }
             (true, false) => return Ordering::Less,
             (false, true) => return Ordering::Greater,
@@ -154,9 +147,7 @@ fn compare(a: &str, b: &str, rules: &[OrderRule]) -> Ordering {
     Ordering::Equal
 }
 fn compile_matcher(pattern: &str) -> Matcher {
-    let (negative, pattern) = pattern
-        .strip_prefix('!')
-        .map_or((false, pattern), |p| (true, p));
+    let (negative, pattern) = pattern.strip_prefix('!').map_or((false, pattern), |p| (true, p));
     let regex = if let Some(rest) = pattern.strip_prefix('/') {
         if let Some((expression, flags)) = rest.rsplit_once('/') {
             RegexBuilder::new(expression)
@@ -304,13 +295,7 @@ mod tests {
         let source = "<div foo {@attach attach}></div>";
         let diagnostics = lint(source, serde_json::json!([]));
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(
-            diagnostics[0].message,
-            "Attribute '@attach' should go before 'foo'."
-        );
-        assert_eq!(
-            diagnostics[0].fix.as_ref().unwrap().replacement,
-            "{@attach attach} foo"
-        );
+        assert_eq!(diagnostics[0].message, "Attribute '@attach' should go before 'foo'.");
+        assert_eq!(diagnostics[0].fix.as_ref().unwrap().replacement, "{@attach attach} foo");
     }
 }

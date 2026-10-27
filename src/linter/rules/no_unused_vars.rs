@@ -9,7 +9,7 @@
 //! itself counts as used, and `x += 1` counts as a read.
 
 use crate::ast::{Attribute, AttributeValue, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
 use oxc::semantic::{Semantic, SymbolFlags, SymbolId};
 use oxc::span::{GetSpan, Span};
@@ -38,10 +38,7 @@ struct Options {
 
 impl Options {
     fn from_config(options: &Option<serde_json::Value>) -> Self {
-        let first = options
-            .as_ref()
-            .and_then(|v| v.as_array())
-            .and_then(|a| a.first());
+        let first = options.as_ref().and_then(|v| v.as_array()).and_then(|a| a.first());
         let mut parsed = Self {
             vars_local: false,
             args: ArgsMode::AfterUsed,
@@ -109,10 +106,7 @@ impl Rule for NoUnusedVars {
         let mut outside_names = template_names(ctx);
         // Names one script leaves unresolved, which the other script or a `$store`
         // subscription may supply.
-        for semantic in [ctx.instance_semantic, ctx.module_semantic]
-            .into_iter()
-            .flatten()
-        {
+        for semantic in [ctx.instance_semantic, ctx.module_semantic].into_iter().flatten() {
             for name in semantic.scoping().root_unresolved_references().keys() {
                 insert_name(&mut outside_names, name.as_str());
             }
@@ -197,9 +191,8 @@ fn check_script(
         // typescript-eslint reports at the last assignment in the declaring function, or at
         // the declaration when there is none.
         let last_write = last_write_span(semantic, symbol);
-        let assigned = declaration.has_initial_value
-            || last_write.is_some()
-            || (is_root && outside_names.assigned.contains(name));
+        let assigned =
+            declaration.has_initial_value || last_write.is_some() || (is_root && outside_names.assigned.contains(name));
         let span = last_write.unwrap_or_else(|| scoping.symbol_span(symbol));
 
         let (described, described_pattern) = match declaration.kind {
@@ -207,20 +200,13 @@ fn check_script(
             DeclKind::Parameter => ("args", &options.args_ignore),
             DeclKind::Variable => {
                 if declaration.in_array_pattern && options.destructured_array_ignore.is_some() {
-                    (
-                        "elements of array destructuring",
-                        &options.destructured_array_ignore,
-                    )
+                    ("elements of array destructuring", &options.destructured_array_ignore)
                 } else {
                     ("vars", &options.vars_ignore)
                 }
             }
         };
-        let action = if assigned {
-            "assigned a value"
-        } else {
-            "defined"
-        };
+        let action = if assigned { "assigned a value" } else { "defined" };
         let additional = described_pattern
             .as_ref()
             .map(|p| format!(". Allowed unused {described} must match /{}/u", p.as_str()))
@@ -236,15 +222,12 @@ fn check_script(
 /// writes does not count, and neither does one that reads the value only to update it,
 /// such as `total += 1;` or `count++;` as a statement.
 fn is_used_in_script(semantic: &Semantic<'_>, symbol: SymbolId) -> bool {
-    semantic
-        .scoping()
-        .get_resolved_references(symbol)
-        .any(|reference| {
-            if !reference.is_write() {
-                return true;
-            }
-            reference.is_read() && !updates_itself_only(semantic, reference.node_id())
-        })
+    semantic.scoping().get_resolved_references(symbol).any(|reference| {
+        if !reference.is_write() {
+            return true;
+        }
+        reference.is_read() && !updates_itself_only(semantic, reference.node_id())
+    })
 }
 
 /// `x += 1;` and `x++;` as whole statements read `x` only to write it back.
@@ -281,10 +264,7 @@ fn last_write_span(semantic: &Semantic<'_>, symbol: SymbolId) -> Option<Span> {
 }
 
 /// The nearest enclosing function or top-level scope.
-fn variable_scope(
-    semantic: &Semantic<'_>,
-    scope: oxc::semantic::ScopeId,
-) -> oxc::semantic::ScopeId {
+fn variable_scope(semantic: &Semantic<'_>, scope: oxc::semantic::ScopeId) -> oxc::semantic::ScopeId {
     let scoping = semantic.scoping();
     let mut current = scope;
     loop {
@@ -320,9 +300,7 @@ fn classify(semantic: &Semantic<'_>, symbol: SymbolId, options: &Options) -> Opt
     let target = scoping.symbol_span(symbol);
     let mut seen_own_declaration = false;
     let mut parameter: Option<Span> = None;
-    for kind in
-        std::iter::once(nodes.kind(declaration_node)).chain(nodes.ancestor_kinds(declaration_node))
-    {
+    for kind in std::iter::once(nodes.kind(declaration_node)).chain(nodes.ancestor_kinds(declaration_node)) {
         match kind {
             AstKind::VariableDeclarator(declarator) => {
                 if declarator.init.is_some() {
@@ -364,9 +342,7 @@ fn classify(semantic: &Semantic<'_>, symbol: SymbolId, options: &Options) -> Opt
             }
             AstKind::FormalParameters(params) => {
                 if let Some(own) = parameter {
-                    if options.args == ArgsMode::AfterUsed
-                        && later_parameter_is_used(semantic, params, own)
-                    {
+                    if options.args == ArgsMode::AfterUsed && later_parameter_is_used(semantic, params, own) {
                         return None;
                     }
                 }
@@ -462,12 +438,7 @@ fn apply_pattern(
     !(place.bindable || options.ignore_rest_siblings && place.rest_sibling)
 }
 
-fn locate(
-    pattern: &oxc::ast::ast::BindingPattern<'_>,
-    target: Span,
-    in_array: bool,
-    place: &mut PatternPlace,
-) -> bool {
+fn locate(pattern: &oxc::ast::ast::BindingPattern<'_>, target: Span, in_array: bool, place: &mut PatternPlace) -> bool {
     use oxc::ast::ast::BindingPattern;
     match pattern {
         BindingPattern::BindingIdentifier(ident) => {
@@ -527,11 +498,7 @@ fn is_identifier_at(pattern: &oxc::ast::ast::BindingPattern<'_>, target: Span) -
 
 /// `args: "after-used"`: a parameter is excused when a later parameter of the same function
 /// is used.
-fn later_parameter_is_used(
-    semantic: &Semantic<'_>,
-    params: &oxc::ast::ast::FormalParameters<'_>,
-    own: Span,
-) -> bool {
+fn later_parameter_is_used(semantic: &Semantic<'_>, params: &oxc::ast::ast::FormalParameters<'_>, own: Span) -> bool {
     let is_used = |symbol: Option<SymbolId>| symbol.is_some_and(|s| is_used_in_script(semantic, s));
     let later_item = params
         .items
@@ -567,9 +534,7 @@ fn template_names(ctx: &LintContext<'_>) -> Names {
 
     // `<script generics="T extends Item">` refers to types by name.
     for script in ctx.ast.instance.iter().chain(ctx.ast.module.iter()) {
-        if let Some(open_tag) =
-            source.get(script.span.start as usize..script.content_span.start as usize)
-        {
+        if let Some(open_tag) = source.get(script.span.start as usize..script.content_span.start as usize) {
             scan_identifiers(open_tag, &mut names);
         }
     }
@@ -582,10 +547,7 @@ fn template_names(ctx: &LintContext<'_>) -> Names {
                 insert_name(&mut names, first);
             }
             for attribute in &element.attributes {
-                if let Attribute::Directive {
-                    kind, name, value, ..
-                } = attribute
-                {
+                if let Attribute::Directive { kind, name, value, .. } = attribute {
                     let subject = name.split('.').next().unwrap_or("");
                     match kind {
                         // `use:action`, `transition:fade`, `animate:flip` name a binding.
@@ -596,9 +558,7 @@ fn template_names(ctx: &LintContext<'_>) -> Names {
                         | DirectiveKind::Animate => insert_name(&mut names, subject),
                         // `bind:value`, `class:active` and `style:color` are shorthand for
                         // a binding of the same name.
-                        DirectiveKind::Binding
-                        | DirectiveKind::Class
-                        | DirectiveKind::StyleDirective => {
+                        DirectiveKind::Binding | DirectiveKind::Class | DirectiveKind::StyleDirective => {
                             if matches!(value, AttributeValue::True) {
                                 insert_name(&mut names, subject);
                             }
@@ -704,8 +664,7 @@ fn scan_identifiers(text: &str, names: &mut Names) {
         while next < bytes.len() && bytes[next].is_ascii_whitespace() {
             next += 1;
         }
-        let assigned = bytes.get(next) == Some(&b'=')
-            && !matches!(bytes.get(next + 1), Some(b'=') | Some(b'>'));
+        let assigned = bytes.get(next) == Some(&b'=') && !matches!(bytes.get(next + 1), Some(b'=') | Some(b'>'));
         if (after_dot && !after_spread) || after_digit {
             continue;
         }
@@ -838,10 +797,7 @@ mod tests {
         let allocator = Allocator::default();
         let result = parser::parse(source, &allocator);
         let diags = Linter::all().lint(&result.ast, source);
-        let total = diags
-            .iter()
-            .find(|d| d.message.starts_with("'total'"))
-            .unwrap();
+        let total = diags.iter().find(|d| d.message.starts_with("'total'")).unwrap();
         assert_eq!(total.span.start as usize, source.find("total = 5").unwrap());
     }
 
@@ -912,10 +868,7 @@ mod tests {
     let { item }: { item: T } = $props();
     console.log(shared, item);
 </script>"#;
-        assert_eq!(
-            lint(source),
-            ["'lonely' is assigned a value but never used. @ lonely"]
-        );
+        assert_eq!(lint(source), ["'lonely' is assigned a value but never used. @ lonely"]);
     }
 
     #[test]
@@ -971,24 +924,13 @@ mod tests {
         let mut linter = Linter::recommended();
         assert!(!has_rule(&linter));
 
-        let off =
-            crate::config::OxvelteConfig::parse(&format!(r#"{{"rules":{{"{name}":"off"}}}}"#))
-                .unwrap();
+        let off = crate::config::OxvelteConfig::parse(&format!(r#"{{"rules":{{"{name}":"off"}}}}"#)).unwrap();
         linter.add_enabled_rules(&off);
         assert!(!has_rule(&linter));
 
-        let on =
-            crate::config::OxvelteConfig::parse(&format!(r#"{{"rules":{{"{name}":"error"}}}}"#))
-                .unwrap();
+        let on = crate::config::OxvelteConfig::parse(&format!(r#"{{"rules":{{"{name}":"error"}}}}"#)).unwrap();
         linter.add_enabled_rules(&on);
         linter.add_enabled_rules(&on);
-        assert_eq!(
-            linter
-                .rules()
-                .iter()
-                .filter(|rule| rule.name() == name)
-                .count(),
-            1
-        );
+        assert_eq!(linter.rules().iter().filter(|rule| rule.name() == name).count(), 1);
     }
 }

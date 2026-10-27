@@ -242,9 +242,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(no_reactive_reassign::NoReactiveReassign),
         Box::new(no_store_async::NoStoreAsync),
         Box::new(prefer_class_directive::PreferClassDirective),
-        Box::new(
-            no_export_load_in_svelte_module_in_kit_pages::NoExportLoadInSvelteModuleInKitPages,
-        ),
+        Box::new(no_export_load_in_svelte_module_in_kit_pages::NoExportLoadInSvelteModuleInKitPages),
         Box::new(infinite_reactive_loop::InfiniteReactiveLoop),
         Box::new(no_unnecessary_state_wrap::NoUnnecessaryStateWrap),
         Box::new(no_unused_props::NoUnusedProps),
@@ -297,9 +295,6 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
 
 /// Return only recommended (⭐) rules.
 pub fn recommended_rules() -> Vec<Box<dyn Rule>> {
-    all_rules()
-        .into_iter()
-        .filter(|r| r.is_recommended())
-        .collect()
+    all_rules().into_iter().filter(|r| r.is_recommended()).collect()
 }
 mod indent;

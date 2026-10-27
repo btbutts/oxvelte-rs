@@ -1,10 +1,8 @@
 //! `svelte/require-stores-init` — require store variables to be initialized.
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{
-    Argument, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement,
-};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Argument, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::span::Span;
 
 pub struct RequireStoresInit;
@@ -33,11 +31,7 @@ impl Rule for RequireStoresInit {
     }
 }
 
-fn check_semantic(
-    ctx: &mut LintContext<'_>,
-    semantic: &oxc::semantic::Semantic<'_>,
-    content_offset: u32,
-) {
+fn check_semantic(ctx: &mut LintContext<'_>, semantic: &oxc::semantic::Semantic<'_>, content_offset: u32) {
     let factories = collect_store_factory_locals(semantic);
     if factories.named.is_empty() && factories.namespaces.is_empty() {
         return;
@@ -53,11 +47,7 @@ fn check_semantic(
 
         // A spread anywhere in the argument list disqualifies the check —
         // we can't statically tell how many values land in the call.
-        if ce
-            .arguments
-            .iter()
-            .any(|a| matches!(a, Argument::SpreadElement(_)))
-        {
+        if ce.arguments.iter().any(|a| matches!(a, Argument::SpreadElement(_))) {
             continue;
         }
 
@@ -71,10 +61,7 @@ fn check_semantic(
         if should_report {
             let s = content_offset + ce.span.start;
             let e = content_offset + ce.span.end;
-            ctx.diagnostic(
-                "Always set a default value for svelte stores.",
-                Span::new(s, e),
-            );
+            ctx.diagnostic("Always set a default value for svelte stores.", Span::new(s, e));
         }
     }
 }
@@ -119,10 +106,7 @@ fn collect_store_factory_locals(semantic: &oxc::semantic::Semantic<'_>) -> Store
     StoreFactoryLocals { named, namespaces }
 }
 
-fn store_factory_call_name<'a>(
-    callee: &'a Expression<'a>,
-    factories: &'a StoreFactoryLocals,
-) -> Option<&'static str> {
+fn store_factory_call_name<'a>(callee: &'a Expression<'a>, factories: &'a StoreFactoryLocals) -> Option<&'static str> {
     match callee {
         Expression::Identifier(callee) => factories
             .named

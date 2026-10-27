@@ -1,11 +1,10 @@
 //! `svelte/prefer-destructured-store-props` offers reactive destructuring alternatives.
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, Fragment, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule, Suggestion};
-use oxc::ast::ast::{
-    AssignmentTarget, AssignmentTargetMaybeDefault, AssignmentTargetProperty, Expression,
-    PropertyKey,
-};
+use crate::linter::{Fix, LintContext, Rule, Suggestion, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{
+    AssignmentTarget, AssignmentTargetMaybeDefault, AssignmentTargetProperty, Expression, PropertyKey,
+};
 use oxc::span::{GetSpan, Span};
 use std::collections::{HashMap, HashSet};
 pub struct PreferDestructuredStoreProps;
@@ -16,10 +15,7 @@ impl Rule for PreferDestructuredStoreProps {
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
         let mut reactive: HashMap<(String, String), Vec<String>> = HashMap::new();
         let mut top_names = HashSet::new();
-        for semantic in [ctx.instance_semantic, ctx.module_semantic]
-            .into_iter()
-            .flatten()
-        {
+        for semantic in [ctx.instance_semantic, ctx.module_semantic].into_iter().flatten() {
             let scoping = semantic.scoping();
             top_names.extend(
                 scoping
@@ -41,8 +37,7 @@ impl Rule for PreferDestructuredStoreProps {
                 if !matches!(nodes.kind(parent), AstKind::ExpressionStatement(_)) {
                     continue;
                 }
-                if !matches!(nodes.parent_kind(parent), AstKind::LabeledStatement(label) if label.label.name == "$")
-                {
+                if !matches!(nodes.parent_kind(parent), AstKind::LabeledStatement(label) if label.label.name == "$") {
                     continue;
                 }
                 let label = nodes.parent_id(parent);
@@ -62,32 +57,24 @@ impl Rule for PreferDestructuredStoreProps {
                                 .push(target.name.to_string());
                         }
                     }
-                    (
-                        AssignmentTarget::ObjectAssignmentTarget(pattern),
-                        Expression::Identifier(store),
-                    ) => {
+                    (AssignmentTarget::ObjectAssignmentTarget(pattern), Expression::Identifier(store)) => {
                         for property in &pattern.properties {
                             let pair = match property {
-                                AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(
-                                    property,
-                                ) if property.init.is_none() => Some((
-                                    property.binding.name.to_string(),
-                                    property.binding.name.to_string(),
-                                )),
-                                AssignmentTargetProperty::AssignmentTargetPropertyProperty(
-                                    property,
-                                ) => {
+                                AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(property)
+                                    if property.init.is_none() =>
+                                {
+                                    Some((property.binding.name.to_string(), property.binding.name.to_string()))
+                                }
+                                AssignmentTargetProperty::AssignmentTargetPropertyProperty(property) => {
                                     let name = match &property.name {
-                                        PropertyKey::StaticIdentifier(id) => {
-                                            Some(id.name.to_string())
-                                        }
-                                        PropertyKey::StringLiteral(lit) => {
-                                            Some(lit.value.display().to_string())
-                                        }
+                                        PropertyKey::StaticIdentifier(id) => Some(id.name.to_string()),
+                                        PropertyKey::StringLiteral(lit) => Some(lit.value.display().to_string()),
                                         _ => None,
                                     };
                                     match (name, &property.binding) {
-                                        (Some(name), AssignmentTargetMaybeDefault::AssignmentTargetIdentifier(id)) => Some((name, id.name.to_string())),
+                                        (Some(name), AssignmentTargetMaybeDefault::AssignmentTargetIdentifier(id)) => {
+                                            Some((name, id.name.to_string()))
+                                        }
                                         _ => None,
                                     }
                                 }
@@ -139,16 +126,12 @@ impl Rule for PreferDestructuredStoreProps {
                     }
                 }
             }
-            TemplateNode::SnippetBlock(block) => {
-                local_regions.push((block.body.span, binding_names(&block.params)))
-            }
+            TemplateNode::SnippetBlock(block) => local_regions.push((block.body.span, binding_names(&block.params))),
             _ => {}
         });
         let mut containers = vec![ctx.ast.html.span];
         walk_template_nodes(&ctx.ast.html, &mut |node| match node {
-            TemplateNode::Element(el) => {
-                containers.push(Span::new(el.start_tag_end + 1, el.span.end))
-            }
+            TemplateNode::Element(el) => containers.push(Span::new(el.start_tag_end + 1, el.span.end)),
             TemplateNode::EachBlock(block) => {
                 containers.push(block.body.span);
                 if let Some(fallback) = &block.fallback {
@@ -159,10 +142,7 @@ impl Rule for PreferDestructuredStoreProps {
                 containers.push(block.consequent.span);
             }
             TemplateNode::AwaitBlock(block) => {
-                for body in [&block.pending, &block.then, &block.catch]
-                    .into_iter()
-                    .flatten()
-                {
+                for body in [&block.pending, &block.then, &block.catch].into_iter().flatten() {
                     containers.push(body.span);
                 }
             }
@@ -179,11 +159,10 @@ impl Rule for PreferDestructuredStoreProps {
                     .unwrap();
                 let allocator = oxc::allocator::Allocator::default();
                 let declaration = format!("const {};", tag.declaration);
-                let parsed =
-                    oxc::parser::Parser::new(&allocator, &declaration, oxc::span::SourceType::ts())
-                        .parse();
+                let parsed = oxc::parser::Parser::new(&allocator, &declaration, oxc::span::SourceType::ts()).parse();
                 if parsed.diagnostics.is_empty() {
-                    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+                    let semantic = oxc::semantic::SemanticBuilder::new()
+                        .with_build_nodes(true)
                         .build(&parsed.program)
                         .semantic;
                     let names = semantic
@@ -199,27 +178,23 @@ impl Rule for PreferDestructuredStoreProps {
         visit_template_expressions(&ctx.ast.html, ctx.source, &mut |text, expression_span| {
             let allocator = oxc::allocator::Allocator::default();
             let wrapper = format!("({text});");
-            let parsed =
-                oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
+            let parsed = oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
             if !parsed.diagnostics.is_empty() {
                 return;
             }
-            let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+            let semantic = oxc::semantic::SemanticBuilder::new()
+                .with_build_nodes(true)
                 .build(&parsed.program)
                 .semantic;
             let nodes = semantic.nodes();
             for node in nodes.iter() {
                 let (object, property, computed, member_span) = match node.kind() {
-                    AstKind::StaticMemberExpression(member) => (
-                        &member.object,
-                        member.property.name.to_string(),
-                        false,
-                        member.span,
-                    ),
+                    AstKind::StaticMemberExpression(member) => {
+                        (&member.object, member.property.name.to_string(), false, member.span)
+                    }
                     AstKind::ComputedMemberExpression(member) => (
                         &member.object,
-                        wrapper[member.expression.span().start as usize
-                            ..member.expression.span().end as usize]
+                        wrapper[member.expression.span().start as usize..member.expression.span().end as usize]
                             .split_whitespace()
                             .collect::<Vec<_>>()
                             .join(" "),
@@ -231,22 +206,13 @@ impl Rule for PreferDestructuredStoreProps {
                 let Expression::Identifier(store) = object else {
                     continue;
                 };
-                if !store.name.starts_with('$')
-                    || store.name.starts_with("$$")
-                    || store.name.len() < 2
-                {
+                if !store.name.starts_with('$') || store.name.starts_with("$$") || store.name.len() < 2 {
                     continue;
                 }
                 if ctx.is_runes
                     && matches!(
                         store.name.as_str(),
-                        "$state"
-                            | "$derived"
-                            | "$effect"
-                            | "$props"
-                            | "$inspect"
-                            | "$bindable"
-                            | "$host"
+                        "$state" | "$derived" | "$effect" | "$props" | "$inspect" | "$bindable" | "$host"
                     )
                 {
                     continue;
@@ -278,9 +244,7 @@ impl Rule for PreferDestructuredStoreProps {
                 );
                 let mut active_names: HashSet<String> = local_regions
                     .iter()
-                    .filter(|(region, _)| {
-                        region.start <= expression_span.start && region.end >= expression_span.end
-                    })
+                    .filter(|(region, _)| region.start <= expression_span.start && region.end >= expression_span.end)
                     .flat_map(|(_, names)| names.iter().cloned())
                     .collect();
                 for scope in semantic.scoping().scope_ancestors(node.scope_id()) {
@@ -294,16 +258,12 @@ impl Rule for PreferDestructuredStoreProps {
                 }
                 let mut suggestions = Vec::new();
                 if !computed {
-                    if let Some(variables) =
-                        reactive.get(&(store.name.to_string(), property.clone()))
-                    {
+                    if let Some(variables) = reactive.get(&(store.name.to_string(), property.clone())) {
                         let mut seen = HashSet::new();
                         for variable in variables {
                             if !active_names.contains(variable) && seen.insert(variable) {
                                 suggestions.push(Suggestion {
-                                    description: format!(
-                                        "Using the predefined reactive variable {variable}"
-                                    ),
+                                    description: format!("Using the predefined reactive variable {variable}"),
                                     fix: Fix {
                                         span,
                                         replacement: variable.clone(),
@@ -353,13 +313,18 @@ impl Rule for PreferDestructuredStoreProps {
                         } else {
                             format!(": {variable}")
                         };
-                        let declaration =
-                            format!("$: ({{ {property}{alias} }} = {});\n", store.name);
+                        let declaration = format!("$: ({{ {property}{alias} }} = {});\n", store.name);
                         let fix = merge_edits(
                             ctx.source,
                             vec![(Span::new(insert, insert), declaration), (span, variable)],
                         );
-                        suggestions.push(Suggestion { description: format!("Using destructuring like $: ({{ {property} }} = {}); will run faster", store.name), fix });
+                        suggestions.push(Suggestion {
+                            description: format!(
+                                "Using destructuring like $: ({{ {property} }} = {}); will run faster",
+                                store.name
+                            ),
+                            fix,
+                        });
                     }
                 }
                 ctx.diagnostic_with_suggestions(
@@ -446,12 +411,12 @@ fn reserved(name: &str) -> bool {
 fn binding_names(pattern: &str) -> Vec<String> {
     let allocator = oxc::allocator::Allocator::default();
     let wrapper = format!("({pattern})=>0");
-    let parsed =
-        oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
+    let parsed = oxc::parser::Parser::new(&allocator, &wrapper, oxc::span::SourceType::ts()).parse();
     if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+    let semantic = oxc::semantic::SemanticBuilder::new()
+        .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     semantic
@@ -463,21 +428,14 @@ fn binding_names(pattern: &str) -> Vec<String> {
         })
         .collect()
 }
-fn visit_template_expressions(
-    fragment: &Fragment,
-    source: &str,
-    visitor: &mut impl FnMut(&str, Span),
-) {
+fn visit_template_expressions(fragment: &Fragment, source: &str, visitor: &mut impl FnMut(&str, Span)) {
     walk_template_nodes(fragment, &mut |node| match node {
         TemplateNode::Element(el) => {
             for (idx, attr) in el.attributes.iter().enumerate() {
                 match attr {
-                    Attribute::NormalAttribute { value, .. }
-                    | Attribute::Directive { value, .. } => match value {
+                    Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => match value {
                         AttributeValue::Expression(text) => {
-                            if let Some(span) =
-                                el.attribute_meta.get(idx).and_then(|m| m.expression_span)
-                            {
+                            if let Some(span) = el.attribute_meta.get(idx).and_then(|m| m.expression_span) {
                                 visitor(text.as_str(), span);
                             }
                         }
@@ -500,21 +458,16 @@ fn visit_template_expressions(
                         _ => {}
                     },
                     Attribute::Spread { span } => {
-                        if let Some(expression_span) = el
-                            .attribute_meta
-                            .get(idx)
-                            .and_then(|meta| meta.expression_span)
+                        if let Some(expression_span) = el.attribute_meta.get(idx).and_then(|meta| meta.expression_span)
                         {
                             visitor(
-                                &source
-                                    [expression_span.start as usize..expression_span.end as usize],
+                                &source[expression_span.start as usize..expression_span.end as usize],
                                 expression_span,
                             );
                         } else {
                             let expression_span = Span::new(span.start + 4, span.end - 1);
                             visitor(
-                                &source
-                                    [expression_span.start as usize..expression_span.end as usize],
+                                &source[expression_span.start as usize..expression_span.end as usize],
                                 expression_span,
                             );
                         }
@@ -534,9 +487,7 @@ fn visit_template_expressions(
                 }
             }
         }
-        TemplateNode::AwaitBlock(block) => {
-            visitor(block.expression.as_str(), block.expression_span)
-        }
+        TemplateNode::AwaitBlock(block) => visitor(block.expression.as_str(), block.expression_span),
         TemplateNode::KeyBlock(block) => visitor(block.expression.as_str(), block.expression_span),
         TemplateNode::Text(_)
         | TemplateNode::DebugTag(_)
@@ -560,14 +511,11 @@ mod tests {
     }
     #[test]
     fn nested_reactive_labels_do_not_offer_function_local_variables() {
-        let source =
-            "<script>function helper(){let existing; $: existing=$store.foo;}</script>{$store.foo}";
+        let source = "<script>function helper(){let existing; $: existing=$store.foo;}</script>{$store.foo}";
         let diagnostics = lint(source);
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].suggestions.len(), 1);
-        assert!(!diagnostics[0].suggestions[0]
-            .description
-            .contains("existing"));
+        assert!(!diagnostics[0].suggestions[0].description.contains("existing"));
     }
     #[test]
     fn suggestions_preserve_nested_members_unicode_and_script_attributes() {
@@ -581,10 +529,7 @@ mod tests {
         assert_eq!(diagnostics[0].suggestions.len(), 2);
         let fix = &diagnostics[0].suggestions[1].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
-        );
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         assert!(output.contains("$: ({ foo: foo1 } = $store);\n</script>"));
         assert!(output.contains("format(foo1.bar)"));
         assert!(diagnostics[2].suggestions.is_empty());
@@ -598,10 +543,7 @@ mod tests {
             assert_eq!(diagnostic.suggestions.len(), 1);
             let fix = &diagnostic.suggestions[0].fix;
             let mut output = source.to_string();
-            output.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
             assert!(output.contains("$: ({ name: name1 } = $store);"));
         }
     }

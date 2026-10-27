@@ -1,6 +1,6 @@
 //! JavaScript token relationships used by the Svelte indentation rule.
 use super::layout::Layout;
-use oxc::ast::{ast::*, AstKind};
+use oxc::ast::{AstKind, ast::*};
 use oxc::span::{GetSpan, Span};
 
 fn mapped(span: Span, base: i64) -> Span {
@@ -46,13 +46,7 @@ fn block(l: &mut Layout<'_>, span: Span, members: Vec<Span>) {
     let (Some(first), Some(last)) = (l.first(span), l.last(span)) else {
         return;
     };
-    l.list(
-        &members,
-        l.tokens[first].span,
-        Some(l.tokens[last].span),
-        1,
-        false,
-    );
+    l.list(&members, l.tokens[first].span, Some(l.tokens[last].span), 1, false);
 }
 fn params(l: &mut Layout<'_>, p: &FormalParameters<'_>, base: i64, anchor: usize) {
     let span = mapped(p.span, base);
@@ -70,13 +64,7 @@ fn params(l: &mut Layout<'_>, p: &FormalParameters<'_>, base: i64, anchor: usize
     if let Some(rest) = &p.rest {
         members.push(mapped(rest.span, base));
     }
-    l.list(
-        &members,
-        l.tokens[first].span,
-        Some(l.tokens[last].span),
-        1,
-        false,
-    );
+    l.list(&members, l.tokens[first].span, Some(l.tokens[last].span), 1, false);
 }
 fn property(l: &mut Layout<'_>, span: Span, key: Span, value: Option<Span>, computed: bool) {
     let (Some(first), Some((kf, kl))) = (l.first(span), l.first_last(key, span.start)) else {
@@ -97,13 +85,7 @@ fn property(l: &mut Layout<'_>, span: Span, key: Span, value: Option<Span>, comp
             return;
         };
         l.set(left, 0, first);
-        l.list(
-            &[key],
-            l.tokens[left].span,
-            Some(l.tokens[right].span),
-            1,
-            false,
-        );
+        l.list(&[key], l.tokens[left].span, Some(l.tokens[right].span), 1, false);
         right
     } else {
         l.set(kf, 0, first);
@@ -126,14 +108,7 @@ fn property(l: &mut Layout<'_>, span: Span, key: Span, value: Option<Span>, comp
         }
     }
 }
-fn binary(
-    l: &mut Layout<'_>,
-    whole: Span,
-    left: Span,
-    right: Span,
-    anchor_span: Span,
-    assignment: bool,
-) {
+fn binary(l: &mut Layout<'_>, whole: Span, left: Span, right: Span, anchor_span: Span, assignment: bool) {
     let anchor = if assignment {
         l.first(anchor_span)
     } else {
@@ -173,19 +148,9 @@ fn loop_body(l: &mut Layout<'_>, body: Span, anchor: usize) {
         l.set(first, i32::from(l.text(first) != "{"), anchor);
     }
 }
-fn call(
-    l: &mut Layout<'_>,
-    whole: Span,
-    callee: Span,
-    arguments: Vec<Span>,
-    types: Option<Span>,
-    new: bool,
-) {
-    let (Some(first), Some((cf, cl)), Some(last)) = (
-        l.first(whole),
-        l.first_last(callee, whole.start),
-        l.last(whole),
-    ) else {
+fn call(l: &mut Layout<'_>, whole: Span, callee: Span, arguments: Vec<Span>, types: Option<Span>, new: bool) {
+    let (Some(first), Some((cf, cl)), Some(last)) = (l.first(whole), l.first_last(callee, whole.start), l.last(whole))
+    else {
         return;
     };
     let anchor = if new {
@@ -210,13 +175,7 @@ fn call(
             current = next;
         }
         l.set(left, 1, anchor);
-        l.list(
-            &arguments,
-            l.tokens[left].span,
-            Some(l.tokens[last].span),
-            1,
-            false,
-        );
+        l.list(&arguments, l.tokens[left].span, Some(l.tokens[last].span), 1, false);
     }
 }
 
@@ -262,9 +221,7 @@ pub(super) fn apply_node(
     };
     match kind {
         AstKind::Program(_) => {}
-        AstKind::ArrayExpression(n) => {
-            block(l, span, n.elements.iter().map(|x| s(x.span())).collect())
-        }
+        AstKind::ArrayExpression(n) => block(l, span, n.elements.iter().map(|x| s(x.span())).collect()),
         AstKind::ArrayPattern(n) => {
             let mut members: Vec<_> = n.elements.iter().flatten().map(|x| s(x.span())).collect();
             if let Some(r) = &n.rest {
@@ -279,9 +236,7 @@ pub(super) fn apply_node(
             }
             block(l, span, members);
         }
-        AstKind::ObjectExpression(n) => {
-            block(l, span, n.properties.iter().map(|x| s(x.span())).collect())
-        }
+        AstKind::ObjectExpression(n) => block(l, span, n.properties.iter().map(|x| s(x.span())).collect()),
         AstKind::ObjectPattern(n) => {
             let mut members: Vec<_> = n.properties.iter().map(|x| s(x.span())).collect();
             if let Some(r) = &n.rest {
@@ -321,10 +276,7 @@ pub(super) fn apply_node(
             }
         }
         AstKind::Function(n) => {
-            let anchor = if matches!(
-                parent,
-                Some(AstKind::MethodDefinition(_) | AstKind::ObjectProperty(_))
-            ) {
+            let anchor = if matches!(parent, Some(AstKind::MethodDefinition(_) | AstKind::ObjectProperty(_))) {
                 parent.and_then(|p| l.first(s(p.span()))).unwrap_or(first)
             } else {
                 first
@@ -360,14 +312,9 @@ pub(super) fn apply_node(
             chain_span,
             assignment_chain,
         ),
-        AstKind::PrivateInExpression(n) => binary(
-            l,
-            span,
-            s(n.left.span),
-            s(n.right.span()),
-            chain_span,
-            assignment_chain,
-        ),
+        AstKind::PrivateInExpression(n) => {
+            binary(l, span, s(n.left.span), s(n.right.span()), chain_span, assignment_chain)
+        }
         AstKind::LogicalExpression(n) => binary(
             l,
             span,
@@ -446,35 +393,17 @@ pub(super) fn apply_node(
                 }
             }
         }
-        AstKind::ObjectProperty(n) => property(
-            l,
-            span,
-            s(n.key.span()),
-            Some(s(n.value.span())),
-            n.computed,
-        ),
-        AstKind::AssignmentTargetPropertyProperty(n) => property(
-            l,
-            span,
-            s(n.name.span()),
-            Some(s(n.binding.span())),
-            n.computed,
-        ),
+        AstKind::ObjectProperty(n) => property(l, span, s(n.key.span()), Some(s(n.value.span())), n.computed),
+        AstKind::AssignmentTargetPropertyProperty(n) => {
+            property(l, span, s(n.name.span()), Some(s(n.binding.span())), n.computed)
+        }
         AstKind::AssignmentTargetPropertyIdentifier(n) => {
             if let Some(init) = &n.init {
                 binary(l, span, s(n.binding.span), s(init.span()), span, true);
             }
         }
-        AstKind::BindingProperty(n) => property(
-            l,
-            span,
-            s(n.key.span()),
-            Some(s(n.value.span())),
-            n.computed,
-        ),
-        AstKind::MethodDefinition(n) => {
-            property(l, span, s(n.key.span()), Some(s(n.value.span)), n.computed)
-        }
+        AstKind::BindingProperty(n) => property(l, span, s(n.key.span()), Some(s(n.value.span())), n.computed),
+        AstKind::MethodDefinition(n) => property(l, span, s(n.key.span()), Some(s(n.value.span)), n.computed),
         AstKind::PropertyDefinition(n) => property(
             l,
             span,
@@ -628,26 +557,13 @@ pub(super) fn apply_node(
                             .chain(n.test.iter().map(|x| s(x.span())))
                             .chain(n.update.iter().map(|x| s(x.span())))
                             .collect();
-                        l.list(
-                            &members,
-                            l.tokens[left].span,
-                            Some(l.tokens[right].span),
-                            1,
-                            false,
-                        );
+                        l.list(&members, l.tokens[left].span, Some(l.tokens[right].span), 1, false);
                     }
                 }
             }
             loop_body(l, s(n.body.span()), first);
         }
-        AstKind::ForInStatement(n) => for_in(
-            l,
-            first,
-            s(n.left.span()),
-            s(n.right.span()),
-            s(n.body.span()),
-            false,
-        ),
+        AstKind::ForInStatement(n) => for_in(l, first, s(n.left.span()), s(n.right.span()), s(n.body.span()), false),
         AstKind::ForOfStatement(n) => for_in(
             l,
             first,
@@ -703,10 +619,7 @@ pub(super) fn apply_node(
             }
         }
         AstKind::SequenceExpression(n) => l.list(
-            &n.expressions
-                .iter()
-                .map(|x| s(x.span()))
-                .collect::<Vec<_>>(),
+            &n.expressions.iter().map(|x| s(x.span())).collect::<Vec<_>>(),
             l.tokens[first].span,
             None,
             0,
@@ -738,10 +651,7 @@ pub(super) fn apply_node(
             }
         }
         AstKind::SwitchCase(n) => {
-            let testlast = n
-                .test
-                .as_ref()
-                .and_then(|t| l.first_last(s(t.span()), span.start));
+            let testlast = n.test.as_ref().and_then(|t| l.first_last(s(t.span()), span.start));
             if let Some((tf, tl)) = testlast {
                 l.set(tf, 1, first);
                 if let Some(colon) = l.after(tl) {
@@ -750,8 +660,7 @@ pub(super) fn apply_node(
             } else if let Some(colon) = l.after(first) {
                 l.set(colon, 1, first);
             }
-            let block_only =
-                n.consequent.len() == 1 && matches!(n.consequent[0], Statement::BlockStatement(_));
+            let block_only = n.consequent.len() == 1 && matches!(n.consequent[0], Statement::BlockStatement(_));
             for st in &n.consequent {
                 if let Some((sf, _)) = l.first_last(s(st.span()), span.start) {
                     l.set(sf, i32::from(!block_only), first);
@@ -779,13 +688,7 @@ pub(super) fn apply_node(
                         l.set(left, 1, first);
                         if let Some(pl) = l.last(s(p.span)) {
                             if let Some(right) = l.after(pl) {
-                                l.list(
-                                    &[s(p.span)],
-                                    l.tokens[left].span,
-                                    Some(l.tokens[right].span),
-                                    1,
-                                    false,
-                                );
+                                l.list(&[s(p.span)], l.tokens[left].span, Some(l.tokens[right].span), 1, false);
                             }
                         }
                     }
@@ -872,13 +775,7 @@ pub(super) fn apply_node(
             set_first(l, s(n.declaration.span()), 1, first);
         }
         AstKind::ExportNamedDeclaration(n) => {
-            import_export(
-                l,
-                span,
-                None,
-                n.specifiers.iter().map(|x| s(x.span)).collect(),
-                true,
-            );
+            import_export(l, span, None, n.specifiers.iter().map(|x| s(x.span)).collect(), true);
         }
         AstKind::ExportFromDeclaration(n) => {
             import_export(
@@ -889,9 +786,7 @@ pub(super) fn apply_node(
                 true,
             );
         }
-        AstKind::ExportAllDeclaration(n) => {
-            import_export(l, span, Some(s(n.source.span)), Vec::new(), true)
-        }
+        AstKind::ExportAllDeclaration(n) => import_export(l, span, Some(s(n.source.span)), Vec::new(), true),
         AstKind::ExportDefaultDeclaration(n) => {
             if let Some(df) = l.first(s(n.declaration.span())) {
                 let mut current = first;
@@ -904,9 +799,7 @@ pub(super) fn apply_node(
                 }
             }
         }
-        AstKind::ImportSpecifier(_)
-        | AstKind::ExportSpecifier(_)
-        | AstKind::ImportNamespaceSpecifier(_) => {
+        AstKind::ImportSpecifier(_) | AstKind::ExportSpecifier(_) | AstKind::ImportNamespaceSpecifier(_) => {
             let mut anchor = first;
             if l.text(first) == "type" {
                 if let Some(next) = l.after(first) {
@@ -971,12 +864,10 @@ pub(super) fn apply_node(
         if !matches!(kind,AstKind::Function(n) if n.body.is_none())
             && l.text(last) == ";"
             && last != first
+            && l.after(last)
+                .is_none_or(|next| l.line_of(l.tokens[last].span.start) < l.line_of(l.tokens[next].span.start))
         {
-            if l.after(last).is_none_or(|next| {
-                l.line_of(l.tokens[last].span.start) < l.line_of(l.tokens[next].span.start)
-            }) {
-                l.set(last, 0, first);
-            }
+            l.set(last, 0, first);
         }
     }
     true
@@ -1039,14 +930,7 @@ fn control_test(l: &mut Layout<'_>, first: usize, _test: Span, body: Span) {
     }
     loop_body(l, body, first);
 }
-fn for_in(
-    l: &mut Layout<'_>,
-    first: usize,
-    left_span: Span,
-    right_span: Span,
-    body: Span,
-    is_await: bool,
-) {
+fn for_in(l: &mut Layout<'_>, first: usize, left_span: Span, right_span: Span, body: Span, is_await: bool) {
     let Some(mut left) = l.after(first) else {
         return;
     };
@@ -1074,13 +958,7 @@ fn for_in(
     }
     loop_body(l, body, first);
 }
-fn import_export(
-    l: &mut Layout<'_>,
-    span: Span,
-    source: Option<Span>,
-    specs: Vec<Span>,
-    export: bool,
-) {
+fn import_export(l: &mut Layout<'_>, span: Span, source: Option<Span>, specs: Vec<Span>, export: bool) {
     let Some(first) = l.first(span) else {
         return;
     };
@@ -1105,13 +983,7 @@ fn import_export(
         if let Some(left) = l.before(sf) {
             if let Some(sl) = specs.last().and_then(|s| l.last(*s)) {
                 if let Some(right) = find_after(l, sl, "}") {
-                    l.list(
-                        &specs,
-                        l.tokens[left].span,
-                        Some(l.tokens[right].span),
-                        1,
-                        false,
-                    );
+                    l.list(&specs, l.tokens[left].span, Some(l.tokens[right].span), 1, false);
                     before.retain(|x| *x <= left || *x > right);
                 }
             }
@@ -1121,13 +993,7 @@ fn import_export(
         if let Some(left) = before.iter().copied().find(|x| l.text(*x) == "{") {
             if let Some(right) = find_after(l, left, "}").filter(|x| *x <= last) {
                 l.set(left, 0, first);
-                l.list(
-                    &[],
-                    l.tokens[left].span,
-                    Some(l.tokens[right].span),
-                    1,
-                    false,
-                );
+                l.list(&[], l.tokens[left].span, Some(l.tokens[right].span), 1, false);
                 before.retain(|x| *x <= left || *x > right);
             }
         }
@@ -1164,13 +1030,7 @@ fn import_export(
                         members.push(l.tokens[next].span);
                         current = next;
                     }
-                    l.list(
-                        &members,
-                        l.tokens[open].span,
-                        Some(l.tokens[close].span),
-                        1,
-                        false,
-                    );
+                    l.list(&members, l.tokens[open].span, Some(l.tokens[close].span), 1, false);
                 }
             }
         }
@@ -1206,10 +1066,7 @@ mod tests {
         fixes.sort_by_key(|f| std::cmp::Reverse(f.span.start));
         let mut result = source.to_owned();
         for fix in fixes {
-            result.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            result.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         }
         result
     }

@@ -1,11 +1,11 @@
 //! `svelte/prefer-derived-over-derived-by` simplifies callbacks returning one expression.
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use crate::parser::expression::parse_template_expression;
 use oxc::allocator::Allocator;
-use oxc::ast::ast::{CallExpression, Expression, Statement};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{CallExpression, Expression, Statement};
 use oxc::semantic::SemanticBuilder;
 use oxc::span::{GetSpan, Span};
 
@@ -23,9 +23,7 @@ impl Rule for PreferDerivedOverDerivedBy {
     }
 
     fn run<'a>(&self, ctx: &mut LintContext<'a>) {
-        if ctx.runes_explicit_false
-            || (!ctx.svelte_version.is_unknown() && !ctx.svelte_version.includes_major(5))
-        {
+        if ctx.runes_explicit_false || (!ctx.svelte_version.is_unknown() && !ctx.svelte_version.includes_major(5)) {
             return;
         }
         for (semantic, script, fallback) in [
@@ -34,11 +32,7 @@ impl Rule for PreferDerivedOverDerivedBy {
                 ctx.ast.instance.as_ref(),
                 ctx.instance_content_offset,
             ),
-            (
-                ctx.module_semantic,
-                ctx.ast.module.as_ref(),
-                ctx.module_content_offset,
-            ),
+            (ctx.module_semantic, ctx.ast.module.as_ref(), ctx.module_content_offset),
         ] {
             let Some(semantic) = semantic else { continue };
             let offset = script.map_or(fallback, |s| s.content_span.start) as i64;
@@ -74,14 +68,14 @@ impl Rule for PreferDerivedOverDerivedBy {
         expressions.dedup();
         for span in expressions {
             let allocator = Allocator::default();
-            let parsed = parse_template_expression(
-                &ctx.source[span.start as usize..span.end as usize],
-                &allocator,
-            );
+            let parsed = parse_template_expression(&ctx.source[span.start as usize..span.end as usize], &allocator);
             if !parsed.diagnostics.is_empty() {
                 continue;
             }
-            let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+            let semantic = SemanticBuilder::new()
+                .with_build_nodes(true)
+                .build(&parsed.program)
+                .semantic;
             for node in semantic.nodes().iter() {
                 if let AstKind::CallExpression(call) = node.kind() {
                     check_call(call, i64::from(span.start) - 6, ctx);
@@ -90,16 +84,15 @@ impl Rule for PreferDerivedOverDerivedBy {
         }
         for span in declarations {
             let allocator = Allocator::default();
-            let source = format!(
-                "const {};",
-                &ctx.source[span.start as usize..span.end as usize]
-            );
-            let parsed =
-                oxc::parser::Parser::new(&allocator, &source, oxc::span::SourceType::ts()).parse();
+            let source = format!("const {};", &ctx.source[span.start as usize..span.end as usize]);
+            let parsed = oxc::parser::Parser::new(&allocator, &source, oxc::span::SourceType::ts()).parse();
             if !parsed.diagnostics.is_empty() {
                 continue;
             }
-            let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+            let semantic = SemanticBuilder::new()
+                .with_build_nodes(true)
+                .build(&parsed.program)
+                .semantic;
             for node in semantic.nodes().iter() {
                 if let AstKind::CallExpression(call) = node.kind() {
                     check_call(call, i64::from(span.start) - 6, ctx);
@@ -124,9 +117,7 @@ fn check_call(call: &CallExpression<'_>, offset: i64, ctx: &mut LintContext<'_>)
     };
     let expression = match argument.without_parentheses() {
         Expression::ArrowFunctionExpression(function)
-            if !function.r#async
-                && function.params.items.is_empty()
-                && function.params.rest.is_none() =>
+            if !function.r#async && function.params.items.is_empty() && function.params.rest.is_none() =>
         {
             if function.body.is_expression() {
                 let Some(expression) = function.body.as_expression() else {
@@ -211,12 +202,12 @@ mod tests {
         let mut output = source.to_string();
         for diagnostic in diagnostics.iter().rev() {
             let fix = diagnostic.fix.as_ref().unwrap();
-            output.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         }
-        assert_eq!(output, "<!-- 😀 --><script data-note=\">\">const value = $derived(source /* keep */ + 1);</script><p>{$derived(value + 1)}</p>");
+        assert_eq!(
+            output,
+            "<!-- 😀 --><script data-note=\">\">const value = $derived(source /* keep */ + 1);</script><p>{$derived(value + 1)}</p>"
+        );
     }
 
     #[test]
@@ -225,15 +216,19 @@ mod tests {
         let alloc = Allocator::default();
         let parsed = parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty());
-        assert!(Linter::all()
-            .lint(&parsed.ast, source)
-            .iter()
-            .all(|d| d.rule_name != "svelte/prefer-derived-over-derived-by"));
+        assert!(
+            Linter::all()
+                .lint(&parsed.ast, source)
+                .iter()
+                .all(|d| d.rule_name != "svelte/prefer-derived-over-derived-by")
+        );
         let source = "<svelte:options runes={false} /><script>let value = $derived.by(() => count);</script>";
         let parsed = parser::parse_for_lint(source, &alloc);
-        assert!(Linter::all()
-            .lint(&parsed.ast, source)
-            .iter()
-            .all(|d| d.rule_name != "svelte/prefer-derived-over-derived-by"));
+        assert!(
+            Linter::all()
+                .lint(&parsed.ast, source)
+                .iter()
+                .all(|d| d.rule_name != "svelte/prefer-derived-over-derived-by")
+        );
     }
 }

@@ -2,10 +2,9 @@
 //! ⭐ Recommended, 🔧 Fixable
 //!
 use crate::ast::{
-    Attribute, AttributeMeta, AttributeQuote, AttributeValue, AttributeValuePart, DirectiveKind,
-    TemplateNode,
+    Attribute, AttributeMeta, AttributeQuote, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode,
 };
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use crate::parser::expression::{parse_template_expression, unwrap_template_expression};
 use oxc::allocator::Allocator;
 use oxc::ast::ast::Expression;
@@ -33,11 +32,7 @@ impl Rule for NoUselessMustaches {
             .as_ref()
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first());
-        let get_bool = |key| {
-            opts.and_then(|v| v.get(key))
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false)
-        };
+        let get_bool = |key| opts.and_then(|v| v.get(key)).and_then(|v| v.as_bool()).unwrap_or(false);
         let ignore_comment = get_bool("ignoreIncludesComment");
         let ignore_escape = get_bool("ignoreStringEscape");
 
@@ -77,14 +72,7 @@ fn check_mustache_tag<'a>(
     ignore_comment: bool,
     ignore_escape: bool,
 ) {
-    check_expression(
-        &tag.expression,
-        tag.span,
-        None,
-        ctx,
-        ignore_comment,
-        ignore_escape,
-    );
+    check_expression(&tag.expression, tag.span, None, ctx, ignore_comment, ignore_escape);
 }
 
 fn check_attribute_value(
@@ -102,9 +90,7 @@ fn check_attribute_value(
         }
         AttributeValue::Concat(parts) => {
             for (part, part_meta) in parts.iter().zip(&meta.parts) {
-                if let (AttributeValuePart::Expression(expr), Some(span)) =
-                    (part, part_meta.mustache_span)
-                {
+                if let (AttributeValuePart::Expression(expr), Some(span)) = (part, part_meta.mustache_span) {
                     check_expression(expr, span, Some(meta), ctx, ignore_comment, ignore_escape);
                 }
             }
@@ -231,10 +217,7 @@ fn has_useful_escape(raw: &str) -> bool {
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'\\' && i + 1 < bytes.len() {
-            if matches!(
-                bytes[i + 1],
-                b'n' | b'r' | b'v' | b't' | b'b' | b'f' | b'u' | b'x'
-            ) {
+            if matches!(bytes[i + 1], b'n' | b'r' | b'v' | b't' | b'b' | b'f' | b'u' | b'x') {
                 return true;
             }
             i += 2;
@@ -281,10 +264,7 @@ mod tests {
             &source[diagnostics[0].span.start as usize..diagnostics[0].span.end as usize],
             "{'a'}"
         );
-        assert_eq!(
-            diagnostics[2].fix.as_ref().unwrap().replacement,
-            "&lt;b&gt;"
-        );
+        assert_eq!(diagnostics[2].fix.as_ref().unwrap().replacement, "&lt;b&gt;");
         assert!(diagnostics[3].fix.is_none());
         assert!(diagnostics[4].fix.is_none());
     }

@@ -1,7 +1,7 @@
 //! `svelte/no-target-blank` — disallow `target="_blank"` without `rel="noopener noreferrer"`.
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct NoTargetBlank;
 
@@ -13,9 +13,9 @@ fn is_external_url(s: &str) -> bool {
     if s.starts_with("//") {
         return true;
     }
-    let mut iter = s.chars();
+    let iter = s.chars();
     let mut saw_word = false;
-    while let Some(c) = iter.next() {
+    for c in iter {
         if c == ':' {
             return saw_word;
         }
@@ -116,8 +116,7 @@ impl Rule for NoTargetBlank {
                     return false;
                 }
                 let words = collect_static_words(value);
-                words.iter().any(|w| w == "noopener")
-                    && (allow_referrer || words.iter().any(|w| w == "noreferrer"))
+                words.iter().any(|w| w == "noopener") && (allow_referrer || words.iter().any(|w| w == "noreferrer"))
             });
             if has_safe_rel {
                 return;

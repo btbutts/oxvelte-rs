@@ -23,11 +23,9 @@
 //!   script-side constructor, matching upstream `ReferenceTracker` behavior.
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
-use oxc::ast::ast::{
-    AssignmentTarget, BindingPattern, ExportDefaultDeclarationKind, Expression, Statement,
-};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{AssignmentTarget, BindingPattern, ExportDefaultDeclarationKind, Expression, Statement};
 use oxc::semantic::{AstNodes, NodeId, Scoping, Semantic, SymbolId};
 use oxc::span::{GetSpan, Span};
 use std::collections::{HashMap, HashSet};
@@ -128,8 +126,7 @@ fn check_script<'a>(
     is_module: bool,
     template_mutations: &TemplateMutationMap,
 ) {
-    let diagnostics =
-        collect_script_diagnostics(sem, content_offset, is_module, template_mutations);
+    let diagnostics = collect_script_diagnostics(sem, content_offset, is_module, template_mutations);
     for (span, builtin) in diagnostics {
         ctx.diagnostic(message(builtin), span);
     }
@@ -202,30 +199,20 @@ fn collect_script_diagnostics<'a>(
         //     to `x` (a tracked symbol below); we mark `x` as exported and
         //     report after we know the construction's symbol.
         if is_module && is_inside_export_decl(nodes, ctor.new_expr_node_id) {
-            to_report.insert((
-                ctor.new_expr_span.start,
-                ctor.new_expr_span.end,
-                ctor.builtin.name,
-            ));
+            to_report.insert((ctor.new_expr_span.start, ctor.new_expr_span.end, ctor.builtin.name));
             continue;
         }
 
         // Direct mutation: `new Date().setHours(...)` or
         // `(new URL(...)).href = "..."`.
         if is_directly_mutated(nodes, ctor.new_expr_node_id, ctor.builtin) {
-            to_report.insert((
-                ctor.new_expr_span.start,
-                ctor.new_expr_span.end,
-                ctor.builtin.name,
-            ));
+            to_report.insert((ctor.new_expr_span.start, ctor.new_expr_span.end, ctor.builtin.name));
             continue;
         }
 
         // Otherwise, locate the binding the construction flows into.
         if let Some(sym) = target_symbol(nodes, scoping, ctor.new_expr_node_id) {
-            tracked
-                .entry(sym)
-                .or_insert((ctor.builtin, ctor.new_expr_span));
+            tracked.entry(sym).or_insert((ctor.builtin, ctor.new_expr_span));
         }
     }
 
@@ -415,11 +402,7 @@ fn binding_symbol_from_pattern(pat: &BindingPattern<'_>) -> Option<SymbolId> {
 /// `const m = new Map(); const m2 = m; const m3 = m2;` → all three tracked.
 ///
 /// We iterate to a fixed point so chains of any length resolve.
-fn expand_aliases(
-    scoping: &Scoping,
-    nodes: &AstNodes,
-    tracked: &mut HashMap<SymbolId, (&'static BuiltinClass, Span)>,
-) {
+fn expand_aliases(scoping: &Scoping, nodes: &AstNodes, tracked: &mut HashMap<SymbolId, (&'static BuiltinClass, Span)>) {
     loop {
         let mut added: Vec<(SymbolId, &'static BuiltinClass, Span)> = Vec::new();
         for (&sid, &(builtin, origin)) in tracked.iter() {
@@ -447,12 +430,7 @@ fn expand_aliases(
 }
 
 /// True if any reference of `sid` reads into a mutating member access.
-fn symbol_is_mutated(
-    scoping: &Scoping,
-    nodes: &AstNodes,
-    sid: SymbolId,
-    builtin: &BuiltinClass,
-) -> bool {
+fn symbol_is_mutated(scoping: &Scoping, nodes: &AstNodes, sid: SymbolId, builtin: &BuiltinClass) -> bool {
     for reference in scoping.get_resolved_references(sid) {
         if !reference.is_read() {
             continue;
@@ -522,8 +500,7 @@ fn collect_template_scan<'a>(ctx: &LintContext<'a>) -> TemplateScan {
         TemplateNode::Element(el) => {
             for (idx, attr) in el.attributes.iter().enumerate() {
                 match attr {
-                    Attribute::NormalAttribute { value, .. }
-                    | Attribute::Directive { value, .. } => match value {
+                    Attribute::NormalAttribute { value, .. } | Attribute::Directive { value, .. } => match value {
                         AttributeValue::Expression(text) => {
                             if let Some(expr) = el.attribute_expression_ast(idx) {
                                 let span = el
@@ -531,13 +508,7 @@ fn collect_template_scan<'a>(ctx: &LintContext<'a>) -> TemplateScan {
                                     .get(idx)
                                     .and_then(|m| m.expression_span)
                                     .unwrap_or_else(|| attr_span(attr));
-                                scan_template_expr(
-                                    expr,
-                                    text,
-                                    span,
-                                    &mut scan.mutations,
-                                    &mut scan.diagnostics,
-                                );
+                                scan_template_expr(expr, text, span, &mut scan.mutations, &mut scan.diagnostics);
                             }
                         }
                         AttributeValue::Concat(parts) => {
@@ -545,8 +516,7 @@ fn collect_template_scan<'a>(ctx: &LintContext<'a>) -> TemplateScan {
                                 let AttributeValuePart::Expression(text) = part else {
                                     continue;
                                 };
-                                let Some(expr) = el.attribute_part_expression_ast(idx, part_idx)
-                                else {
+                                let Some(expr) = el.attribute_part_expression_ast(idx, part_idx) else {
                                     continue;
                                 };
                                 let span = el
@@ -555,13 +525,7 @@ fn collect_template_scan<'a>(ctx: &LintContext<'a>) -> TemplateScan {
                                     .and_then(|m| m.parts.get(part_idx))
                                     .and_then(|p| p.expression_span)
                                     .unwrap_or_else(|| attr_span(attr));
-                                scan_template_expr(
-                                    expr,
-                                    text,
-                                    span,
-                                    &mut scan.mutations,
-                                    &mut scan.diagnostics,
-                                );
+                                scan_template_expr(expr, text, span, &mut scan.mutations, &mut scan.diagnostics);
                             }
                         }
                         _ => {}
@@ -589,9 +553,9 @@ fn collect_template_scan<'a>(ctx: &LintContext<'a>) -> TemplateScan {
 
 fn attr_span(attr: &Attribute) -> Span {
     match attr {
-        Attribute::NormalAttribute { span, .. }
-        | Attribute::Directive { span, .. }
-        | Attribute::Spread { span } => *span,
+        Attribute::NormalAttribute { span, .. } | Attribute::Directive { span, .. } | Attribute::Spread { span } => {
+            *span
+        }
     }
 }
 
@@ -606,11 +570,7 @@ fn scan_template_expr<'a>(
     scan_template_expression_semantic(text, span, out);
 }
 
-fn scan_template_expression_semantic(
-    text: &str,
-    expression_span: Span,
-    out: &mut Vec<(Span, &'static BuiltinClass)>,
-) {
+fn scan_template_expression_semantic(text: &str, expression_span: Span, out: &mut Vec<(Span, &'static BuiltinClass)>) {
     use oxc::allocator::Allocator;
     use oxc::parser::Parser;
     use oxc::semantic::SemanticBuilder;
@@ -622,7 +582,10 @@ fn scan_template_expression_semantic(
     if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
     let mut template_targets: HashMap<&'static str, HashSet<String>> = HashMap::new();
     for b in BUILTIN_CLASSES {
         template_targets.insert(b.name, HashSet::new());
@@ -638,19 +601,11 @@ fn scan_template_expression_semantic(
 /// Recursively collect `<name>.<mutator>(...)` and `<name>.<prop> = ...`
 /// mutations from template expressions. These names are matched against
 /// script-side tracked symbols so diagnostics still point at the constructor.
-fn collect_template_mutations_expr<'a>(
-    expr: &'a Expression<'a>,
-    mutations: &mut TemplateMutationMap,
-) {
+fn collect_template_mutations_expr<'a>(expr: &'a Expression<'a>, mutations: &mut TemplateMutationMap) {
     match expr {
         Expression::CallExpression(ce) => {
             if let Expression::StaticMemberExpression(mem) = &ce.callee {
-                record_template_member_mutation(
-                    &mem.object,
-                    mem.property.name.as_str(),
-                    false,
-                    mutations,
-                );
+                record_template_member_mutation(&mem.object, mem.property.name.as_str(), false, mutations);
                 collect_template_mutations_expr(&mem.object, mutations);
             } else {
                 collect_template_mutations_expr(&ce.callee, mutations);
@@ -663,12 +618,7 @@ fn collect_template_mutations_expr<'a>(
         }
         Expression::AssignmentExpression(ae) => {
             if let AssignmentTarget::StaticMemberExpression(mem) = &ae.left {
-                record_template_member_mutation(
-                    &mem.object,
-                    mem.property.name.as_str(),
-                    true,
-                    mutations,
-                );
+                record_template_member_mutation(&mem.object, mem.property.name.as_str(), true, mutations);
             }
             collect_template_mutations_expr(&ae.right, mutations);
         }
@@ -790,10 +740,7 @@ fn collect_template_mutations_statements<'a>(
     }
 }
 
-fn collect_template_mutations_statement<'a>(
-    statement: &'a Statement<'a>,
-    mutations: &mut TemplateMutationMap,
-) {
+fn collect_template_mutations_statement<'a>(statement: &'a Statement<'a>, mutations: &mut TemplateMutationMap) {
     match statement {
         Statement::ExpressionStatement(es) => {
             collect_template_mutations_expr(&es.expression, mutations);
@@ -885,10 +832,7 @@ mod tests {
         let diags = lint_module(source, true);
         assert_eq!(diags.len(), 1);
         let span = diags[0].span;
-        assert_eq!(
-            &source[span.start as usize..span.end as usize],
-            "new Date(0)"
-        );
+        assert_eq!(&source[span.start as usize..span.end as usize], "new Date(0)");
         assert_eq!(
             diags[0].message,
             "Found a mutable instance of the built-in Date class. Use SvelteDate instead."

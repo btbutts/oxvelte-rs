@@ -2,14 +2,13 @@
 //! ⭐ Recommended
 
 use crate::ast::{Attribute, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
-use oxc::ast::ast::{
-    ArrayAssignmentTarget, AssignmentTarget, AssignmentTargetMaybeDefault,
-    AssignmentTargetProperty, Declaration, Expression, ForStatementLeft, IdentifierReference,
-    ImportDeclarationSpecifier, ObjectAssignmentTarget, SimpleAssignmentTarget, Statement,
-    VariableDeclaration,
-};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{
+    ArrayAssignmentTarget, AssignmentTarget, AssignmentTargetMaybeDefault, AssignmentTargetProperty, Declaration,
+    Expression, ForStatementLeft, IdentifierReference, ImportDeclarationSpecifier, ObjectAssignmentTarget,
+    SimpleAssignmentTarget, Statement, VariableDeclaration,
+};
 use oxc::semantic::{NodeId, Semantic};
 use oxc::span::Span;
 use std::collections::HashSet;
@@ -64,11 +63,7 @@ impl Rule for NoReactiveReassign {
                         if !reactive_vars.contains(name) {
                             continue;
                         }
-                        if scoping
-                            .get_reference(id.reference_id())
-                            .symbol_id()
-                            .is_some()
-                        {
+                        if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
                             continue;
                         }
                         if is_direct_reactive_decl(nodes, node.id()) {
@@ -76,10 +71,7 @@ impl Rule for NoReactiveReassign {
                         }
                         let sp = content_offset as u32 + id.span.start;
                         let end = content_offset as u32 + ae.span.end.min(span_after_left_op(ae));
-                        ctx.diagnostic(
-                            format!("Assignment to reactive value '{}'.", name),
-                            Span::new(sp, end),
-                        );
+                        ctx.diagnostic(format!("Assignment to reactive value '{}'.", name), Span::new(sp, end));
                     }
                 }
                 AstKind::UpdateExpression(ue) => {
@@ -88,11 +80,7 @@ impl Rule for NoReactiveReassign {
                         if !reactive_vars.contains(name) {
                             continue;
                         }
-                        if scoping
-                            .get_reference(id.reference_id())
-                            .symbol_id()
-                            .is_some()
-                        {
+                        if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
                             continue;
                         }
                         if is_direct_reactive_decl(nodes, node.id()) {
@@ -100,10 +88,7 @@ impl Rule for NoReactiveReassign {
                         }
                         let sp = content_offset as u32 + ue.span.start;
                         let end = content_offset as u32 + ue.span.end;
-                        ctx.diagnostic(
-                            format!("Assignment to reactive value '{}'.", name),
-                            Span::new(sp, end),
-                        );
+                        ctx.diagnostic(format!("Assignment to reactive value '{}'.", name), Span::new(sp, end));
                     }
                 }
                 _ => {}
@@ -155,9 +140,7 @@ impl Rule for NoReactiveReassign {
                     }
                     AstKind::CallExpression(ce) => {
                         let (method_name, base_expr) = match &ce.callee {
-                            Expression::StaticMemberExpression(m) => {
-                                (m.property.name.as_str(), &m.object)
-                            }
+                            Expression::StaticMemberExpression(m) => (m.property.name.as_str(), &m.object),
                             Expression::ChainExpression(c) => match &c.expression {
                                 oxc::ast::ast::ChainElement::StaticMemberExpression(m) => {
                                     (m.property.name.as_str(), &m.object)
@@ -174,9 +157,7 @@ impl Rule for NoReactiveReassign {
                         };
                         (b, d, ce.span.end, true)
                     }
-                    AstKind::UnaryExpression(ue)
-                        if ue.operator == oxc::syntax::operator::UnaryOperator::Delete =>
-                    {
+                    AstKind::UnaryExpression(ue) if ue.operator == oxc::syntax::operator::UnaryOperator::Delete => {
                         let Some(b) = expr_base_ident(&ue.argument) else {
                             continue;
                         };
@@ -195,11 +176,7 @@ impl Rule for NoReactiveReassign {
                 if !is_reactive_ref {
                     continue;
                 }
-                if scoping
-                    .get_reference(base.reference_id())
-                    .symbol_id()
-                    .is_some()
-                {
+                if scoping.get_reference(base.reference_id()).symbol_id().is_some() {
                     continue;
                 }
                 if is_in_direct_reactive_statement(nodes, node.id()) {
@@ -235,8 +212,7 @@ impl Rule for NoReactiveReassign {
             };
             if !matches!(
                 &ae.left,
-                AssignmentTarget::ObjectAssignmentTarget(_)
-                    | AssignmentTarget::ArrayAssignmentTarget(_)
+                AssignmentTarget::ObjectAssignmentTarget(_) | AssignmentTarget::ArrayAssignmentTarget(_)
             ) {
                 continue;
             }
@@ -248,16 +224,12 @@ impl Rule for NoReactiveReassign {
             let mut reported = std::collections::HashSet::new();
             for id in &idents {
                 let name = id.name.as_str();
-                let is_reactive = reactive_vars.contains(name)
-                    || (name.starts_with('$') && reactive_vars.contains(&name[1..]));
+                let is_reactive =
+                    reactive_vars.contains(name) || (name.starts_with('$') && reactive_vars.contains(&name[1..]));
                 if !is_reactive {
                     continue;
                 }
-                if scoping
-                    .get_reference(id.reference_id())
-                    .symbol_id()
-                    .is_some()
-                {
+                if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
                     continue;
                 }
                 if !reported.insert(name) {
@@ -265,10 +237,7 @@ impl Rule for NoReactiveReassign {
                 } // report each var once per pattern
                 let sp = content_offset as u32 + ae.span.start;
                 let end = content_offset as u32 + ae.span.end;
-                ctx.diagnostic(
-                    format!("Assignment to reactive value '{}'.", name),
-                    Span::new(sp, end),
-                );
+                ctx.diagnostic(format!("Assignment to reactive value '{}'.", name), Span::new(sp, end));
             }
         }
 
@@ -284,44 +253,25 @@ impl Rule for NoReactiveReassign {
             let (name, name_end, is_prop) = match left {
                 ForStatementLeft::VariableDeclaration(_) => continue,
                 ForStatementLeft::AssignmentTargetIdentifier(id) => {
-                    if scoping
-                        .get_reference(id.reference_id())
-                        .symbol_id()
-                        .is_some()
-                    {
+                    if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
                         continue;
                     }
                     (id.name.as_str(), id.span.end, false)
                 }
                 ForStatementLeft::StaticMemberExpression(m) => match expr_base_ident(&m.object) {
-                    Some(id)
-                        if scoping
-                            .get_reference(id.reference_id())
-                            .symbol_id()
-                            .is_none() =>
-                    {
+                    Some(id) if scoping.get_reference(id.reference_id()).symbol_id().is_none() => {
                         (id.name.as_str(), id.span.end, true)
                     }
                     _ => continue,
                 },
                 ForStatementLeft::ComputedMemberExpression(m) => match expr_base_ident(&m.object) {
-                    Some(id)
-                        if scoping
-                            .get_reference(id.reference_id())
-                            .symbol_id()
-                            .is_none() =>
-                    {
+                    Some(id) if scoping.get_reference(id.reference_id()).symbol_id().is_none() => {
                         (id.name.as_str(), id.span.end, true)
                     }
                     _ => continue,
                 },
                 ForStatementLeft::PrivateFieldExpression(m) => match expr_base_ident(&m.object) {
-                    Some(id)
-                        if scoping
-                            .get_reference(id.reference_id())
-                            .symbol_id()
-                            .is_none() =>
-                    {
+                    Some(id) if scoping.get_reference(id.reference_id()).symbol_id().is_none() => {
                         (id.name.as_str(), id.span.end, true)
                     }
                     _ => continue,
@@ -363,11 +313,7 @@ impl Rule for NoReactiveReassign {
                 let Some(id) = find_reactive_via_conditional(member_object, &reactive_vars) else {
                     continue;
                 };
-                if scoping
-                    .get_reference(id.reference_id())
-                    .symbol_id()
-                    .is_some()
-                {
+                if scoping.get_reference(id.reference_id()).symbol_id().is_some() {
                     continue;
                 }
                 if is_in_direct_reactive_statement(nodes, node.id()) {
@@ -397,8 +343,7 @@ impl Rule for NoReactiveReassign {
                         Attribute::NormalAttribute { value, span, .. }
                             if matches!(
                                 value,
-                                crate::ast::AttributeValue::Expression(_)
-                                    | crate::ast::AttributeValue::Concat(_)
+                                crate::ast::AttributeValue::Expression(_) | crate::ast::AttributeValue::Concat(_)
                             ) =>
                         {
                             Some((value, *span))
@@ -431,8 +376,7 @@ impl Rule for NoReactiveReassign {
                                         let Some(rel) = region[cursor..].find('{') else {
                                             break;
                                         };
-                                        let text_start =
-                                            attr_span.start + (cursor + rel) as u32 + 1;
+                                        let text_start = attr_span.start + (cursor + rel) as u32 + 1;
                                         check_template_expression(
                                             text,
                                             text_start,
@@ -471,25 +415,19 @@ impl Rule for NoReactiveReassign {
                                 };
                                 (base_name.clone(), (base_name, is_member))
                             }
-                            crate::ast::AttributeValue::True => {
-                                (name.clone(), (name.clone(), false))
-                            }
+                            crate::ast::AttributeValue::True => (name.clone(), (name.clone(), false)),
                             _ => continue,
                         };
                         let (base_name, is_member) = base;
                         let matched = if is_member {
                             reactive_vars.contains(&base_name) && check_props
                         } else {
-                            reactive_vars.contains(&base_name)
-                                || bound == base_name && reactive_vars.contains(&bound)
+                            reactive_vars.contains(&base_name) || bound == base_name && reactive_vars.contains(&bound)
                         };
                         if matched {
                             ctx.diagnostic(
                                 if is_member {
-                                    format!(
-                                        "Assignment to property of reactive value '{}'.",
-                                        base_name
-                                    )
+                                    format!("Assignment to property of reactive value '{}'.", base_name)
                                 } else {
                                     format!("Assignment to reactive value '{}'.", base_name)
                                 },
@@ -558,7 +496,10 @@ fn check_template_expression<'a>(
     if !parsed.diagnostics.is_empty() {
         return;
     }
-    let semantic = SemanticBuilder::new().with_build_nodes(true).build(&parsed.program).semantic;
+    let semantic = SemanticBuilder::new()
+        .with_build_nodes(true)
+        .build(&parsed.program)
+        .semantic;
     let nodes = semantic.nodes();
 
     const MUTATING_NAMES: &[&str] = &[
@@ -579,8 +520,7 @@ fn check_template_expression<'a>(
     let src_pos = |wrap_pos: u32| -> u32 { text_start + wrap_pos.saturating_sub(1) };
 
     let check_reactive = |name: &str| -> bool {
-        reactive_vars.contains(name)
-            || (name.starts_with('$') && reactive_vars.contains(&name[1..]))
+        reactive_vars.contains(name) || (name.starts_with('$') && reactive_vars.contains(&name[1..]))
     };
 
     // Suppress when the wrapper parse yielded no useful nodes.
@@ -605,10 +545,7 @@ fn check_template_expression<'a>(
                 let sp = src_pos(ae.span.start);
                 let end = src_pos(ae.span.end);
                 if depth == 0 {
-                    ctx.diagnostic(
-                        format!("Assignment to reactive value '{}'.", name),
-                        Span::new(sp, end),
-                    );
+                    ctx.diagnostic(format!("Assignment to reactive value '{}'.", name), Span::new(sp, end));
                 } else if check_props {
                     ctx.diagnostic(
                         format!("Assignment to property of reactive value '{}'.", name),
@@ -633,10 +570,7 @@ fn check_template_expression<'a>(
                 let sp = src_pos(ue.span.start);
                 let end = src_pos(ue.span.end);
                 if depth == 0 {
-                    ctx.diagnostic(
-                        format!("Assignment to reactive value '{}'.", name),
-                        Span::new(sp, end),
-                    );
+                    ctx.diagnostic(format!("Assignment to reactive value '{}'.", name), Span::new(sp, end));
                 } else if check_props {
                     ctx.diagnostic(
                         format!("Assignment to property of reactive value '{}'.", name),
@@ -727,43 +661,35 @@ fn collect_reactive_and_declared(semantic: &Semantic<'_>) -> (HashSet<String>, H
                 for spec in specs {
                     let name = match spec {
                         ImportDeclarationSpecifier::ImportSpecifier(s) => s.local.name.as_str(),
-                        ImportDeclarationSpecifier::ImportDefaultSpecifier(s) => {
-                            s.local.name.as_str()
-                        }
-                        ImportDeclarationSpecifier::ImportNamespaceSpecifier(s) => {
-                            s.local.name.as_str()
-                        }
+                        ImportDeclarationSpecifier::ImportDefaultSpecifier(s) => s.local.name.as_str(),
+                        ImportDeclarationSpecifier::ImportNamespaceSpecifier(s) => s.local.name.as_str(),
                     };
                     declared.insert(name.to_string());
                 }
             }
-            Statement::ExportDeclaration(exp) => {
-                match &exp.declaration {
-                    Declaration::VariableDeclaration(vd) => {
-                        collect_var_names(vd, &mut declared)
+            Statement::ExportDeclaration(exp) => match &exp.declaration {
+                Declaration::VariableDeclaration(vd) => collect_var_names(vd, &mut declared),
+                Declaration::FunctionDeclaration(f) => {
+                    if let Some(id) = &f.id {
+                        declared.insert(id.name.to_string());
                     }
-                    Declaration::FunctionDeclaration(f) => {
-                        if let Some(id) = &f.id {
-                            declared.insert(id.name.to_string());
-                        }
-                    }
-                    Declaration::ClassDeclaration(c) => {
-                        if let Some(id) = &c.id {
-                            declared.insert(id.name.to_string());
-                        }
-                    }
-                    Declaration::TSTypeAliasDeclaration(t) => {
-                        declared.insert(t.id.name.to_string());
-                    }
-                    Declaration::TSInterfaceDeclaration(i) => {
-                        declared.insert(i.id.name.to_string());
-                    }
-                    Declaration::TSEnumDeclaration(e) => {
-                        declared.insert(e.id.name.to_string());
-                    }
-                    _ => {}
                 }
-            }
+                Declaration::ClassDeclaration(c) => {
+                    if let Some(id) = &c.id {
+                        declared.insert(id.name.to_string());
+                    }
+                }
+                Declaration::TSTypeAliasDeclaration(t) => {
+                    declared.insert(t.id.name.to_string());
+                }
+                Declaration::TSInterfaceDeclaration(i) => {
+                    declared.insert(i.id.name.to_string());
+                }
+                Declaration::TSEnumDeclaration(e) => {
+                    declared.insert(e.id.name.to_string());
+                }
+                _ => {}
+            },
             _ => {}
         }
     }
@@ -776,10 +702,7 @@ fn collect_var_names(vd: &VariableDeclaration<'_>, out: &mut HashSet<String>) {
     }
 }
 
-fn collect_binding_pattern_names(
-    pat: &oxc::ast::ast::BindingPattern<'_>,
-    out: &mut HashSet<String>,
-) {
+fn collect_binding_pattern_names(pat: &oxc::ast::ast::BindingPattern<'_>, out: &mut HashSet<String>) {
     use oxc::ast::ast::BindingPattern;
     match pat {
         BindingPattern::BindingIdentifier(id) => {
@@ -822,9 +745,7 @@ fn span_after_left_op(ae: &oxc::ast::ast::AssignmentExpression<'_>) -> u32 {
         AssignmentOperator::ShiftLeft | AssignmentOperator::ShiftRight => 3,
         AssignmentOperator::ShiftRightZeroFill => 4,
         AssignmentOperator::Exponential => 3,
-        AssignmentOperator::LogicalAnd
-        | AssignmentOperator::LogicalOr
-        | AssignmentOperator::LogicalNullish => 3,
+        AssignmentOperator::LogicalAnd | AssignmentOperator::LogicalOr | AssignmentOperator::LogicalNullish => 3,
     };
     let left_end = oxc::span::GetSpan::span(&ae.left).end;
     left_end + op_len + 1
@@ -879,15 +800,9 @@ fn expr_base_ident<'a>(expr: &'a Expression<'a>) -> Option<&'a IdentifierReferen
 fn expr_member_path<'a>(expr: &'a Expression<'a>) -> Option<(&'a IdentifierReference<'a>, usize)> {
     match unwrap_paren(expr) {
         Expression::Identifier(id) => Some((id, 0)),
-        Expression::StaticMemberExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
-        Expression::ComputedMemberExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
-        Expression::PrivateFieldExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
+        Expression::StaticMemberExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
+        Expression::ComputedMemberExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
+        Expression::PrivateFieldExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
         Expression::ChainExpression(c) => match &c.expression {
             oxc::ast::ast::ChainElement::StaticMemberExpression(m) => {
                 expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
@@ -905,20 +820,12 @@ fn expr_member_path<'a>(expr: &'a Expression<'a>) -> Option<(&'a IdentifierRefer
 }
 
 /// Member-path walk for an `AssignmentTarget` (LHS of `=`, `+=`, etc.).
-fn target_member_path<'a>(
-    target: &'a AssignmentTarget<'a>,
-) -> Option<(&'a IdentifierReference<'a>, usize)> {
+fn target_member_path<'a>(target: &'a AssignmentTarget<'a>) -> Option<(&'a IdentifierReference<'a>, usize)> {
     match target {
         AssignmentTarget::AssignmentTargetIdentifier(id) => Some((id, 0)),
-        AssignmentTarget::StaticMemberExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
-        AssignmentTarget::ComputedMemberExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
-        AssignmentTarget::PrivateFieldExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
+        AssignmentTarget::StaticMemberExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
+        AssignmentTarget::ComputedMemberExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
+        AssignmentTarget::PrivateFieldExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
         _ => None,
     }
 }
@@ -942,10 +849,8 @@ fn find_reactive_via_conditional<'a>(
     reactive_vars: &std::collections::HashSet<String>,
 ) -> Option<&'a IdentifierReference<'a>> {
     match unwrap_paren(expr) {
-        Expression::ConditionalExpression(c) => {
-            find_reactive_in_branch(&c.consequent, reactive_vars)
-                .or_else(|| find_reactive_in_branch(&c.alternate, reactive_vars))
-        }
+        Expression::ConditionalExpression(c) => find_reactive_in_branch(&c.consequent, reactive_vars)
+            .or_else(|| find_reactive_in_branch(&c.alternate, reactive_vars)),
         _ => None,
     }
 }
@@ -957,18 +862,14 @@ fn find_reactive_in_branch<'a>(
     match unwrap_paren(expr) {
         Expression::Identifier(id) => {
             let name = id.name.as_str();
-            if reactive_vars.contains(name)
-                || (name.starts_with('$') && reactive_vars.contains(&name[1..]))
-            {
+            if reactive_vars.contains(name) || (name.starts_with('$') && reactive_vars.contains(&name[1..])) {
                 Some(id)
             } else {
                 None
             }
         }
-        Expression::ConditionalExpression(c) => {
-            find_reactive_in_branch(&c.consequent, reactive_vars)
-                .or_else(|| find_reactive_in_branch(&c.alternate, reactive_vars))
-        }
+        Expression::ConditionalExpression(c) => find_reactive_in_branch(&c.consequent, reactive_vars)
+            .or_else(|| find_reactive_in_branch(&c.alternate, reactive_vars)),
         _ => None,
     }
 }
@@ -977,10 +878,7 @@ fn find_reactive_in_branch<'a>(
 /// shorthand props, renamed props, nested arrays/objects, and rest elements.
 /// Member-expression variants (used for computed property assignment like
 /// `x[y] = …`) are not destructure leaves and are skipped.
-fn collect_target_idents<'a>(
-    t: &'a AssignmentTarget<'a>,
-    out: &mut Vec<&'a IdentifierReference<'a>>,
-) {
+fn collect_target_idents<'a>(t: &'a AssignmentTarget<'a>, out: &mut Vec<&'a IdentifierReference<'a>>) {
     match t {
         AssignmentTarget::AssignmentTargetIdentifier(id) => out.push(id),
         AssignmentTarget::ObjectAssignmentTarget(o) => collect_obj_target_idents(o, out),
@@ -989,10 +887,7 @@ fn collect_target_idents<'a>(
     }
 }
 
-fn collect_obj_target_idents<'a>(
-    obj: &'a ObjectAssignmentTarget<'a>,
-    out: &mut Vec<&'a IdentifierReference<'a>>,
-) {
+fn collect_obj_target_idents<'a>(obj: &'a ObjectAssignmentTarget<'a>, out: &mut Vec<&'a IdentifierReference<'a>>) {
     for prop in &obj.properties {
         match prop {
             AssignmentTargetProperty::AssignmentTargetPropertyIdentifier(p) => {
@@ -1008,10 +903,7 @@ fn collect_obj_target_idents<'a>(
     }
 }
 
-fn collect_arr_target_idents<'a>(
-    arr: &'a ArrayAssignmentTarget<'a>,
-    out: &mut Vec<&'a IdentifierReference<'a>>,
-) {
+fn collect_arr_target_idents<'a>(arr: &'a ArrayAssignmentTarget<'a>, out: &mut Vec<&'a IdentifierReference<'a>>) {
     for el in arr.elements.iter().flatten() {
         collect_maybe_default_idents(el, out);
     }
@@ -1025,13 +917,9 @@ fn collect_maybe_default_idents<'a>(
     out: &mut Vec<&'a IdentifierReference<'a>>,
 ) {
     match m {
-        AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(wd) => {
-            collect_target_idents(&wd.binding, out)
-        }
+        AssignmentTargetMaybeDefault::AssignmentTargetWithDefault(wd) => collect_target_idents(&wd.binding, out),
         AssignmentTargetMaybeDefault::AssignmentTargetIdentifier(id) => out.push(id),
-        AssignmentTargetMaybeDefault::ObjectAssignmentTarget(o) => {
-            collect_obj_target_idents(o, out)
-        }
+        AssignmentTargetMaybeDefault::ObjectAssignmentTarget(o) => collect_obj_target_idents(o, out),
         AssignmentTargetMaybeDefault::ArrayAssignmentTarget(a) => collect_arr_target_idents(a, out),
         _ => {}
     }
@@ -1043,15 +931,9 @@ fn simple_target_member_path<'a>(
 ) -> Option<(&'a IdentifierReference<'a>, usize)> {
     match target {
         SimpleAssignmentTarget::AssignmentTargetIdentifier(id) => Some((id, 0)),
-        SimpleAssignmentTarget::StaticMemberExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
-        SimpleAssignmentTarget::ComputedMemberExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
-        SimpleAssignmentTarget::PrivateFieldExpression(m) => {
-            expr_member_path(&m.object).map(|(i, d)| (i, d + 1))
-        }
+        SimpleAssignmentTarget::StaticMemberExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
+        SimpleAssignmentTarget::ComputedMemberExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
+        SimpleAssignmentTarget::PrivateFieldExpression(m) => expr_member_path(&m.object).map(|(i, d)| (i, d + 1)),
         _ => None,
     }
 }
@@ -1062,7 +944,7 @@ mod tests {
     use oxc::allocator::Allocator;
     #[test]
     fn reactive_mutations_use_operation_spans_and_respect_local_symbols() {
-        let source="<!-- 😀 --><script data-note=\">\">let value=1; $: reactive={value}; function change(){ delete reactive.value; (reactive?.value).nested=2; ({value:reactive}=other); } function shadow(reactive){delete reactive.value; reactive.value=3;}</script><input bind:value={reactive.value} />";
+        let source = "<!-- 😀 --><script data-note=\">\">let value=1; $: reactive={value}; function change(){ delete reactive.value; (reactive?.value).nested=2; ({value:reactive}=other); } function shadow(reactive){delete reactive.value; reactive.value=3;}</script><input bind:value={reactive.value} />";
         let allocator = Allocator::default();
         let parsed = parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
@@ -1085,16 +967,13 @@ mod tests {
             );
         }
         assert_eq!(
-            diagnostics
-                .iter()
-                .filter(|d| d.message.contains("property of"))
-                .count(),
+            diagnostics.iter().filter(|d| d.message.contains("property of")).count(),
             3
         );
     }
     #[test]
     fn template_callback_bindings_shadow_reactive_declarations() {
-        let source="<script>let source=0; $: reactive=source;</script><button onclick={(reactive)=>reactive++}/><button onclick={()=>{reactive=1; reactive=2;}}/>";
+        let source = "<script>let source=0; $: reactive=source;</script><button onclick={(reactive)=>reactive++}/><button onclick={()=>{reactive=1; reactive=2;}}/>";
         let allocator = Allocator::default();
         let parsed = parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()

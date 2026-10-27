@@ -4,10 +4,8 @@
 //! ⭐ Recommended
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::{
-    Argument, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement,
-};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Argument, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::semantic::Semantic;
 use oxc::span::Span;
 
@@ -67,11 +65,7 @@ fn async_callback_span(arg: &Argument<'_>) -> Option<Span> {
     }
 }
 
-fn check_semantic<'a>(
-    semantic: &Semantic<'a>,
-    content_offset: u32,
-    findings: &mut Vec<(String, Span)>,
-) {
+fn check_semantic<'a>(semantic: &Semantic<'a>, content_offset: u32, findings: &mut Vec<(String, Span)>) {
     let factory_locals = collect_store_factory_locals(semantic);
     if factory_locals.named.is_empty() && factory_locals.namespaces.is_empty() {
         return;
@@ -115,10 +109,7 @@ fn is_store_factory_call(callee: &Expression<'_>, locals: &StoreFactoryLocals) -
             let Expression::Identifier(namespace) = &member.object else {
                 return false;
             };
-            locals
-                .namespaces
-                .iter()
-                .any(|l| l == namespace.name.as_str())
+            locals.namespaces.iter().any(|l| l == namespace.name.as_str())
                 && is_store_factory_name(member.property.name.as_str())
         }
         _ => false,

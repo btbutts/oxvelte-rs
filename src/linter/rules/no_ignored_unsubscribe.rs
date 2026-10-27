@@ -1,8 +1,8 @@
 //! `svelte/no-ignored-unsubscribe` — disallow ignoring store subscribe return value.
 
 use crate::linter::{LintContext, Rule};
-use oxc::ast::ast::Expression;
 use oxc::ast::AstKind;
+use oxc::ast::ast::Expression;
 use oxc::span::Span;
 
 pub struct NoIgnoredUnsubscribe;
@@ -20,9 +20,7 @@ impl Rule for NoIgnoredUnsubscribe {
                     ctx.ast
                         .instance
                         .as_ref()
-                        .map_or(ctx.instance_content_offset, |script| {
-                            script.content_span.start
-                        }),
+                        .map_or(ctx.instance_content_offset, |script| script.content_span.start),
                 )
             }),
             ctx.module_semantic.map(|s| {
@@ -31,9 +29,7 @@ impl Rule for NoIgnoredUnsubscribe {
                     ctx.ast
                         .module
                         .as_ref()
-                        .map_or(ctx.module_content_offset, |script| {
-                            script.content_span.start
-                        }),
+                        .map_or(ctx.module_content_offset, |script| script.content_span.start),
                 )
             }),
         ]
@@ -47,9 +43,7 @@ impl Rule for NoIgnoredUnsubscribe {
                     continue;
                 };
                 let property_span = match &ce.callee {
-                    Expression::StaticMemberExpression(mem) if mem.property.name == "subscribe" => {
-                        mem.property.span
-                    }
+                    Expression::StaticMemberExpression(mem) if mem.property.name == "subscribe" => mem.property.span,
                     Expression::ComputedMemberExpression(mem) => match &mem.expression {
                         Expression::Identifier(id) if id.name == "subscribe" => id.span,
                         _ => continue,

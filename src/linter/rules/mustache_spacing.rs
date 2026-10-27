@@ -4,7 +4,7 @@
 //! Default: "never" — no spaces inside mustache braces: `{expr}`.
 
 use crate::ast::{Attribute, AttributeMeta, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 use std::collections::HashSet;
 
@@ -26,23 +26,15 @@ impl Rule for MustacheSpacing {
             .as_ref()
             .and_then(|v| v.as_array())
             .and_then(|arr| arr.first());
-        let text_always = opts
-            .and_then(|v| v.get("textExpressions"))
-            .and_then(|v| v.as_str())
-            == Some("always");
-        let attributes_always = opts
-            .and_then(|v| v.get("attributesAndProps"))
-            .and_then(|v| v.as_str())
-            == Some("always");
+        let text_always = opts.and_then(|v| v.get("textExpressions")).and_then(|v| v.as_str()) == Some("always");
+        let attributes_always =
+            opts.and_then(|v| v.get("attributesAndProps")).and_then(|v| v.as_str()) == Some("always");
         let directives_always = opts
             .and_then(|v| v.get("directiveExpressions"))
             .and_then(|v| v.as_str())
             == Some("always");
         let tags = opts.and_then(|v| v.get("tags"));
-        let tags_opening_always = tags
-            .and_then(|v| v.get("openingBrace"))
-            .and_then(|v| v.as_str())
-            == Some("always");
+        let tags_opening_always = tags.and_then(|v| v.get("openingBrace")).and_then(|v| v.as_str()) == Some("always");
         let closing = tags
             .and_then(|v| v.get("closingBrace"))
             .and_then(|v| v.as_str())
@@ -132,13 +124,9 @@ impl Rule for MustacheSpacing {
             let text = ctx.source[tag.span.start as usize..tag.span.end as usize]
                 .trim_end_matches('}')
                 .trim_end();
-            let unbound_shorthand = unbound_await_starts.contains(&tag.span.start)
-                && (text.ends_with(" then") || text.ends_with(" catch"));
-            let closing_mode = if tag.check_closing {
-                closing.as_str()
-            } else {
-                "ignore"
-            };
+            let unbound_shorthand =
+                unbound_await_starts.contains(&tag.span.start) && (text.ends_with(" then") || text.ends_with(" catch"));
+            let closing_mode = if tag.check_closing { closing.as_str() } else { "ignore" };
             check_mustache(
                 ctx,
                 tag.span,
@@ -165,21 +153,13 @@ fn mustache_spans(meta: &AttributeMeta<'_>) -> Vec<Span> {
     spans
 }
 
-fn check_mustache(
-    ctx: &mut LintContext<'_>,
-    span: Span,
-    opening_always: bool,
-    closing_mode: &str,
-    has_expr: bool,
-) {
+fn check_mustache(ctx: &mut LintContext<'_>, span: Span, opening_always: bool, closing_mode: &str, has_expr: bool) {
     if span.end <= span.start + 1 || span.end as usize > ctx.source.len() {
         return;
     }
     let open = span.start as usize;
     let close = span.end as usize - 1;
-    if ctx.source.as_bytes().get(open) != Some(&b'{')
-        || ctx.source.as_bytes().get(close) != Some(&b'}')
-    {
+    if ctx.source.as_bytes().get(open) != Some(&b'{') || ctx.source.as_bytes().get(close) != Some(&b'}') {
         return;
     }
 
@@ -218,8 +198,7 @@ fn check_mustache(
         return;
     }
 
-    let require_closing =
-        closing_mode == "always" || (closing_mode == "always-after-expression" && has_expr);
+    let require_closing = closing_mode == "always" || (closing_mode == "always-after-expression" && has_expr);
     if require_closing {
         if last_end == close {
             let insert = Span::new(close as u32, close as u32);

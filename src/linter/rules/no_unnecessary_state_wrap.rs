@@ -5,11 +5,9 @@
 //! and don't need `$state()` wrapping.
 
 use crate::ast::{Attribute, AttributeValue, DirectiveKind, Fragment, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule, Suggestion};
-use oxc::ast::ast::{
-    Argument, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement,
-};
+use crate::linter::{Fix, LintContext, Rule, Suggestion, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Argument, Expression, ImportDeclarationSpecifier, ModuleExportName, Statement};
 use oxc::semantic::SymbolId;
 use oxc::span::{GetSpan, Span};
 
@@ -41,9 +39,7 @@ impl Rule for NoUnnecessaryStateWrap {
             .ast
             .instance
             .as_ref()
-            .map_or(ctx.instance_content_offset, |script| {
-                script.content_span.start
-            });
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
 
         let opts = ctx
             .config
@@ -54,11 +50,7 @@ impl Rule for NoUnnecessaryStateWrap {
         let additional: Vec<String> = opts
             .and_then(|o| o.get("additionalReactiveClasses"))
             .and_then(|v| v.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|c| c.as_str().map(String::from))
-                    .collect()
-            })
+            .map(|arr| arr.iter().filter_map(|c| c.as_str().map(String::from)).collect())
             .unwrap_or_default();
         let allow_reassign = opts
             .and_then(|o| o.get("allowReassign"))
@@ -126,9 +118,7 @@ impl Rule for NoUnnecessaryStateWrap {
                 continue;
             }
             let decl_symbol = binding.symbol_id();
-            if allow_reassign
-                && is_symbol_reassigned(decl_symbol, binding.span, scoping, nodes, &ctx.ast.html)
-            {
+            if allow_reassign && is_symbol_reassigned(decl_symbol, binding.span, scoping, nodes, &ctx.ast.html) {
                 continue;
             }
             for arg in &ce.arguments {
@@ -167,21 +157,12 @@ impl Rule for NoUnnecessaryStateWrap {
                 };
                 let Some(original) = original else { continue };
                 ctx.diagnostic_with_suggestions(
-                    format!(
-                        "{} is already reactive, $state wrapping is unnecessary.",
-                        original
-                    ),
-                    Span::new(
-                        content_offset + target_span.start,
-                        content_offset + target_span.end,
-                    ),
+                    format!("{} is already reactive, $state wrapping is unnecessary.", original),
+                    Span::new(content_offset + target_span.start, content_offset + target_span.end),
                     vec![Suggestion {
                         description: "Remove unnecessary $state wrapping".into(),
                         fix: Fix {
-                            span: Span::new(
-                                content_offset + ce.span.start,
-                                content_offset + ce.span.end,
-                            ),
+                            span: Span::new(content_offset + ce.span.start, content_offset + ce.span.end),
                             replacement: ctx.source[(content_offset + target_span.start) as usize
                                 ..(content_offset + target_span.end) as usize]
                                 .to_string(),
@@ -235,10 +216,7 @@ fn is_symbol_reassigned<'a>(
             // `bind:anything={name}` / nested member writing through name.
             if let AttributeValue::Expression(text) = value {
                 let trimmed = text.trim();
-                let base = trimmed
-                    .split(|c: char| c == '.' || c == '[')
-                    .next()
-                    .unwrap_or(trimmed);
+                let base = trimmed.split(['.', '[']).next().unwrap_or(trimmed);
                 if base == name {
                     found = true;
                     return;
@@ -290,11 +268,14 @@ mod tests {
             "$state(new Map())"
         );
         assert_eq!(fix.replacement, "new Map()");
-        assert_eq!(
-            diagnostics[1].suggestions[0].fix.replacement,
-            "reactive.SvelteSet()"
+        assert_eq!(diagnostics[1].suggestions[0].fix.replacement, "reactive.SvelteSet()");
+        assert!(
+            lint(
+                "<script>import { SvelteSet } from 'other'; const value = $state(new SvelteSet());</script>",
+                serde_json::json!([])
+            )
+            .is_empty()
         );
-        assert!(lint("<script>import { SvelteSet } from 'other'; const value = $state(new SvelteSet());</script>", serde_json::json!([])).is_empty());
     }
 
     #[test]
@@ -308,10 +289,7 @@ mod tests {
     #[test]
     fn custom_factories_require_a_direct_binding_initializer() {
         let source = "<script>const valid = $state(Custom()); const nested = keep($state(Custom()));</script>";
-        let diagnostics = lint(
-            source,
-            serde_json::json!([{"additionalReactiveClasses": ["Custom"]}]),
-        );
+        let diagnostics = lint(source, serde_json::json!([{"additionalReactiveClasses": ["Custom"]}]));
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].suggestions[0].fix.replacement, "Custom()");
     }

@@ -66,7 +66,7 @@ impl Rule for ValidPropNamesInKitPages {
                 // `let { ... } = $props();` — Svelte 5 props.
                 Statement::VariableDeclaration(vd) => {
                     for d in &vd.declarations {
-                        let is_props_call = d.init.as_ref().map_or(false, |init| match init {
+                        let is_props_call = d.init.as_ref().is_some_and(|init| match init {
                             Expression::CallExpression(ce) => matches!(
                                 &ce.callee,
                                 Expression::Identifier(id) if id.name == "$props"
@@ -84,11 +84,7 @@ impl Rule for ValidPropNamesInKitPages {
     }
 }
 
-fn check_export_named<'a>(
-    ctx: &mut LintContext<'_>,
-    content_offset: u32,
-    exp: &'a ExportDeclaration<'a>,
-) {
+fn check_export_named<'a>(ctx: &mut LintContext<'_>, content_offset: u32, exp: &'a ExportDeclaration<'a>) {
     let Declaration::VariableDeclaration(vd) = &exp.declaration else {
         return;
     };
@@ -103,12 +99,7 @@ fn check_export_named<'a>(
     }
 }
 
-fn report_pattern_names<'a>(
-    ctx: &mut LintContext<'_>,
-    content_offset: u32,
-    pat: &BindingPattern<'a>,
-    valid: &[&str],
-) {
+fn report_pattern_names<'a>(ctx: &mut LintContext<'_>, content_offset: u32, pat: &BindingPattern<'a>, valid: &[&str]) {
     match pat {
         BindingPattern::BindingIdentifier(_) => {}
         BindingPattern::ObjectPattern(obj) => {
@@ -135,10 +126,7 @@ fn report_pattern_names<'a>(
 fn report(ctx: &mut LintContext<'_>, content_offset: u32, span: Span) {
     let s = content_offset + span.start;
     let e = content_offset + span.end;
-    ctx.diagnostic(
-        "disallow invalid props in SvelteKit route components.",
-        Span::new(s, e),
-    );
+    ctx.diagnostic("disallow invalid props in SvelteKit route components.", Span::new(s, e));
 }
 
 #[cfg(test)]
@@ -166,10 +154,7 @@ mod tests {
             const { data, form, params, snapshot, children, error, errors, ...rest } = $props();
         </script>"#;
         for (path, expected) in [
-            (
-                "src/routes/+page.svelte",
-                vec!["children", "error", "errors"],
-            ),
+            ("src/routes/+page.svelte", vec!["children", "error", "errors"]),
             ("src/routes/+layout.svelte", vec!["error", "errors"]),
             (
                 "src/routes/+error.svelte",
@@ -185,9 +170,11 @@ mod tests {
                     .collect::<Vec<_>>(),
                 expected
             );
-            assert!(diagnostics
-                .iter()
-                .all(|d| d.message == "disallow invalid props in SvelteKit route components."));
+            assert!(
+                diagnostics
+                    .iter()
+                    .all(|d| d.message == "disallow invalid props in SvelteKit route components.")
+            );
         }
     }
 
@@ -206,9 +193,6 @@ mod tests {
         let diagnostics = lint(source, "src/routes/+page.svelte");
         assert_eq!(diagnostics.len(), 1);
         let span = diagnostics[0].span;
-        assert_eq!(
-            &source[span.start as usize..span.end as usize],
-            "custom = 'value'"
-        );
+        assert_eq!(&source[span.start as usize..span.end as usize], "custom = 'value'");
     }
 }

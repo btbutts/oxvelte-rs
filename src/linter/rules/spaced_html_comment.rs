@@ -2,7 +2,7 @@
 //! 🔧 Fixable
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 
 pub struct SpacedHtmlComment;

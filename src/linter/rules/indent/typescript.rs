@@ -1,6 +1,6 @@
 //! TypeScript token relationships, following the upstream indentation visitor.
 use super::Layout;
-use oxc::ast::{ast::*, AstKind};
+use oxc::ast::{AstKind, ast::*};
 use oxc::span::{GetSpan, Span};
 
 fn shifted(span: Span, base: i64) -> Span {
@@ -15,9 +15,7 @@ fn tokens(layout: &Layout, span: Span) -> Vec<usize> {
         .tokens
         .iter()
         .enumerate()
-        .filter_map(|(i, t)| {
-            (!t.comment && t.span.start >= span.start && t.span.end <= span.end).then_some(i)
-        })
+        .filter_map(|(i, t)| (!t.comment && t.span.start >= span.start && t.span.end <= span.end).then_some(i))
         .collect()
 }
 
@@ -117,8 +115,8 @@ fn property(layout: &mut Layout, span: Span, key: Span, computed: bool, value: O
     let (Some(first), Some((kf, kl))) = (layout.first(span), layout.first_last(key, 0)) else {
         return;
     };
-    let last_key;
-    if computed {
+
+    let last_key = if computed {
         let (Some(left), Some(right)) = (layout.before(kf), layout.after(kl)) else {
             return;
         };
@@ -130,11 +128,11 @@ fn property(layout: &mut Layout, span: Span, key: Span, computed: bool, value: O
             1,
             false,
         );
-        last_key = right;
+        right
     } else {
         range(layout, first, kf, 0, first);
-        last_key = kl;
-    }
+        kl
+    };
     if let Some(value) = value {
         if let Some(init) = layout.first(value) {
             range(layout, last_key + 1, init, 1, last_key);
@@ -142,12 +140,7 @@ fn property(layout: &mut Layout, span: Span, key: Span, computed: bool, value: O
     }
 }
 
-pub(super) fn apply_node(
-    kind: AstKind<'_>,
-    parent: Option<AstKind<'_>>,
-    base: i64,
-    layout: &mut Layout<'_>,
-) -> bool {
+pub(super) fn apply_node(kind: AstKind<'_>, parent: Option<AstKind<'_>>, base: i64, layout: &mut Layout<'_>) -> bool {
     let span = shifted(kind.span(), base);
     let Some(first) = layout.first(span) else {
         return true;
@@ -164,10 +157,7 @@ pub(super) fn apply_node(
                 })
                 .unwrap_or(first);
             layout.set(first, 1, anchor);
-            if let Some(second) = layout
-                .after(first)
-                .filter(|&i| layout.tokens[i].span.end <= span.end)
-            {
+            if let Some(second) = layout.after(first).filter(|&i| layout.tokens[i].span.end <= span.end) {
                 layout.set(second, 1, anchor);
             }
             if let Some(before) = layout.before(first) {
@@ -186,33 +176,12 @@ pub(super) fn apply_node(
             shifted(n.expression.span(), base),
             shifted(n.type_annotation.span(), base),
         ),
-        AstKind::TSTypeReference(n) => generic(
-            layout,
-            n.span,
-            n.type_arguments.as_ref().map(|a| a.span),
-            base,
-        ),
-        AstKind::TSInstantiationExpression(n) => {
-            generic(layout, n.span, Some(n.type_arguments.span), base)
-        }
-        AstKind::TSClassImplements(n) => generic(
-            layout,
-            n.span,
-            n.type_arguments.as_ref().map(|a| a.span),
-            base,
-        ),
-        AstKind::TSInterfaceHeritage(n) => generic(
-            layout,
-            n.span,
-            n.type_arguments.as_ref().map(|a| a.span),
-            base,
-        ),
-        AstKind::TSTypeParameterInstantiation(n) => {
-            list(layout, n.params.iter().map(GetSpan::span), n.span, base)
-        }
-        AstKind::TSTypeParameterDeclaration(n) => {
-            list(layout, n.params.iter().map(GetSpan::span), n.span, base)
-        }
+        AstKind::TSTypeReference(n) => generic(layout, n.span, n.type_arguments.as_ref().map(|a| a.span), base),
+        AstKind::TSInstantiationExpression(n) => generic(layout, n.span, Some(n.type_arguments.span), base),
+        AstKind::TSClassImplements(n) => generic(layout, n.span, n.type_arguments.as_ref().map(|a| a.span), base),
+        AstKind::TSInterfaceHeritage(n) => generic(layout, n.span, n.type_arguments.as_ref().map(|a| a.span), base),
+        AstKind::TSTypeParameterInstantiation(n) => list(layout, n.params.iter().map(GetSpan::span), n.span, base),
+        AstKind::TSTypeParameterDeclaration(n) => list(layout, n.params.iter().map(GetSpan::span), n.span, base),
         AstKind::TSTypeAliasDeclaration(n) => {
             if let Some(id) = layout.first(shifted(n.id.span, base)) {
                 layout.set(id, 1, first);
@@ -220,31 +189,14 @@ pub(super) fn apply_node(
                     child(layout, shifted(args.span, base), 1, id);
                 }
                 let end = n.type_parameters.as_ref().map_or(n.id.span, |a| a.span);
-                if let Some(eq) = layout
-                    .last(shifted(end, base))
-                    .and_then(|i| layout.after(i))
-                {
+                if let Some(eq) = layout.last(shifted(end, base)).and_then(|i| layout.after(i)) {
                     layout.set(eq, 1, id);
                 }
                 child(layout, shifted(n.type_annotation.span(), base), 1, id);
             }
         }
-        AstKind::TSFunctionType(n) => signature(
-            layout,
-            n.span,
-            &n.params,
-            base,
-            Some(n.return_type.span),
-            false,
-        ),
-        AstKind::TSConstructorType(n) => signature(
-            layout,
-            n.span,
-            &n.params,
-            base,
-            Some(n.return_type.span),
-            true,
-        ),
+        AstKind::TSFunctionType(n) => signature(layout, n.span, &n.params, base, Some(n.return_type.span), false),
+        AstKind::TSConstructorType(n) => signature(layout, n.span, &n.params, base, Some(n.return_type.span), true),
         AstKind::TSCallSignatureDeclaration(n) => signature(
             layout,
             n.span,
@@ -277,9 +229,7 @@ pub(super) fn apply_node(
                 range(layout, key_last + 1, left, 1, first);
             }
         }
-        AstKind::TSTypeLiteral(n) => {
-            list(layout, n.members.iter().map(GetSpan::span), n.span, base)
-        }
+        AstKind::TSTypeLiteral(n) => list(layout, n.members.iter().map(GetSpan::span), n.span, base),
         AstKind::TSInterfaceBody(n) => list(layout, n.body.iter().map(GetSpan::span), n.span, base),
         AstKind::TSModuleBlock(n) => list(
             layout,
@@ -297,9 +247,7 @@ pub(super) fn apply_node(
                 property(layout, span, key, true, None);
             }
             if let Some(ty) = &n.type_annotation {
-                if let (Some(mut last), Some(end)) =
-                    (layout.last(key), layout.first(shifted(ty.span, base)))
-                {
+                if let (Some(mut last), Some(end)) = (layout.last(key), layout.first(shifted(ty.span, base))) {
                     if n.computed {
                         if let Some(close) = layout.after(last) {
                             last = close;
@@ -318,25 +266,14 @@ pub(super) fn apply_node(
                 ts.iter().find(|&&i| layout.text(i) == "]"),
             ) {
                 let ps: Vec<_> = vec![shifted(n.parameter.span, base)];
-                layout.list(
-                    &ps,
-                    layout.tokens[left].span,
-                    Some(layout.tokens[right].span),
-                    1,
-                    false,
-                );
+                layout.list(&ps, layout.tokens[left].span, Some(layout.tokens[right].span), 1, false);
                 if let Some(end) = layout.first(shifted(n.type_annotation.span, base)) {
                     range(layout, right + 1, end, 1, left);
                 }
             }
         }
         AstKind::TSArrayType(_) => suffix(layout, span, 2, 0),
-        AstKind::TSTupleType(n) => list(
-            layout,
-            n.element_types.iter().map(GetSpan::span),
-            n.span,
-            base,
-        ),
+        AstKind::TSTupleType(n) => list(layout, n.element_types.iter().map(GetSpan::span), n.span, base),
         AstKind::TSQualifiedName(n) => {
             if let Some(right) = layout.first(shifted(n.right.span, base)) {
                 if let Some(dot) = layout.before(right) {
@@ -369,9 +306,7 @@ pub(super) fn apply_node(
             }
         }
         AstKind::TSUnionType(n) => union(layout, n.types.iter().map(GetSpan::span), span, base),
-        AstKind::TSIntersectionType(n) => {
-            union(layout, n.types.iter().map(GetSpan::span), span, base)
-        }
+        AstKind::TSIntersectionType(n) => union(layout, n.types.iter().map(GetSpan::span), span, base),
         AstKind::TSMappedType(n) => {
             let key = shifted(n.key.span, base);
             if let Some(k) = layout.first(key) {
@@ -381,18 +316,8 @@ pub(super) fn apply_node(
                     if let Some(name) = &n.name_type {
                         xs.push(shifted(name.span(), base));
                     }
-                    if let Some(last) = xs
-                        .last()
-                        .and_then(|s| layout.last(*s))
-                        .and_then(|i| layout.after(i))
-                    {
-                        layout.list(
-                            &xs,
-                            layout.tokens[left].span,
-                            Some(layout.tokens[last].span),
-                            1,
-                            false,
-                        );
+                    if let Some(last) = xs.last().and_then(|s| layout.last(*s)).and_then(|i| layout.after(i)) {
+                        layout.list(&xs, layout.tokens[left].span, Some(layout.tokens[last].span), 1, false);
                         if let Some(c) = layout.first(shifted(n.constraint.span(), base)) {
                             range(layout, k + 1, c, 1, k);
                         }
@@ -418,9 +343,7 @@ pub(super) fn apply_node(
                 let child = shifted(child.span(), base);
                 let cf = layout.first(child);
                 ts.retain(|&i| {
-                    layout.tokens[i].span.start < child.start
-                        || layout.tokens[i].span.end > child.end
-                        || Some(i) == cf
+                    layout.tokens[i].span.start < child.start || layout.tokens[i].span.end > child.end || Some(i) == cf
                 });
             }
             if ts.len() > 1 {
@@ -498,12 +421,9 @@ pub(super) fn apply_node(
             }
             child(layout, shifted(n.body.span, base), 0, first);
         }
-        AstKind::TSEnumDeclaration(n) => declaration(
-            layout,
-            span,
-            shifted(n.id.span, base),
-            Some(shifted(n.body.span, base)),
-        ),
+        AstKind::TSEnumDeclaration(n) => {
+            declaration(layout, span, shifted(n.id.span, base), Some(shifted(n.body.span, base)))
+        }
         AstKind::TSExternalModuleDeclaration(n) => declaration(
             layout,
             span,
@@ -527,10 +447,7 @@ pub(super) fn apply_node(
             ),
             n.initializer.as_ref().map(|v| shifted(v.span(), base)),
         ),
-        AstKind::TSTypeOperator(_)
-        | AstKind::TSTypeQuery(_)
-        | AstKind::TSInferType(_)
-        | AstKind::TSRestType(_) => {
+        AstKind::TSTypeOperator(_) | AstKind::TSTypeQuery(_) | AstKind::TSInferType(_) | AstKind::TSRestType(_) => {
             if let Some(next) = layout.after(first) {
                 layout.set(next, 1, first);
             }
@@ -546,9 +463,9 @@ pub(super) fn apply_node(
                 child(layout, shifted(ty.type_annotation.span(), base), 1, first);
             }
         }
-        AstKind::TSOptionalType(_)
-        | AstKind::TSNonNullExpression(_)
-        | AstKind::JSDocNonNullableType(_) => suffix(layout, span, 1, 1),
+        AstKind::TSOptionalType(_) | AstKind::TSNonNullExpression(_) | AstKind::JSDocNonNullableType(_) => {
+            suffix(layout, span, 1, 1)
+        }
         AstKind::TSParenthesizedType(n) => list(layout, [n.type_annotation.span()], n.span, base),
         AstKind::TSTypeAssertion(n) => {
             if let Some(e) = layout.first(shifted(n.expression.span(), base)) {
@@ -571,11 +488,7 @@ pub(super) fn apply_node(
                 if let Some(options) = &n.options {
                     args.push(shifted(options.span, base));
                 }
-                if let Some(right) = args
-                    .last()
-                    .and_then(|s| layout.last(*s))
-                    .and_then(|i| layout.after(i))
-                {
+                if let Some(right) = args.last().and_then(|s| layout.last(*s)).and_then(|i| layout.after(i)) {
                     layout.list(
                         &args,
                         layout.tokens[left].span,
@@ -668,20 +581,11 @@ pub(super) fn apply_node(
             n.value.as_ref().map(|v| shifted(v.span(), base)),
         ),
         AstKind::StaticBlock(n) => {
-            if let Some(left) = tokens(layout, span)
-                .into_iter()
-                .find(|&i| layout.text(i) == "{")
-            {
+            if let Some(left) = tokens(layout, span).into_iter().find(|&i| layout.text(i) == "{") {
                 range(layout, first + 1, left, 0, first);
                 let ps: Vec<_> = n.body.iter().map(|s| shifted(s.span(), base)).collect();
                 if let Some(last) = layout.last(span) {
-                    layout.list(
-                        &ps,
-                        layout.tokens[left].span,
-                        Some(layout.tokens[last].span),
-                        1,
-                        false,
-                    );
+                    layout.list(&ps, layout.tokens[left].span, Some(layout.tokens[last].span), 1, false);
                 }
             }
         }
@@ -702,8 +606,7 @@ pub(super) fn apply_node(
             }
             if let Some(heritage) = &n.heritage {
                 if let Some(tp) = &heritage.type_arguments {
-                    if let Some(anchor) = layout.first(shifted(heritage.expression.span(), base))
-                    {
+                    if let Some(anchor) = layout.first(shifted(heritage.expression.span(), base)) {
                         child(layout, shifted(tp.span, base), 1, anchor);
                     }
                 }
@@ -813,8 +716,7 @@ fn semicolon(layout: &mut Layout, span: Span, first: usize) {
         if last != first
             && layout.text(last) == ";"
             && layout.after(last).is_none_or(|n| {
-                layout.line_of(layout.tokens[last].span.start)
-                    < layout.line_of(layout.tokens[n].span.start)
+                layout.line_of(layout.tokens[last].span.start) < layout.line_of(layout.tokens[n].span.start)
             })
         {
             layout.set(last, 0, first);
@@ -822,13 +724,7 @@ fn semicolon(layout: &mut Layout, span: Span, first: usize) {
     }
 }
 
-fn decorators(
-    layout: &mut Layout,
-    parent: Option<AstKind<'_>>,
-    span: Span,
-    base: i64,
-    first: usize,
-) {
+fn decorators(layout: &mut Layout, parent: Option<AstKind<'_>>, span: Span, base: i64, first: usize) {
     let Some(parent) = parent else {
         return;
     };
@@ -897,48 +793,43 @@ mod tests {
         let diagnostics = ctx.into_diagnostics();
         let mut output = source.to_owned();
         for diagnostic in diagnostics.into_iter().rev() {
-            let fix = diagnostic
-                .fix
-                .expect("indentation diagnostic must have a fix");
+            let fix = diagnostic.fix.expect("indentation diagnostic must have a fix");
             let old = &source[fix.span.start as usize..fix.span.end as usize];
             assert!(old.chars().all(char::is_whitespace));
-            output.replace_range(
-                fix.span.start as usize..fix.span.end as usize,
-                &fix.replacement,
-            );
+            output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         }
         output
     }
 
     #[test]
     fn preserves_unicode_and_type_syntax_while_indenting_members() {
-        let source =
-            "<!-- 😀 -->\n<script lang=\"ts\">\ntype Label = {\nname:\nstring;\n};\n</script>";
-        let expected="<!-- 😀 -->\n<script lang=\"ts\">\n  type Label = {\n    name:\n      string;\n  };\n</script>";
+        let source = "<!-- 😀 -->\n<script lang=\"ts\">\ntype Label = {\nname:\nstring;\n};\n</script>";
+        let expected = "<!-- 😀 -->\n<script lang=\"ts\">\n  type Label = {\n    name:\n      string;\n  };\n</script>";
         assert_eq!(fixed(source), expected);
         assert_eq!(fixed(expected), expected);
     }
 
     #[test]
     fn anchors_mapped_keys_and_constraints_independently() {
-        let source="<script lang=\"ts\">\ntype Flags = {\n[\nkey in\nkeyof Model\n]:\nboolean\n};\n</script>";
-        let expected="<script lang=\"ts\">\n  type Flags = {\n    [\n      key in\n        keyof Model\n    ]:\n    boolean\n  };\n</script>";
+        let source = "<script lang=\"ts\">\ntype Flags = {\n[\nkey in\nkeyof Model\n]:\nboolean\n};\n</script>";
+        let expected = "<script lang=\"ts\">\n  type Flags = {\n    [\n      key in\n        keyof Model\n    ]:\n    boolean\n  };\n</script>";
         assert_eq!(fixed(source), expected);
         assert_eq!(fixed(expected), expected);
     }
 
     #[test]
     fn aligns_exported_decorators_and_template_type_delimiters() {
-        let source="<script lang=\"ts\">\n@decorate\nexport class Box {}\ntype Name = `hello${\nstring\n}`;\n</script>";
-        let expected="<script lang=\"ts\">\n  @decorate\n  export class Box {}\n  type Name = `hello${\n    string\n  }`;\n</script>";
+        let source =
+            "<script lang=\"ts\">\n@decorate\nexport class Box {}\ntype Name = `hello${\nstring\n}`;\n</script>";
+        let expected = "<script lang=\"ts\">\n  @decorate\n  export class Box {}\n  type Name = `hello${\n    string\n  }`;\n</script>";
         assert_eq!(fixed(source), expected);
         assert_eq!(fixed(expected), expected);
     }
 
     #[test]
     fn keeps_a_following_declaration_outside_a_single_token_predicate_annotation() {
-        let source="<script lang=\"ts\">\ntype Check = (value: unknown) => value is string;\ntype Next = [\nnumber\n];\n</script>";
-        let expected="<script lang=\"ts\">\n  type Check = (value: unknown) => value is string;\n  type Next = [\n    number\n  ];\n</script>";
+        let source = "<script lang=\"ts\">\ntype Check = (value: unknown) => value is string;\ntype Next = [\nnumber\n];\n</script>";
+        let expected = "<script lang=\"ts\">\n  type Check = (value: unknown) => value is string;\n  type Next = [\n    number\n  ];\n</script>";
         assert_eq!(fixed(source), expected);
         assert_eq!(fixed(expected), expected);
     }

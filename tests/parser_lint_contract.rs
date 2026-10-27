@@ -36,10 +36,7 @@ fn lint_parsing_retains_attributes_and_source_spans() {
     };
     assert_eq!(name, "name");
     assert!(matches!(value, AttributeValue::Expression(text) if text == "current"));
-    assert_eq!(
-        &source[span.start as usize..span.end as usize],
-        "name={current}"
-    );
+    assert_eq!(&source[span.start as usize..span.end as usize], "name={current}");
     assert!(slot.attribute_meta[0].expression_ast.is_some());
 }
 
@@ -116,8 +113,7 @@ fn lint_parsing_accepts_else_without_a_test_expression() {
 
 #[test]
 fn directive_subjects_keep_dollar_identifiers_and_exact_spans() {
-    let source =
-        "<div use:$store transition:$store in:$store out:$store animate:$store class:$store />";
+    let source = "<div use:$store transition:$store in:$store out:$store animate:$store class:$store />";
     let alloc = Allocator::default();
     let parsed = parser::parse_for_lint(source, &alloc);
     assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
@@ -131,10 +127,7 @@ fn directive_subjects_keep_dollar_identifiers_and_exact_spans() {
         };
         assert_eq!(name, "$store");
         let subject = meta.directive_subject_span.unwrap();
-        assert_eq!(
-            &source[subject.start as usize..subject.end as usize],
-            "$store"
-        );
+        assert_eq!(&source[subject.start as usize..subject.end as usize], "$store");
         assert!(source[span.start as usize..span.end as usize].ends_with("$store"));
     }
     assert!(
@@ -146,8 +139,7 @@ fn directive_subjects_keep_dollar_identifiers_and_exact_spans() {
 
 #[test]
 fn modern_let_tags_retain_declaration_kind_and_unicode_ranges() {
-    let source =
-        "<!-- 😀 -->{#if yes}{ let\n label = `${value} pixels` }{const size = 2}{letdown}{/if}";
+    let source = "<!-- 😀 -->{#if yes}{ let\n label = `${value} pixels` }{const size = 2}{letdown}{/if}";
     let alloc = Allocator::default();
     let parsed = parser::parse_for_lint(source, &alloc);
     assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
@@ -166,10 +158,7 @@ fn modern_let_tags_retain_declaration_kind_and_unicode_ranges() {
         panic!("const tag");
     };
     assert_eq!(tag.kind, oxvelte::ast::TemplateDeclarationKind::Const);
-    assert!(matches!(
-        block.consequent.nodes[2],
-        TemplateNode::MustacheTag(_)
-    ));
+    assert!(matches!(block.consequent.nodes[2], TemplateNode::MustacheTag(_)));
 }
 
 #[test]

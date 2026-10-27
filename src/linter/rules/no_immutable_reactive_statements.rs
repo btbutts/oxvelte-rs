@@ -12,9 +12,9 @@
 //! we early-return when `ctx.is_runes` is true.
 
 use crate::ast::{Attribute, DirectiveKind, EachBlock, Fragment, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
-use oxc::ast::ast::{Expression, Statement, VariableDeclarationKind};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::ast::AstKind;
+use oxc::ast::ast::{Expression, Statement, VariableDeclarationKind};
 use oxc::semantic::{NodeId, Reference, Semantic, SymbolId};
 use oxc::span::{GetSpan, Span};
 use std::collections::{HashMap, HashSet};
@@ -58,9 +58,7 @@ impl Rule for NoImmutableReactiveStatements {
             // Vendor reports on the RHS of `$: x = expr;`, otherwise on the body.
             let report_span = match &ls.body {
                 Statement::ExpressionStatement(es) => match &es.expression {
-                    Expression::AssignmentExpression(ae) if ae.operator.as_str() == "=" => {
-                        ae.right.span()
-                    }
+                    Expression::AssignmentExpression(ae) if ae.operator.as_str() == "=" => ae.right.span(),
                     _ => ls.body.span(),
                 },
                 _ => ls.body.span(),
@@ -255,11 +253,7 @@ fn is_mutable_variable<'a>(
 
 /// Vendor's `isMutableVariable` enumerates `variable.defs`; oxc symbols have
 /// one declaration site, but its surrounding AST exposes the same info.
-fn compute_mutability<'a>(
-    semantic: &'a Semantic<'a>,
-    sid: SymbolId,
-    template_writes: &HashSet<String>,
-) -> bool {
+fn compute_mutability<'a>(semantic: &'a Semantic<'a>, sid: SymbolId, template_writes: &HashSet<String>) -> bool {
     let scoping = semantic.scoping();
     let nodes = semantic.nodes();
     let decl_id = scoping.symbol_declaration(sid);
@@ -268,9 +262,7 @@ fn compute_mutability<'a>(
     // Imports → immutable.
     if matches!(
         decl_kind,
-        AstKind::ImportSpecifier(_)
-            | AstKind::ImportDefaultSpecifier(_)
-            | AstKind::ImportNamespaceSpecifier(_)
+        AstKind::ImportSpecifier(_) | AstKind::ImportDefaultSpecifier(_) | AstKind::ImportNamespaceSpecifier(_)
     ) {
         return false;
     }
@@ -307,22 +299,19 @@ fn compute_mutability<'a>(
     }
     if let Some(vd) = declaration {
         if vd.kind == VariableDeclarationKind::Const {
-            if declarator
-                .and_then(|d| d.init.as_ref())
-                .is_some_and(|init| {
-                    matches!(
-                        init,
-                        Expression::FunctionExpression(_)
-                            | Expression::ArrowFunctionExpression(_)
-                            | Expression::StringLiteral(_)
-                            | Expression::NumericLiteral(_)
-                            | Expression::BooleanLiteral(_)
-                            | Expression::NullLiteral(_)
-                            | Expression::BigIntLiteral(_)
-                            | Expression::RegExpLiteral(_)
-                    )
-                })
-            {
+            if declarator.and_then(|d| d.init.as_ref()).is_some_and(|init| {
+                matches!(
+                    init,
+                    Expression::FunctionExpression(_)
+                        | Expression::ArrowFunctionExpression(_)
+                        | Expression::StringLiteral(_)
+                        | Expression::NumericLiteral(_)
+                        | Expression::BooleanLiteral(_)
+                        | Expression::NullLiteral(_)
+                        | Expression::BigIntLiteral(_)
+                        | Expression::RegExpLiteral(_)
+                )
+            }) {
                 return false;
             }
             return has_write_anywhere(semantic, sid, template_writes);
@@ -339,11 +328,7 @@ fn compute_mutability<'a>(
 ///     (or `UpdateExpression`, `delete x.y`), OR
 ///   - the symbol's name appears in `template_writes` (bind: directive on it,
 ///     or each-block-iterable with written context).
-fn has_write_anywhere<'a>(
-    semantic: &'a Semantic<'a>,
-    sid: SymbolId,
-    template_writes: &HashSet<String>,
-) -> bool {
+fn has_write_anywhere<'a>(semantic: &'a Semantic<'a>, sid: SymbolId, template_writes: &HashSet<String>) -> bool {
     let scoping = semantic.scoping();
     let name = scoping.symbol_name(sid);
     if template_writes.contains(name) {
@@ -446,8 +431,7 @@ fn collect_template_writes(html: &Fragment) -> HashSet<String> {
                             texts.push(t);
                         }
                     }
-                    Attribute::Directive { value, .. }
-                    | Attribute::NormalAttribute { value, .. } => {
+                    Attribute::Directive { value, .. } | Attribute::NormalAttribute { value, .. } => {
                         if let Some(t) = attr_value_text(value) {
                             texts.push(t);
                         }
@@ -527,9 +511,7 @@ fn each_body_writes_to_context(block: &EachBlock) -> bool {
                         hit = true;
                         return;
                     }
-                    if let Attribute::Directive { value, .. }
-                    | Attribute::NormalAttribute { value, .. } = attr
-                    {
+                    if let Attribute::Directive { value, .. } | Attribute::NormalAttribute { value, .. } = attr {
                         if let crate::ast::AttributeValue::Expression(t) = value {
                             texts.push(t.as_str());
                         }
@@ -632,9 +614,8 @@ fn scan_writes(text: &str, target: Option<&str>) -> Vec<String> {
             j += 1;
         }
         let prefix_update = start >= 2 && matches!(&bytes[start - 2..start], b"++" | b"--");
-        let delete_prefix = start >= 7
-            && bytes[start - 1] == b' '
-            && bytes[start.saturating_sub(7)..start - 1].ends_with(b"delete");
+        let delete_prefix =
+            start >= 7 && bytes[start - 1] == b' ' && bytes[start.saturating_sub(7)..start - 1].ends_with(b"delete");
         if is_write_op(bytes, j) || prefix_update || (had_member && delete_prefix) {
             out.push(name.to_string());
         }
@@ -766,10 +747,7 @@ fn extract_idents(text: &str) -> Vec<String> {
                     i = j + 1;
                     continue;
                 }
-                if !matches!(
-                    name,
-                    "true" | "false" | "null" | "undefined" | "this" | "in" | "of"
-                ) {
+                if !matches!(name, "true" | "false" | "null" | "undefined" | "this" | "in" | "of") {
                     out.push(name.to_string());
                 }
             }

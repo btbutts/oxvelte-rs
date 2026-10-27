@@ -2,7 +2,7 @@
 //! ⭐ Recommended, 💡 Suggestion
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule, Suggestion};
+use crate::linter::{Fix, LintContext, Rule, Suggestion, walk_template_nodes};
 
 pub struct NoAtDebugTags;
 
@@ -53,10 +53,7 @@ mod tests {
         assert!(diagnostic.fix.is_none());
         let fix = &diagnostic.suggestions[0].fix;
         let mut output = source.to_string();
-        output.replace_range(
-            fix.span.start as usize..fix.span.end as usize,
-            &fix.replacement,
-        );
+        output.replace_range(fix.span.start as usize..fix.span.end as usize, &fix.replacement);
         assert_eq!(output, "😀 before {#if yes} after{/if}");
     }
 }

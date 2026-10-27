@@ -1,7 +1,7 @@
 //! `svelte/no-navigation-without-base` — require imported base-path prefixes.
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, Fragment, TemplateNode};
 use crate::linter::{LintContext, Rule};
-use oxc::ast::{ast::Expression, AstKind};
+use oxc::ast::{AstKind, ast::Expression};
 use oxc::semantic::{Semantic, SymbolId};
 use oxc::span::{GetSpan, SourceType, Span};
 use std::collections::HashSet;
@@ -31,17 +31,11 @@ impl Rule for NoNavigationWithoutBase {
         for (semantic, offset) in [
             (
                 ctx.instance_semantic,
-                ctx.ast
-                    .instance
-                    .as_ref()
-                    .map_or(0, |script| script.content_span.start),
+                ctx.ast.instance.as_ref().map_or(0, |script| script.content_span.start),
             ),
             (
                 ctx.module_semantic,
-                ctx.ast
-                    .module
-                    .as_ref()
-                    .map_or(0, |script| script.content_span.start),
+                ctx.ast.module.as_ref().map_or(0, |script| script.content_span.start),
             ),
         ] {
             let Some(semantic) = semantic else { continue };
@@ -57,13 +51,7 @@ impl Rule for NoNavigationWithoutBase {
                 .iter()
                 .find_map(|(name, option)| {
                     (!ignored(option)
-                        && import_reference(
-                            &call.callee,
-                            semantic,
-                            "$app/navigation",
-                            name,
-                            &mut Vec::new(),
-                        ))
+                        && import_reference(&call.callee, semantic, "$app/navigation", name, &mut Vec::new()))
                     .then_some(*name)
                 }) else {
                     continue;
@@ -73,17 +61,14 @@ impl Rule for NoNavigationWithoutBase {
                 };
                 let safe = argument.as_expression().is_some_and(|expression| {
                     (name != "goto" && expression_is_empty(expression))
-                        || prefixed(
-                            expression,
-                            semantic,
-                            false,
-                            &HashSet::new(),
-                            &mut Vec::new(),
-                        )
+                        || prefixed(expression, semantic, false, &HashSet::new(), &mut Vec::new())
                 });
                 if !safe {
                     let span = argument.span();
-                    ctx.diagnostic(format!("Found a {name}() call with a url that isn't prefixed with the base path."), Span::new(offset + span.start, offset + span.end));
+                    ctx.diagnostic(
+                        format!("Found a {name}() call with a url that isn't prefixed with the base path."),
+                        Span::new(offset + span.start, offset + span.end),
+                    );
                 }
             }
         }
@@ -102,11 +87,9 @@ fn expression_is_empty(expression: &Expression<'_>) -> bool {
     }
 }
 fn absolute_uri(value: &str) -> bool {
-    value.find(':').is_some_and(|colon| {
-        value[..colon]
-            .bytes()
-            .all(|b| b == b'+' || b.is_ascii_alphabetic())
-    })
+    value
+        .find(':')
+        .is_some_and(|colon| value[..colon].bytes().all(|b| b == b'+' || b.is_ascii_alphabetic()))
 }
 fn link_exempt(expression: &Expression<'_>, fragment: bool) -> bool {
     let check = |value: &str| {
@@ -122,14 +105,11 @@ fn link_exempt(expression: &Expression<'_>, fragment: bool) -> bool {
             link_exempt(&b.left, fragment) || (!fragment && link_exempt(&b.right, false))
         }
         Expression::TemplateLiteral(t) if fragment => {
-            t.quasis
-                .first()
-                .is_some_and(|q| check(q.value.raw.as_str()))
+            t.quasis.first().is_some_and(|q| check(q.value.raw.as_str()))
                 || t.expressions.first().is_some_and(|e| link_exempt(e, true))
         }
         Expression::TemplateLiteral(t) => {
-            t.quasis.iter().any(|q| check(q.value.raw.as_str()))
-                || t.expressions.iter().any(|e| link_exempt(e, false))
+            t.quasis.iter().any(|q| check(q.value.raw.as_str())) || t.expressions.iter().any(|e| link_exempt(e, false))
         }
         _ => false,
     }
@@ -151,10 +131,7 @@ fn prefixed(
                     .scoping()
                     .find_binding(semantic.scoping().root_scope_id(), id.name)
             } else {
-                semantic
-                    .scoping()
-                    .get_reference(id.reference_id())
-                    .symbol_id()
+                semantic.scoping().get_reference(id.reference_id()).symbol_id()
             };
             let Some(symbol) = symbol else { return false };
             prefix_symbol(symbol, semantic, seen)
@@ -171,23 +148,15 @@ fn prefixed(
                     .scoping()
                     .find_binding(semantic.scoping().root_scope_id(), id.name)
             } else {
-                semantic
-                    .scoping()
-                    .get_reference(id.reference_id())
-                    .symbol_id()
+                semantic.scoping().get_reference(id.reference_id()).symbol_id()
             };
             symbol.is_some_and(|symbol| namespace_symbol(symbol, semantic, "$app/paths"))
         }
-        Expression::BinaryExpression(binary)
-            if binary.operator == oxc::syntax::operator::BinaryOperator::Addition =>
-        {
+        Expression::BinaryExpression(binary) if binary.operator == oxc::syntax::operator::BinaryOperator::Addition => {
             prefixed(&binary.left, semantic, template, shadows, seen)
         }
         Expression::TemplateLiteral(literal) => {
-            literal
-                .quasis
-                .first()
-                .is_some_and(|q| q.value.raw.is_empty())
+            literal.quasis.first().is_some_and(|q| q.value.raw.is_empty())
                 && literal
                     .expressions
                     .first()
@@ -219,7 +188,8 @@ fn binding_names(pattern: &str) -> HashSet<String> {
     let allocator = oxc::allocator::Allocator::default();
     let source = format!("({pattern}) => {{}}");
     let parsed = oxc::parser::Parser::new(&allocator, &source, SourceType::ts()).parse();
-    let semantic = oxc::semantic::SemanticBuilder::new().with_build_nodes(true)
+    let semantic = oxc::semantic::SemanticBuilder::new()
+        .with_build_nodes(true)
         .build(&parsed.program)
         .semantic;
     semantic
@@ -231,18 +201,10 @@ fn binding_names(pattern: &str) -> HashSet<String> {
         })
         .collect()
 }
-fn check_fragment<'a>(
-    fragment: &'a Fragment<'a>,
-    ctx: &mut LintContext<'a>,
-    inherited: &HashSet<String>,
-) {
+fn check_fragment<'a>(fragment: &'a Fragment<'a>, ctx: &mut LintContext<'a>, inherited: &HashSet<String>) {
     check_nodes(&fragment.nodes, ctx, inherited);
 }
-fn check_nodes<'a>(
-    nodes: &'a [TemplateNode<'a>],
-    ctx: &mut LintContext<'a>,
-    inherited: &HashSet<String>,
-) {
+fn check_nodes<'a>(nodes: &'a [TemplateNode<'a>], ctx: &mut LintContext<'a>, inherited: &HashSet<String>) {
     let mut shadows = inherited.clone();
     for node in nodes {
         if let TemplateNode::ConstTag(tag) = node {
@@ -272,14 +234,11 @@ fn check_nodes<'a>(
                                 })
                         };
                         let (safe, span) = match value {
-                            AttributeValue::Static(value) => (
-                                absolute_uri(value) || value.starts_with('#'),
-                                meta.value_span,
-                            ),
+                            AttributeValue::Static(value) => {
+                                (absolute_uri(value) || value.starts_with('#'), meta.value_span)
+                            }
                             AttributeValue::Expression(_) => (
-                                element
-                                    .attribute_expression_ast(index)
-                                    .is_some_and(safe_expr),
+                                element.attribute_expression_ast(index).is_some_and(safe_expr),
                                 meta.mustache_span,
                             ),
                             AttributeValue::Concat(parts) => match parts.first() {
@@ -288,9 +247,7 @@ fn check_nodes<'a>(
                                     meta.parts.first().map(|p| p.span),
                                 ),
                                 Some(AttributeValuePart::Expression(_)) => (
-                                    element
-                                        .attribute_part_expression_ast(index, 0)
-                                        .is_some_and(safe_expr),
+                                    element.attribute_part_expression_ast(index, 0).is_some_and(safe_expr),
                                     meta.parts.first().map(|p| p.span),
                                 ),
                                 None => (false, meta.value_span),
@@ -340,10 +297,7 @@ fn check_nodes<'a>(
                 if let Some(pending) = &block.pending {
                     check_fragment(pending, ctx, &shadows);
                 }
-                for (body, binding) in [
-                    (&block.then, &block.then_binding),
-                    (&block.catch, &block.catch_binding),
-                ] {
+                for (body, binding) in [(&block.then, &block.then_binding), (&block.catch, &block.catch_binding)] {
                     if let Some(body) = body {
                         let mut nested = shadows.clone();
                         if let Some(binding) = binding {
@@ -372,11 +326,7 @@ fn import_reference(
 ) -> bool {
     match expression.get_inner_expression() {
         Expression::Identifier(id) => {
-            let Some(symbol) = semantic
-                .scoping()
-                .get_reference(id.reference_id())
-                .symbol_id()
-            else {
+            let Some(symbol) = semantic.scoping().get_reference(id.reference_id()).symbol_id() else {
                 return false;
             };
             if seen.contains(&symbol) {
@@ -384,9 +334,7 @@ fn import_reference(
             }
             seen.push(symbol);
             let declaration = semantic.scoping().symbol_declaration(symbol);
-            for node in
-                std::iter::once(declaration).chain(semantic.nodes().ancestor_ids(declaration))
-            {
+            for node in std::iter::once(declaration).chain(semantic.nodes().ancestor_ids(declaration)) {
                 match semantic.nodes().kind(node) {
                     AstKind::ImportDeclaration(import) => return import.source.value == source && import.specifiers.as_ref().is_some_and(|specifiers| specifiers.iter().any(|specifier| matches!(specifier, oxc::ast::ast::ImportDeclarationSpecifier::ImportSpecifier(s) if s.local.symbol_id.get() == Some(symbol) && s.imported.name() == exported))),
                     AstKind::VariableDeclarator(variable) => return variable.init.as_ref().is_some_and(|init| import_reference(init, semantic, source, exported, seen)),
@@ -399,11 +347,7 @@ fn import_reference(
             let Expression::Identifier(id) = member.object.get_inner_expression() else {
                 return false;
             };
-            let Some(symbol) = semantic
-                .scoping()
-                .get_reference(id.reference_id())
-                .symbol_id()
-            else {
+            let Some(symbol) = semantic.scoping().get_reference(id.reference_id()).symbol_id() else {
                 return false;
             };
             let declaration = semantic.scoping().symbol_declaration(symbol);
@@ -424,7 +368,9 @@ mod tests {
     #[test]
     fn argument_spans_use_parsed_script_offsets() {
         for attributes in ["data-note=\">\"", "module data-note=\">\""] {
-            let source = format!("<!-- 😀 -->\n<script {attributes}>\nimport {{ goto, pushState, replaceState }} from '$app/navigation';\ngoto('/goto');\npushState('/push');\nreplaceState('/replace');\n</script>");
+            let source = format!(
+                "<!-- 😀 -->\n<script {attributes}>\nimport {{ goto, pushState, replaceState }} from '$app/navigation';\ngoto('/goto');\npushState('/push');\nreplaceState('/replace');\n</script>"
+            );
             assert_eq!(
                 findings(&source, serde_json::json!([])),
                 ["'/goto'", "'/push'", "'/replace'"]
@@ -484,7 +430,13 @@ pushState(dynamic);
                 "dynamic"
             ]
         );
-        assert!(findings(source, serde_json::json!([{ "ignoreGoto": true, "ignorePushState": true, "ignoreReplaceState": true }])).is_empty());
+        assert!(
+            findings(
+                source,
+                serde_json::json!([{ "ignoreGoto": true, "ignorePushState": true, "ignoreReplaceState": true }])
+            )
+            .is_empty()
+        );
     }
     #[test]
     fn hrefs_use_value_spans_and_template_binding_scopes() {

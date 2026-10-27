@@ -1,6 +1,6 @@
 //! Prefer class directives for conditional class names.
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, TemplateNode};
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::{
     allocator::Allocator,
     ast::ast::Expression,
@@ -65,12 +65,7 @@ impl Rule for PreferClassDirective {
                 };
                 let ranges: Vec<_> = spans
                     .into_iter()
-                    .map(|s| {
-                        (
-                            (s.start - span.start) as usize,
-                            (s.end - span.start) as usize,
-                        )
-                    })
+                    .map(|s| ((s.start - span.start) as usize, (s.end - span.start) as usize))
                     .collect();
                 if ranges.len() != parts.len() {
                     continue;
@@ -80,16 +75,13 @@ impl Rule for PreferClassDirective {
                         continue;
                     };
                     let allocator = Allocator::default();
-                    let Ok(expr) =
-                        Parser::new(&allocator, source, SourceType::ts()).parse_expression()
-                    else {
+                    let Ok(expr) = Parser::new(&allocator, source, SourceType::ts()).parse_expression() else {
                         continue;
                     };
                     let Expression::ConditionalExpression(c) = expr.without_parentheses() else {
                         continue;
                     };
-                    let (Some(t), Some(f)) = (constant(&c.consequent), constant(&c.alternate))
-                    else {
+                    let (Some(t), Some(f)) = (constant(&c.consequent), constant(&c.alternate)) else {
                         continue;
                     };
                     if empty && !t.trim().is_empty() && !f.trim().is_empty() {
@@ -112,18 +104,10 @@ impl Rule for PreferClassDirective {
                     }
                     let mut directives = Vec::new();
                     if !t.trim().is_empty() {
-                        directives.push(format!(
-                            "class:{}={{{}}}",
-                            t.trim(),
-                            text(source, &c.test)
-                        ));
+                        directives.push(format!("class:{}={{{}}}", t.trim(), text(source, &c.test)));
                     }
                     if !f.trim().is_empty() {
-                        directives.push(format!(
-                            "class:{}={{{}}}",
-                            f.trim(),
-                            negate(source, &c.test)
-                        ));
+                        directives.push(format!("class:{}={{{}}}", f.trim(), negate(source, &c.test)));
                     }
                     let (start, end) = ranges[i];
                     let mut left = start;
@@ -168,12 +152,11 @@ impl Rule for PreferClassDirective {
                         } else {
                             ""
                         };
-                        let separator =
-                            if before_count > 0 && after_count > 0 && separator.is_empty() {
-                                " "
-                            } else {
-                                separator
-                            };
+                        let separator = if before_count > 0 && after_count > 0 && separator.is_empty() {
+                            " "
+                        } else {
+                            separator
+                        };
                         format!(
                             "{}{}{} {}",
                             &raw[..left],
@@ -259,9 +242,7 @@ fn negate(source: &str, expr: &Expression<'_>) -> String {
         Expression::UnaryExpression(u) if u.operator.as_str() == "!" => {
             text(source, u.argument.without_parentheses()).into()
         }
-        Expression::BinaryExpression(b)
-            if matches!(b.operator.as_str(), "==" | "===" | "!=" | "!==") =>
-        {
+        Expression::BinaryExpression(b) if matches!(b.operator.as_str(), "==" | "===" | "!=" | "!==") => {
             let op = b.operator.as_str();
             let inverse = match op {
                 "==" => "!=",
@@ -304,8 +285,7 @@ mod tests {
     use oxc::allocator::Allocator;
     #[test]
     fn ranges_and_negation_preserve_entities_and_operator_comments() {
-        let source =
-            "<!-- 😀 --><button class=\"&amp; {a /* === */ === b ? '' : 'active'} tail\" />";
+        let source = "<!-- 😀 --><button class=\"&amp; {a /* === */ === b ? '' : 'active'} tail\" />";
         let allocator = Allocator::default();
         let parsed = parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
@@ -324,15 +304,16 @@ mod tests {
         );
         let source = "<button class=\"{flag ? ' ' : 'suffix'}{ready ? 'active' : ''}\" />";
         let parsed = parser::parse_for_lint(source, &allocator);
-        assert!(Linter::all()
-            .lint(&parsed.ast, source)
-            .into_iter()
-            .all(|d| d.rule_name != "svelte/prefer-class-directive"));
+        assert!(
+            Linter::all()
+                .lint(&parsed.ast, source)
+                .into_iter()
+                .all(|d| d.rule_name != "svelte/prefer-class-directive")
+        );
     }
     #[test]
     fn class_edits_preserve_unicode_comments_and_unknown_neighbors() {
-        let source =
-            "<!-- 😀 --><button class=\"fixed {ready /* comment */ ? 'active' : ''} tail\" />";
+        let source = "<!-- 😀 --><button class=\"fixed {ready /* comment */ ? 'active' : ''} tail\" />";
         let allocator = Allocator::default();
         let parsed = parser::parse_for_lint(source, &allocator);
         let diagnostics = Linter::all().lint(&parsed.ast, source);
@@ -352,9 +333,11 @@ mod tests {
         );
         let source = "<button class=\"{unknown}{ready ? 'active' : ''}\" />";
         let parsed = parser::parse_for_lint(source, &allocator);
-        assert!(Linter::all()
-            .lint_with_config(&parsed.ast, source, RuleConfig::default())
-            .into_iter()
-            .all(|d| d.rule_name != "svelte/prefer-class-directive"));
+        assert!(
+            Linter::all()
+                .lint_with_config(&parsed.ast, source, RuleConfig::default())
+                .into_iter()
+                .all(|d| d.rule_name != "svelte/prefer-class-directive")
+        );
     }
 }

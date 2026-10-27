@@ -2,7 +2,7 @@
 //! ⭐ Recommended
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct NoUselessChildrenSnippet;
 

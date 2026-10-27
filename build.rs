@@ -99,9 +99,7 @@ fn css_prop_sources() -> HashMap<&'static str, SourceSpec> {
                 repo: "browser-compat-data",
                 commit_env: "OXVELTE_CSS_SRC_MDN_BROWSER_COMPAT_DATA_COMMIT",
                 fetch: Fetch::Archive(ArchiveKind::Tarball),
-                extract: Extract::MemberFileNames {
-                    dir: "css/properties/",
-                },
+                extract: Extract::MemberFileNames { dir: "css/properties/" },
             },
         ),
         (
@@ -191,8 +189,7 @@ fn http_download(url: &str, dest: &Path) -> Result<(), String> {
     })?;
     let mut reader = response.body_mut().as_reader();
     let mut file = fs::File::create(dest).map_err(|e| format!("creating {}: {e}", dest.display()))?;
-    std::io::copy(&mut reader, &mut file)
-        .map_err(|e| format!("downloading {url}: {e}"))?;
+    std::io::copy(&mut reader, &mut file).map_err(|e| format!("downloading {url}: {e}"))?;
     Ok(())
 }
 
@@ -206,7 +203,10 @@ fn fetch_github_repo(
     archive: ArchiveKind,
     dest_dir: &Path,
 ) -> Result<PathBuf, String> {
-    let url = format!("https://github.com/{owner}/{repo}/archive/{commit_hash}{ext}", ext = archive.ext());
+    let url = format!(
+        "https://github.com/{owner}/{repo}/archive/{commit_hash}{ext}",
+        ext = archive.ext()
+    );
     let path = dest_dir.join(format!("{owner}-{repo}-{commit_hash}{ext}", ext = archive.ext()));
     http_download(&url, &path)?;
     Ok(path)
@@ -225,16 +225,12 @@ fn member_action(rel: &str, extract: &Extract) -> MemberAction {
     match extract {
         Extract::SingleJson { member, .. } if rel == *member => MemberAction::UseContent,
         Extract::MultiJson { dir, .. }
-            if rel.starts_with(dir)
-                && rel.ends_with(".json")
-                && !rel[dir.len()..].contains('/') =>
+            if rel.starts_with(dir) && rel.ends_with(".json") && !rel[dir.len()..].contains('/') =>
         {
             MemberAction::UseContent
         }
         Extract::MemberFileNames { dir }
-            if rel.starts_with(dir)
-                && rel.ends_with(".json")
-                && !rel[dir.len()..].contains('/') =>
+            if rel.starts_with(dir) && rel.ends_with(".json") && !rel[dir.len()..].contains('/') =>
         {
             MemberAction::UseFileName
         }
@@ -251,8 +247,8 @@ fn strip_archive_root(path: &Path) -> Option<String> {
 }
 
 fn parse_property_json(bytes: &[u8], schema: Schema, source: &str) -> Vec<String> {
-    let value: serde_json::Value = serde_json::from_slice(bytes)
-        .unwrap_or_else(|e| panic!("CSS source '{source}': invalid JSON: {e}"));
+    let value: serde_json::Value =
+        serde_json::from_slice(bytes).unwrap_or_else(|e| panic!("CSS source '{source}': invalid JSON: {e}"));
     let missing = || -> ! { panic!("CSS source '{source}': JSON does not match the expected schema") };
     match schema {
         Schema::PropertiesArray => value["properties"]
@@ -312,7 +308,10 @@ fn extract_from_tarball(archive: &Path, spec: &SourceSpec, key: &str) -> Vec<Str
         }
     }
     if let Extract::SingleJson { member, .. } = spec.extract {
-        assert!(found_single, "CSS source '{key}': member '{member}' not found in tarball — upstream layout likely changed");
+        assert!(
+            found_single,
+            "CSS source '{key}': member '{member}' not found in tarball — upstream layout likely changed"
+        );
     }
     names
 }
@@ -328,7 +327,9 @@ fn extract_from_zip(archive: &Path, spec: &SourceSpec, key: &str) -> Vec<String>
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).unwrap_or_else(|e| fail(&e));
         let name = entry.name().unwrap_or_else(|e| fail(&e)).into_owned();
-        let Some(rel) = strip_archive_root(Path::new(&name)) else { continue };
+        let Some(rel) = strip_archive_root(Path::new(&name)) else {
+            continue;
+        };
         match member_action(&rel, &spec.extract) {
             MemberAction::Skip => {}
             MemberAction::UseFileName => {
@@ -347,7 +348,10 @@ fn extract_from_zip(archive: &Path, spec: &SourceSpec, key: &str) -> Vec<String>
         }
     }
     if let Extract::SingleJson { member, .. } = spec.extract {
-        assert!(found_single, "CSS source '{key}': member '{member}' not found in zip — upstream layout likely changed");
+        assert!(
+            found_single,
+            "CSS source '{key}': member '{member}' not found in zip — upstream layout likely changed"
+        );
     }
     names
 }
@@ -356,7 +360,10 @@ fn extract_from_zip(archive: &Path, spec: &SourceSpec, key: &str) -> Vec<String>
 /// `Err` (the caller warns and continues); extraction or parse problems panic.
 fn fetch_source(key: &str, spec: &SourceSpec, tmp_dir: &Path) -> Result<Vec<String>, String> {
     let commit = std::env::var(spec.commit_env).map_err(|_| {
-        format!("env var {} is not set — define it in .cargo/config.toml", spec.commit_env)
+        format!(
+            "env var {} is not set — define it in .cargo/config.toml",
+            spec.commit_env
+        )
     })?;
     match &spec.fetch {
         Fetch::RawFile(path) => {
@@ -388,10 +395,7 @@ fn fetch_source(key: &str, spec: &SourceSpec, tmp_dir: &Path) -> Result<Vec<Stri
 /// custom-property wildcard and other non-property meta entries.
 fn normalize_property(raw: &str) -> Option<String> {
     let prop = raw.trim().to_lowercase();
-    if prop.is_empty()
-        || prop.starts_with("--")
-        || prop.contains(char::is_whitespace)
-    {
+    if prop.is_empty() || prop.starts_with("--") || prop.contains(char::is_whitespace) {
         None
     } else {
         Some(prop)
@@ -420,8 +424,8 @@ fn main() {
 
     // Success chatter is opt-in (`.cargo/config.toml`); genuine failures
     // always warn.
-    let show_stats = std::env::var("OXVELTE_BUILD_SHOW_CSS_PROP_GEN_STATS")
-        .is_ok_and(|v| matches!(v.as_str(), "true" | "1"));
+    let show_stats =
+        std::env::var("OXVELTE_BUILD_SHOW_CSS_PROP_GEN_STATS").is_ok_and(|v| matches!(v.as_str(), "true" | "1"));
 
     let tmp_dir = std::env::temp_dir().join(format!("oxvelte-css-props-{}", std::process::id()));
     fs::create_dir_all(&tmp_dir).expect("create temp dir for CSS source downloads");

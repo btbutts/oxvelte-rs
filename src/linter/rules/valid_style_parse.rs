@@ -1,7 +1,7 @@
 //! `svelte/valid-style-parse` — report style parsing errors in `<style>` blocks.
 
 use crate::linter::{LintContext, Rule};
-use crate::parser::css::{parse_css, CssParseErrorKind};
+use crate::parser::css::{CssParseErrorKind, parse_css};
 
 pub struct ValidStyleParse;
 
@@ -41,25 +41,12 @@ impl Rule for ValidStyleParse {
             None
         };
         if let Some(ep) = err_pos {
-            let (position, reason) = style_error_message(
-                &style.content,
-                ep as usize,
-                parsed.errors.first().map(|e| e.kind),
-            );
+            let (position, reason) =
+                style_error_message(&style.content, ep as usize, parsed.errors.first().map(|e| e.kind));
             let prefix = &style.content[..position];
             let line = prefix.bytes().filter(|b| *b == b'\n').count() + 1;
-            let column = prefix
-                .rsplit('\n')
-                .next()
-                .unwrap_or(prefix)
-                .encode_utf16()
-                .count()
-                + 1;
-            let filename = ctx
-                .file_path
-                .as_deref()
-                .unwrap_or("<input>")
-                .replace('\\', "/");
+            let column = prefix.rsplit('\n').next().unwrap_or(prefix).encode_utf16().count() + 1;
+            let filename = ctx.file_path.as_deref().unwrap_or("<input>").replace('\\', "/");
             let cwd = std::env::current_dir()
                 .ok()
                 .map(|p| p.to_string_lossy().replace('\\', "/") + "/");
@@ -75,11 +62,7 @@ impl Rule for ValidStyleParse {
     }
 }
 
-fn style_error_message(
-    css: &str,
-    position: usize,
-    kind: Option<CssParseErrorKind>,
-) -> (usize, String) {
+fn style_error_message(css: &str, position: usize, kind: Option<CssParseErrorKind>) -> (usize, String) {
     if kind == Some(CssParseErrorKind::UnclosedComment) {
         return (position, "Unclosed comment".into());
     }
@@ -89,12 +72,11 @@ fn style_error_message(
         let after_property = &tail[property_len..];
         let whitespace_len = after_property.len() - after_property.trim_start().len();
         let next = property_len + whitespace_len;
-        let word_position =
-            if next < tail.len() && !matches!(tail.as_bytes()[next], b':' | b';' | b'}') {
-                position + next
-            } else {
-                position
-            };
+        let word_position = if next < tail.len() && !matches!(tail.as_bytes()[next], b':' | b';' | b'}') {
+            position + next
+        } else {
+            position
+        };
         let word = css[word_position..]
             .split(|c: char| c.is_whitespace() || matches!(c, ';' | '}' | ':'))
             .next()
@@ -154,10 +136,10 @@ mod tests {
         ValidStyleParse.run(&mut ctx);
         let diagnostics = ctx.into_diagnostics();
         assert_eq!(diagnostics.len(), 1);
-        assert_eq!(diagnostics[0].message, "Error parsing style element. Error message: \"src/Panel.svelte:1:12: Unknown word red\"");
         assert_eq!(
-            diagnostics[0].span.start,
-            source.find("<style").unwrap() as u32
+            diagnostics[0].message,
+            "Error parsing style element. Error message: \"src/Panel.svelte:1:12: Unknown word red\""
         );
+        assert_eq!(diagnostics[0].span.start, source.find("<style").unwrap() as u32);
     }
 }

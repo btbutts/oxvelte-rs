@@ -1,5 +1,5 @@
 use oxvelte::linter::{Fix, LintDiagnostic};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -33,9 +33,7 @@ pub fn runner_arguments(args: impl IntoIterator<Item = String>) -> Result<Runner
             }
             "--report" => result.report = Some(args.next().ok_or("--report needs a path")?.into()),
             "--corpus" => result.corpus = Some(args.next().ok_or("--corpus needs a path")?.into()),
-            "--baseline" => {
-                result.baseline = Some(args.next().ok_or("--baseline needs a path")?.into())
-            }
+            "--baseline" => result.baseline = Some(args.next().ok_or("--baseline needs a path")?.into()),
             "--no-baseline" => result.no_baseline = true,
             "--update-baseline" => result.update = true,
             "--strict" => result.strict = true,
@@ -47,10 +45,7 @@ pub fn runner_arguments(args: impl IntoIterator<Item = String>) -> Result<Runner
         return Err("Baseline updates require the entire suite without --strict".into());
     }
     if result.no_baseline && (!result.strict || result.baseline.is_some() || result.update) {
-        return Err(
-            "--no-baseline requires --strict and cannot be combined with a baseline path or update"
-                .into(),
-        );
+        return Err("--no-baseline requires --strict and cannot be combined with a baseline path or update".into());
     }
     if result.corpus.is_some() && result.baseline.is_none() && !result.no_baseline {
         return Err("--corpus requires --baseline or --strict --no-baseline to protect the default baseline".into());
@@ -111,9 +106,7 @@ pub fn fixture_settings(
                 };
                 json!(resolved.to_string_lossy().replace('\\', "/"))
             }
-            Value::Array(paths) => {
-                Value::Array(paths.into_iter().map(|path| resolve(path, root)).collect())
-            }
+            Value::Array(paths) => Value::Array(paths.into_iter().map(|path| resolve(path, root)).collect()),
             other => other,
         }
     }
@@ -180,21 +173,13 @@ pub fn script_parse_errors(source: &str, is_ts: bool) -> Vec<String> {
         .diagnostics
         .iter()
         .filter(|error| {
-            !(is_ts
-                && error.code.scope.as_deref() == Some("TS")
-                && error.code.number.as_deref() == Some("1029"))
+            !(is_ts && error.code.scope.as_deref() == Some("TS") && error.code.number.as_deref() == Some("1029"))
         })
         .map(ToString::to_string)
         .collect()
 }
 
-pub fn is_regression(
-    baseline: &Signatures,
-    id: &str,
-    dimension: &str,
-    signature: &str,
-    strict: bool,
-) -> bool {
+pub fn is_regression(baseline: &Signatures, id: &str, dimension: &str, signature: &str, strict: bool) -> bool {
     (strict && dimension != "version_skip")
         || baseline
             .get(id)
@@ -230,12 +215,8 @@ pub fn fixture_message(message: &str, filename: &str, cwd: &str, original: &str)
             let end = start + path.len();
             let before = result[..start].chars().next_back();
             let after = result[end..].chars().next();
-            let left = before.is_none_or(|ch| {
-                ch.is_whitespace() || matches!(ch, '\'' | '"' | '(' | '[' | ':' | '=')
-            });
-            let right = after.is_none_or(|ch| {
-                ch.is_whitespace() || matches!(ch, '\'' | '"' | ')' | ']' | ':' | ',')
-            });
+            let left = before.is_none_or(|ch| ch.is_whitespace() || matches!(ch, '\'' | '"' | '(' | '[' | ':' | '='));
+            let right = after.is_none_or(|ch| ch.is_whitespace() || matches!(ch, '\'' | '"' | ')' | ']' | ':' | ','));
             if left && right {
                 output.push_str(&result[cursor..start]);
                 output.push_str(original);

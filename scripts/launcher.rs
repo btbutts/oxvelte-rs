@@ -5,7 +5,7 @@
 
 use std::env;
 use std::path::Path;
-use std::process::{exit, Command, Stdio};
+use std::process::{Command, Stdio, exit};
 
 const SCRIPT_DIR: &str = "scripts/get-fixtures";
 const SCRIPT: &str = "import.mjs";

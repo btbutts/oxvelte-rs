@@ -2,7 +2,7 @@
 //! ⭐ Recommended
 
 use crate::ast::{Attribute, AttributeValue, AttributeValuePart, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 
 pub struct NoObjectInTextMustaches;
 
@@ -35,14 +35,9 @@ impl Rule for NoObjectInTextMustaches {
                     {
                         for (part, part_meta) in parts.iter().zip(&meta.parts) {
                             if let AttributeValuePart::Expression(_) = part {
-                                if let Some(label) =
-                                    part_meta.expression_ast.and_then(detect_expression_kind)
-                                {
+                                if let Some(label) = part_meta.expression_ast.and_then(detect_expression_kind) {
                                     ctx.diagnostic(
-                                        format!(
-                                            "Unexpected {} in text mustache interpolation.",
-                                            label
-                                        ),
+                                        format!("Unexpected {} in text mustache interpolation.", label),
                                         part_meta.mustache_span.unwrap_or(part_meta.span),
                                     );
                                 }
@@ -61,9 +56,7 @@ fn detect_expression_kind(expr: &oxc::ast::ast::Expression<'_>) -> Option<&'stat
     match expr.without_parentheses() {
         Expression::ObjectExpression(_) => Some("object"),
         Expression::ArrayExpression(_) => Some("array"),
-        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
-            Some("function")
-        }
+        Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => Some("function"),
         Expression::ClassExpression(_) => Some("class"),
         _ => None,
     }

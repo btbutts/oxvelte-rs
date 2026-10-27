@@ -1,7 +1,7 @@
 //! `svelte/no-restricted-html-elements` — disallow specific HTML elements.
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 
 pub struct NoRestrictedHtmlElements;
@@ -20,17 +20,16 @@ impl Rule for NoRestrictedHtmlElements {
         if let Some(arr) = ctx.config.options.as_ref().and_then(|o| o.as_array()) {
             for v in arr {
                 match v {
-                    serde_json::Value::String(s) => restricted.push((
-                        s.clone(),
-                        format!("Unexpected use of forbidden HTML element {}.", s),
-                    )),
+                    serde_json::Value::String(s) => {
+                        restricted.push((s.clone(), format!("Unexpected use of forbidden HTML element {}.", s)))
+                    }
                     serde_json::Value::Object(obj) => {
                         let custom = obj.get("message").and_then(|m| m.as_str());
                         if let Some(els) = obj.get("elements").and_then(|e| e.as_array()) {
                             for el in els.iter().filter_map(|e| e.as_str()) {
-                                let msg = custom.map(str::to_string).unwrap_or_else(|| {
-                                    format!("Unexpected use of forbidden HTML element {}.", el)
-                                });
+                                let msg = custom
+                                    .map(str::to_string)
+                                    .unwrap_or_else(|| format!("Unexpected use of forbidden HTML element {}.", el));
                                 restricted.push((el.to_string(), msg));
                             }
                         }

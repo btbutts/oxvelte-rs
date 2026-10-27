@@ -2,7 +2,7 @@
 //! ⭐ Recommended
 
 use crate::ast::{Attribute, DirectiveKind, TemplateNode};
-use crate::linter::{walk_template_nodes, LintContext, Rule};
+use crate::linter::{LintContext, Rule, walk_template_nodes};
 use regex::{Regex, RegexBuilder};
 use rustc_hash::FxHashSet;
 use std::sync::OnceLock;
@@ -88,8 +88,7 @@ fn known_property(prop: &str) -> bool {
         return false;
     };
     let unprefixed = &prop[prefix.len()..];
-    matches!(prefix, "-moz-" | "-webkit-" | "-ms-" | "-o-")
-        && known_css_properties().contains(unprefixed)
+    matches!(prefix, "-moz-" | "-webkit-" | "-ms-" | "-o-") && known_css_properties().contains(unprefixed)
 }
 
 pub struct NoUnknownStyleDirectiveProperty;
@@ -147,10 +146,7 @@ impl Rule for NoUnknownStyleDirectiveProperty {
                         if !known_property(name) {
                             ctx.diagnostic(
                                 format!("Unexpected unknown style directive property '{}'.", name),
-                                oxc::span::Span::new(
-                                    span.start + 6,
-                                    span.start + 6 + name.len() as u32,
-                                ),
+                                oxc::span::Span::new(span.start + 6, span.start + 6 + name.len() as u32),
                             );
                         }
                     }
@@ -173,9 +169,6 @@ mod span_tests {
         let diagnostics = ctx.into_diagnostics();
         assert_eq!(diagnostics.len(), 1);
         let span = diagnostics[0].span;
-        assert_eq!(
-            &source[span.start as usize..span.end as usize],
-            "unknown-color"
-        );
+        assert_eq!(&source[span.start as usize..span.end as usize], "unknown-color");
     }
 }

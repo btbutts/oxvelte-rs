@@ -1,6 +1,6 @@
 use crate::ast::TemplateNode;
 use crate::compiler::IgnoreItem;
-use crate::linter::{walk_template_nodes, LintContext};
+use crate::linter::{LintContext, walk_template_nodes};
 use oxc::span::GetSpan;
 use oxc::span::Span;
 
@@ -38,10 +38,7 @@ pub(crate) fn resolve(ctx: &LintContext<'_>, result: &mut crate::compiler::Compi
     ] {
         let Some(semantic) = semantic else { continue };
         for comment in &semantic.nodes().program().comments {
-            comments.push(Span::new(
-                offset + comment.span.start,
-                offset + comment.span.end,
-            ));
+            comments.push(Span::new(offset + comment.span.start, offset + comment.span.end));
         }
         for statement in &semantic.nodes().program().body {
             let span = statement.span();
@@ -62,10 +59,7 @@ pub(crate) fn resolve(ctx: &LintContext<'_>, result: &mut crate::compiler::Compi
             .copied()
             .collect();
         containing.sort_by_key(|(span, _)| span.end - span.start);
-        let Some(first) = containing
-            .iter()
-            .position(|(_, warning_target)| *warning_target)
-        else {
+        let Some(first) = containing.iter().position(|(_, warning_target)| *warning_target) else {
             return true;
         };
         let mut used = false;
@@ -84,9 +78,7 @@ pub(crate) fn resolve(ctx: &LintContext<'_>, result: &mut crate::compiler::Compi
                 &comments,
                 &result.ignore_items,
                 &mut result.unused_ignores,
-                |item| {
-                    item.code.as_deref() == Some(code) || item.code_for_v5.as_deref() == Some(code)
-                },
+                |item| item.code.as_deref() == Some(code) || item.code_for_v5.as_deref() == Some(code),
             );
         }
         !used
@@ -127,11 +119,7 @@ fn consume_ignore(
     matches: impl Fn(&IgnoreItem) -> bool,
 ) -> bool {
     let mut end = target.start;
-    for comment in comments
-        .iter()
-        .rev()
-        .filter(|comment| comment.end <= target.start)
-    {
+    for comment in comments.iter().rev().filter(|comment| comment.end <= target.start) {
         let between = &source[comment.end as usize..end as usize];
         // HTMLText and opening parentheses are excluded by the upstream token
         // filter. Other markup/control tokens terminate the leading comments.
@@ -146,10 +134,7 @@ fn consume_ignore(
             break;
         }
         end = comment.start;
-        if let Some(item) = all
-            .iter()
-            .find(|item| item.token_span == *comment && matches(item))
-        {
+        if let Some(item) = all.iter().find(|item| item.token_span == *comment && matches(item)) {
             unused.retain(|other| other.span != item.span);
             return true;
         }
@@ -160,12 +145,7 @@ pub(crate) fn items(ctx: &LintContext<'_>) -> Vec<IgnoreItem> {
     let mut items = Vec::new();
     walk_template_nodes(&ctx.ast.html, &mut |node| {
         if let TemplateNode::Comment(comment) = node {
-            parse_comment(
-                &comment.data,
-                comment.span.start + 4,
-                comment.span,
-                &mut items,
-            );
+            parse_comment(&comment.data, comment.span.start + 4, comment.span, &mut items);
         }
     });
     for (semantic, offset) in [
@@ -174,8 +154,7 @@ pub(crate) fn items(ctx: &LintContext<'_>) -> Vec<IgnoreItem> {
     ] {
         let Some(semantic) = semantic else { continue };
         for comment in &semantic.nodes().program().comments {
-            let text =
-                &semantic.source_text()[comment.span.start as usize..comment.span.end as usize];
+            let text = &semantic.source_text()[comment.span.start as usize..comment.span.end as usize];
             let body = if comment.is_line() {
                 &text[2..]
             } else {
@@ -203,9 +182,7 @@ fn parse_comment(body: &str, body_start: u32, token_span: Span, items: &mut Vec<
     // Parenthetical explanations occupy their original bytes to retain locations.
     static NOTES: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
     let notes = NOTES.get_or_init(|| regex::Regex::new(r"\([^)]*\)").unwrap());
-    let processed = notes.replace_all(codes, |captures: &regex::Captures<'_>| {
-        " ".repeat(captures[0].len())
-    });
+    let processed = notes.replace_all(codes, |captures: &regex::Captures<'_>| " ".repeat(captures[0].len()));
     if processed.trim_matches(js_whitespace).is_empty() {
         items.push(IgnoreItem {
             code: None,
@@ -218,8 +195,7 @@ fn parse_comment(body: &str, body_start: u32, token_span: Span, items: &mut Vec<
     // Match the pinned helper's separator iteration, including its handling of
     // a trailing code without a separator.
     static SEPARATOR: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
-    let separator = SEPARATOR
-        .get_or_init(|| regex::Regex::new(r"[\s\x{FEFF}]*[\s\x{FEFF},][\s\x{FEFF}]*").unwrap());
+    let separator = SEPARATOR.get_or_init(|| regex::Regex::new(r"[\s\x{FEFF}]*[\s\x{FEFF},][\s\x{FEFF}]*").unwrap());
     let mut last_end = 0;
     let initial_count = items.len();
     for matched in separator.find_iter(&processed) {
@@ -321,12 +297,7 @@ mod tests {
         let comments = [Span::new(0, 26), Span::new(27, 53)];
         let mut items = Vec::new();
         for comment in comments {
-            parse_comment(
-                " svelte-ignore foo ",
-                comment.start + 4,
-                comment,
-                &mut items,
-            );
+            parse_comment(" svelte-ignore foo ", comment.start + 4, comment, &mut items);
         }
         items.sort_by_key(|item| std::cmp::Reverse(item.span.start));
         let mut unused = items.clone();
@@ -346,12 +317,8 @@ mod tests {
     #[test]
     fn warnings_in_snippets_do_not_use_an_outer_element_ignore() {
         use crate::compiler::{CompileResult, Warning};
-        for (body, consumed) in [
-            ("<img />", true),
-            ("{#snippet example()}<img />{/snippet}", false),
-        ] {
-            let source =
-                format!("<!-- svelte-ignore a11y_missing_attribute -->\n<div>{body}</div>");
+        for (body, consumed) in [("<img />", true), ("{#snippet example()}<img />{/snippet}", false)] {
+            let source = format!("<!-- svelte-ignore a11y_missing_attribute -->\n<div>{body}</div>");
             let allocator = oxc::allocator::Allocator::default();
             let parsed = crate::parser::parse_for_lint(&source, &allocator);
             let ctx = LintContext::new(&parsed.ast, &source);

@@ -15,7 +15,7 @@
 //! `ctx.source` and run the vendor-equivalent trim check.
 
 use crate::ast::TemplateNode;
-use crate::linter::{walk_template_nodes, Fix, LintContext, Rule};
+use crate::linter::{Fix, LintContext, Rule, walk_template_nodes};
 use oxc::span::Span;
 
 pub struct HtmlClosingBracketSpacing;
@@ -56,11 +56,7 @@ impl Rule for HtmlClosingBracketSpacing {
             let start_src_end = (el.start_tag_end + 1) as usize;
             if start_src_end <= ctx.source.len() {
                 let tag_src = &ctx.source[el.span.start as usize..start_src_end];
-                let tag_mode: &str = if el.self_closing {
-                    &sc_mode
-                } else {
-                    &start_mode
-                };
+                let tag_mode: &str = if el.self_closing { &sc_mode } else { &start_mode };
                 check_tag(tag_mode, tag_src, el.span.start, ctx);
             }
 
