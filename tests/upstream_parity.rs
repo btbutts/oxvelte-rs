@@ -18,8 +18,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-const REVISION: &str = "18339c886320151148568063c5801bf69cb51027";
-const CORPUS: &str = "fixtures/upstream/eslint-plugin-svelte";
+const REVISION: &str = concat!(
+    "eslint-plugin-svelte@",
+    env!("OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG")
+);
+const CORPUS: &str = "fixtures/linter";
 const BASELINE: &str = "tests/upstream-parity-baseline.json";
 
 #[derive(Deserialize)]
@@ -146,9 +149,9 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
     } else {
         None
     };
-    let settings =
-        parity::fixture_settings(&case.config, executable_path.as_deref(), root, &case.rule);
-    if let Some(language) = case.config.get("languageOptions") {
+    let config = parity::rewrite_fixture_paths(&case.config, root, &case.filename);
+    let settings = parity::fixture_settings(&config, executable_path.as_deref(), root, &case.rule);
+    if let Some(language) = config.get("languageOptions") {
         if let Some(parser_options) = language.get("parserOptions") {
             if let Some(svelte_config) = parser_options.get("svelteConfig") {
                 if !compiler_rule
@@ -178,7 +181,7 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
         }
     }
     Ok(RuleConfig {
-        options: case.config.get("options").cloned(),
+        options: config.get("options").cloned(),
         settings,
     })
 }
@@ -265,19 +268,22 @@ fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
     let filename = source_path.to_string_lossy().replace('\\', "/");
     let mut diags = lint_case(&lint, &source, &filename, config, &mut issues);
     let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
+    // Expectations were recorded against upstream's repository layout;
+    // normalize real paths in messages back to the virtual fixture path.
+    let virtual_path = format!("tests/fixtures/rules/{}", case.id);
     for diagnostic in &mut diags {
         diagnostic.message = parity::fixture_message(
             &diagnostic.message,
             &filename,
             &cwd.to_string_lossy(),
-            &case.filename,
+            &virtual_path,
         );
         for suggestion in &mut diagnostic.suggestions {
             suggestion.description = parity::fixture_message(
                 &suggestion.description,
                 &filename,
                 &cwd.to_string_lossy(),
-                &case.filename,
+                &virtual_path,
             );
         }
     }

@@ -101,7 +101,7 @@ fn collect_guard_ctx(sem: &Semantic<'_>) -> GuardCtx {
             continue;
         };
         let src = imp.source.value.as_str();
-        let is_app = src == "$app/environment";
+        let is_app = src == "$app/environment" || src == "$app/env";
         let is_esm = src == "esm-env";
         if !is_app && !is_esm {
             continue;

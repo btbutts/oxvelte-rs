@@ -2,7 +2,7 @@
 // Mirrors discovery/config precedence in the pinned tests/utils/utils.ts.
 // This exports raw cases, without generating or rewriting upstream expectations.
 import { createHash } from 'node:crypto';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import semver from 'semver';
 import ts from 'typescript';
 import { createRequire } from 'node:module';
 import { builtinRules } from 'eslint/use-at-your-own-risk';
-import { extractMembers, fetchGithubRelease, syncRuleDirs } from './github.mjs';
+import { extractMembers, fetchGithubRelease, listFiles, syncRuleDirs } from './github.mjs';
 
 export const revision = '18339c886320151148568063c5801bf69cb51027';
 export const environment = {
@@ -76,7 +76,7 @@ export function ruleMetadata(source, versions = environment, coreRules = builtin
       if (candidate && ts.isObjectLiteralExpression(candidate)) rule = candidate;
     }
   }
-  if (!rule) return { fixable: false, ineligible: [] };
+  if (!rule) return { fixable: false, ineligible: [], gates: [] };
   const named = (object, name) => object.properties.find((property) => property.name && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === name);
   const metadata = named(rule, 'meta');
   let fixable = false;
@@ -94,6 +94,7 @@ export function ruleMetadata(source, versions = environment, coreRules = builtin
     }
   }
   const blocked = [];
+  const gates = [];
   const create = named(rule, 'create');
   if (create && ts.isMethodDeclaration(create) && create.body) {
     for (const statement of create.body.statements) {
@@ -110,9 +111,25 @@ export function ruleMetadata(source, versions = environment, coreRules = builtin
       const [version, range] = gate.arguments;
       if (!version || !ts.isIdentifier(version) || !compilerVersions.has(version.text) || !range || !ts.isStringLiteral(range) || gate.arguments.length !== 2) continue;
       blocked.push(...ineligible({ svelte: range.text }, versions).map((reason) => `Rule runtime gate: ${reason}`));
+      gates.push({ name: 'svelte', range: range.text });
     }
   }
-  return { fixable, ineligible: blocked };
+  return { fixable, ineligible: blocked, gates };
+}
+
+// Reason strings for compiler-version gates that block a rule under `versions`.
+const gateReasons = (gates, versions) => (gates ?? []).filter(({ name, range }) => {
+  if (!versions[name]) throw new Error(`No declared version for requirement ${name}`);
+  return !semver.satisfies(versions[name], range);
+}).map(({ name, range }) => `Rule runtime gate: ${name} ${versions[name]} does not satisfy ${range}`);
+
+// Recompute per-case eligibility for another environment without the upstream
+// TypeScript sources: requirement ranges come from each case, compiler-version
+// gates from the machine-readable `gates` list stored at import time.
+export function recomputeEligibility(manifest, versions) {
+  return { ...manifest, environment: versions,
+    cases: manifest.cases.map((kase) => ({ ...kase,
+      ineligible: [...ineligible(kase.requirements ?? {}, versions), ...gateReasons(kase.gates, versions)] })) };
 }
 
 export function buildManifest(files, versions = environment, coreRules = builtinRules) {
@@ -159,7 +176,7 @@ export function buildManifest(files, versions = environment, coreRules = builtin
     }
     cases.push({ id, rule, kind: parts[kindIndex], filename: fullPath, configFile: configFile ?? null,
       config, executableConfig: Boolean(executableConfig), requirements, ineligible: [...ineligible(requirements, versions), ...metadata.ineligible],
-      fixable, errors, output });
+      gates: metadata.gates, fixable, errors, output });
   }
   cases.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   if (!cases.length) throw new Error('No fixture cases discovered');
@@ -170,6 +187,104 @@ export function buildManifest(files, versions = environment, coreRules = builtin
     ruleCount: rules.size, cases,
     files: Object.fromEntries([...files].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([name, bytes]) => [name, digest(bytes)])),
   };
+}
+
+// Job: refresh fixtures/linter/upstream/ from the pinned eslint-plugin-svelte
+// release tag, then rebuild fixtures/linter/manifest.json over BOTH fixture
+// roots (upstream/ + local/). fixtures/linter/local/ is never written —
+// see docs/research/test/pinned-rules.md.
+async function importEslintRuleFixtures() {
+  const tag = process.env.OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG;
+  if (!tag) throw new Error('OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG is not set; run via `cargo get-eslint-fixtures`');
+  const home = path.join(repoRoot, 'fixtures/linter');
+  const rulesPrefix = 'packages/eslint-plugin-svelte/tests/fixtures/rules/';
+  const sourcesPrefix = 'packages/eslint-plugin-svelte/src/rules/';
+  const tmp = mkdtempSync(path.join(os.tmpdir(), 'oxvelte-fixtures-'));
+  try {
+    console.log(`Fetching sveltejs/eslint-plugin-svelte@${tag}...`);
+    const archive = await fetchGithubRelease('sveltejs', 'eslint-plugin-svelte', tag, tmp);
+    const extracted = path.join(tmp, 'extracted');
+    extractMembers(archive, extracted, [rulesPrefix, sourcesPrefix, 'LICENSE']);
+    const extractedRules = path.join(extracted, ...rulesPrefix.split('/'));
+    if (!existsSync(extractedRules)) throw new Error(`Archive has no ${rulesPrefix} — upstream layout changed?`);
+    const untouched = syncRuleDirs(extractedRules, path.join(home, 'upstream'), 'ESLint Rule');
+    // Loose files at the rules root (e.g. tsconfig.json) sit above the
+    // per-rule directories syncRuleDirs manages; copy them outright.
+    for (const entry of readdirSync(extractedRules, { withFileTypes: true })) {
+      if (entry.isFile()) cpSync(path.join(extractedRules, entry.name), path.join(home, 'upstream', entry.name));
+    }
+    cpSync(path.join(extracted, 'LICENSE'), path.join(home, 'LICENSE'));
+    writeFileSync(path.join(home, 'package.json'), JSON.stringify({ private: true, dependencies: { svelte: environment.svelte } }, null, 2) + '\n');
+
+    // Gather the merged corpus from disk under buildManifest's virtual
+    // 'tests/fixtures/rules/' keys, remembering each file's real root.
+    const files = new Map();
+    const origin = new Map();
+    for (const rootName of ['upstream', 'local']) {
+      const rootDir = path.join(home, rootName);
+      if (!existsSync(rootDir)) continue;
+      for (const rel of listFiles(rootDir)) {
+        const key = rel.split(path.sep).join('/');
+        files.set(`tests/fixtures/rules/${key}`, readFileSync(path.join(rootDir, rel)));
+        origin.set(key, rootName);
+      }
+    }
+    const sourcesDir = path.join(extracted, ...sourcesPrefix.split('/'));
+    const archivedRules = new Set();
+    if (existsSync(sourcesDir)) {
+      for (const rel of listFiles(sourcesDir)) {
+        const key = rel.split(path.sep).join('/');
+        files.set(`src/rules/${key}`, readFileSync(path.join(sourcesDir, rel)));
+        if (key.endsWith('.ts')) archivedRules.add(key.slice(0, -3));
+      }
+    }
+
+    const manifest = buildManifest(files);
+    const real = (virtual) => {
+      const rel = virtual.slice('tests/fixtures/rules/'.length);
+      return `${origin.get(rel)}/${rel}`;
+    };
+    for (const kase of manifest.cases) {
+      kase.filename = real(kase.filename);
+      if (kase.configFile) kase.configFile = real(kase.configFile);
+    }
+    // Rules missing from this archive (deleted upstream, kept locally) retain
+    // their previous fixable flag and version gates — those cannot be
+    // recomputed without the TypeScript sources.
+    const manifestPath = path.join(home, 'manifest.json');
+    if (existsSync(manifestPath)) {
+      const previous = JSON.parse(readFileSync(manifestPath, 'utf8'));
+      const preserved = new Map();
+      for (const kase of previous.cases ?? []) {
+        if (!archivedRules.has(kase.rule) && !preserved.has(kase.rule)) {
+          preserved.set(kase.rule, { fixable: kase.fixable, gates: kase.gates ?? [] });
+        }
+      }
+      for (const kase of manifest.cases) {
+        const keep = preserved.get(kase.rule);
+        if (keep) { kase.fixable = keep.fixable; kase.gates = keep.gates; kase.ineligible.push(...gateReasons(keep.gates, environment)); }
+      }
+    }
+    manifest.revision = `eslint-plugin-svelte@${tag}`;
+    manifest.version = tag;
+    manifest.parserDefaults.parserOptions.project = 'upstream/tsconfig.json';
+    manifest.files = {};
+    for (const [virtual, bytes] of files) {
+      if (virtual.startsWith('src/rules/')) continue;
+      manifest.files[real(virtual)] = digest(bytes);
+    }
+    for (const extra of ['LICENSE', 'package.json']) manifest.files[extra] = digest(readFileSync(path.join(home, extra)));
+    manifest.files = Object.fromEntries(Object.entries(manifest.files).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0));
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+
+    if (untouched.length) {
+      console.log('\nrules with no upstream candidate:');
+      for (const label of untouched.sort()) console.log(`  ${label}`);
+    }
+    console.log(`\nmanifest.json: ${manifest.cases.length} cases across ${manifest.ruleCount} rules at ${manifest.revision}`);
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 }
 
 // Job: refresh fixtures/parser/{legacy,modern}/ from the pinned sveltejs/svelte
@@ -205,9 +320,7 @@ async function importSvelteParserFixtures() {
 async function main() {
   const [job] = process.argv.slice(2);
   if (job === '--get-svelte-fixtures') return importSvelteParserFixtures();
-  if (job === '--get-eslint-fixtures') {
-    throw new Error('--get-eslint-fixtures is not implemented yet (stage 2 of docs/research/test/pinned-rules.md)');
-  }
+  if (job === '--get-eslint-fixtures') return importEslintRuleFixtures();
   throw new Error('Usage: import.mjs --get-svelte-fixtures | --get-eslint-fixtures');
 }
 

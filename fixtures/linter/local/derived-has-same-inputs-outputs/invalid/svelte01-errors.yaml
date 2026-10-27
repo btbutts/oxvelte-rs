@@ -1,0 +1,10 @@
+- message: The argument name should be '$a'.
+  line: 3
+  column: 14
+  suggestions:
+    - desc: Rename the parameter from b to $a.
+      output: |
+        <script>
+        	import { derived } from 'svelte/store';
+        	derived(a, ($a) => { /** do nothing */ });
+        </script>

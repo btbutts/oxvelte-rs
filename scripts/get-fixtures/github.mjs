@@ -57,14 +57,15 @@ function* tarEntries(buffer) {
 // preserving the remaining directory structure. Returns the file count.
 export function extractMembers(archivePath, destDir, prefixes) {
   const buffer = gunzipSync(readFileSync(archivePath));
-  const markers = prefixes.map((prefix) => (prefix.endsWith('/') ? prefix : `${prefix}/`));
+  const matches = (relative) => prefixes.some((prefix) =>
+    prefix.endsWith('/') ? relative.startsWith(prefix) : relative === prefix || relative.startsWith(`${prefix}/`));
   let count = 0;
   for (const entry of tarEntries(buffer)) {
     if (entry.type !== '0' && entry.type !== '\0') continue;
     const slash = entry.name.indexOf('/');
     if (slash < 0) continue;
     const relative = entry.name.slice(slash + 1);
-    if (!markers.some((marker) => relative.startsWith(marker))) continue;
+    if (!matches(relative)) continue;
     const destination = path.join(destDir, ...relative.split('/'));
     mkdirSync(path.dirname(destination), { recursive: true });
     writeFileSync(destination, entry.body);
@@ -74,7 +75,7 @@ export function extractMembers(archivePath, destDir, prefixes) {
   return count;
 }
 
-const listFiles = (dir, relative = '') =>
+export const listFiles = (dir, relative = '') =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const name = relative ? `${relative}/${entry.name}` : entry.name;
     return entry.isDirectory() ? listFiles(path.join(dir, entry.name), name) : [name];

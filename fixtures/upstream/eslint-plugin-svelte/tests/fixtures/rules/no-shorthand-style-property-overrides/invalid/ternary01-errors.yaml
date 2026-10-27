@@ -1,8 +1,0 @@
-- message: Unexpected shorthand 'background' after 'background-repeat'.
-  line: 8
-  column: 13
-  suggestions: null
-- message: Unexpected shorthand 'background' after 'background-repeat'.
-  line: 8
-  column: 36
-  suggestions: null

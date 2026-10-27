@@ -36,6 +36,9 @@
     "mustache-spacing/invalid/declaration-tag-input.svelte": {
       "version_skip": "cf663011ac1149132681647835e8e7d4e8f247c148480d12a1042bad537ca39c"
     },
+    "no-add-event-listener/invalid/module-script-input.svelte": {
+      "suggestions": "da7b857de7d6c48aeffdd5053335b26303d1089b8cba65061821ebee63473fae"
+    },
     "no-at-const-tags/invalid/const01-input.svelte": {
       "version_skip": "8378c42b5caa307d2c6ca62c096b358f223b78f6d2a1358738b5dd017dad0125"
     },
@@ -44,6 +47,18 @@
     },
     "no-at-const-tags/valid/legacy-at-const-non-runes-input.svelte": {
       "version_skip": "8378c42b5caa307d2c6ca62c096b358f223b78f6d2a1358738b5dd017dad0125"
+    },
+    "no-immutable-reactive-statements/invalid/global-return/immutable-input.svelte": {
+      "parser_configuration": "87929f7a061d342653308260b7198a2b851364a71b2ab0855fa117734b7d528d"
+    },
+    "no-immutable-reactive-statements/valid/global-return/javascript-input.svelte": {
+      "parser_configuration": "87929f7a061d342653308260b7198a2b851364a71b2ab0855fa117734b7d528d"
+    },
+    "no-immutable-reactive-statements/valid/global-return/mutable-input.svelte": {
+      "parser_configuration": "87929f7a061d342653308260b7198a2b851364a71b2ab0855fa117734b7d528d"
+    },
+    "no-immutable-reactive-statements/valid/global-return/props-input.svelte": {
+      "parser_configuration": "87929f7a061d342653308260b7198a2b851364a71b2ab0855fa117734b7d528d"
     },
     "no-inner-declarations/invalid/both/test01-input.svelte": {
       "version_skip": "edec042090e4d00a141c35225b9afd97af186396adb3b222ea1ebdac55d880c2"
@@ -57,8 +72,15 @@
     "no-inner-declarations/invalid/v8/test01-input.svelte": {
       "version_skip": "e7fb23074757273334488c569c05c9fa6cb6906a0027d226efd467f00f3f55fe"
     },
+    "no-unused-svelte-ignore/invalid/local-rule-unused-input.svelte": {
+      "diagnostics": "6199a8302694a4c365af1ca4c508800a3ca51475553c2f972aa3504c06b1c540"
+    },
     "no-unused-svelte-ignore/invalid/script-comment02-svelte4-input.svelte": {
       "version_skip": "5ec66186b48e3b633b325f6d7123f64602f223451c4b7b7bd7dca0e9a59f4716"
+    },
+    "no-unused-svelte-ignore/valid/local-rule-used-input.svelte": {
+      "diagnostic_count": "4af60305bf386bbd2ab96512ee17b64a9a57fc4468e57ec3e736493dadd5d1c4",
+      "diagnostics": "b5b81d33196f907776f7f40d4552199ed6334e5890276747c6a8166076dd6a28"
     },
     "no-unused-svelte-ignore/valid/reactive-component-input.svelte": {
       "version_skip": "3ad1267f8ee1684751d4590b03b7b2aaa44d9557ce39d506934133f95068af3c"
@@ -101,6 +123,9 @@
     },
     "require-store-reactive-access/invalid/calc01-input.svelte": {
       "version_skip": "5ec66186b48e3b633b325f6d7123f64602f223451c4b7b7bd7dca0e9a59f4716"
+    },
+    "shorthand-attribute/invalid/comment-expression/test01-input.svelte": {
+      "fix_output": "727c67b30e6a83dbdbce698c7a489f5c58447165dc985859f543f7cd103783f4"
     },
     "valid-compile/invalid/a11y01-svelte4-input.svelte": {
       "version_skip": "5ec66186b48e3b633b325f6d7123f64602f223451c4b7b7bd7dca0e9a59f4716"
@@ -202,8 +227,8 @@
       "version_skip": "5ec66186b48e3b633b325f6d7123f64602f223451c4b7b7bd7dca0e9a59f4716"
     }
   },
-  "manifestHash": "9cb1a959dc6557aa9c76c2b4059d049f9e478722e16b2e9c47e6f0f973213206",
+  "manifestHash": "673bbac7133f5b8355f904547feb83a9f0068849cc1da5096d862d43d0187090",
   "note": "Known gaps, not rewritten upstream expectations. Regenerate only after reviewing a full --report.",
-  "revision": "18339c886320151148568063c5801bf69cb51027",
+  "revision": "eslint-plugin-svelte@3.23.1",
   "schema": 1
 }

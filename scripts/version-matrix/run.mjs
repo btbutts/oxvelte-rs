@@ -4,10 +4,10 @@ import { createRequire } from 'node:module';
 import { isDeepStrictEqual } from 'node:util';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildManifest, digest } from '../upstream-parity/import.mjs';
+import { digest, recomputeEligibility } from '../get-fixtures/import.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const baseCorpus = path.join(root, 'fixtures/upstream/eslint-plugin-svelte');
+const baseCorpus = path.join(root, 'fixtures/linter');
 const profilesRoot = path.join(root, 'scripts/version-matrix');
 const outputRoot = path.join(root, 'reports/version-matrix');
 export const profiles = ['modern', 'svelte4', 'legacyparser', 'svelte3'];
@@ -41,10 +41,15 @@ export function prepareProfile(name) {
   const files = verifiedFiles(baseCorpus, original);
   // This generated file signals the selected compiler major to native rules.
   // Imported fixture sources, expected diagnostics and fixes remain byte-exact.
-  files.set('tests/package.json', Buffer.from(JSON.stringify({ private: true, dependencies: { svelte: versions.svelte } }, null, 2) + '\n'));
-  const { builtinRules } = require('eslint/use-at-your-own-risk');
-  const manifest = buildManifest(files, versions, builtinRules);
+  const signal = Buffer.from(JSON.stringify({ private: true, dependencies: { svelte: versions.svelte } }, null, 2) + '\n');
+  files.set('package.json', signal);
+  // Eligibility is recomputed per profile from the stored requirements and
+  // gates; expectations and fixability carry over from the import unchanged.
+  const manifest = recomputeEligibility(original, versions);
+  manifest.files = { ...manifest.files, 'package.json': digest(signal) };
   const corpus = path.join(outputRoot, name, 'corpus');
+  // Clear first: stale files from earlier corpus layouts must not survive.
+  rmSync(corpus, { recursive: true, force: true });
   for (const [file, bytes] of files) {
     const destination = path.join(corpus, ...file.split('/'));
     mkdirSync(path.dirname(destination), { recursive: true });

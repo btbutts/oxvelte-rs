@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { digest, buildManifest } from '../upstream-parity/import.mjs';
+import { digest, recomputeEligibility } from '../get-fixtures/import.mjs';
 import { summarizeMatrix, verifiedFiles, profiles } from './run.mjs';
 import { fileURLToPath } from 'node:url';
 
@@ -39,13 +39,12 @@ test('report union coverage without hiding regressions in another environment', 
 
 test('pinned matrix declarations make every original skip eligible somewhere', () => {
   const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-  const corpus = path.join(root, 'fixtures/upstream/eslint-plugin-svelte');
+  const corpus = path.join(root, 'fixtures/linter');
   const original = JSON.parse(readFileSync(path.join(corpus, 'manifest.json')));
-  const files = verifiedFiles(corpus, original);
   const eligible = new Set();
   for (const profile of profiles) {
     const versions = JSON.parse(readFileSync(path.join(root, 'scripts/version-matrix', profile, 'package.json'))).dependencies;
-    const manifest = buildManifest(files, versions);
+    const manifest = recomputeEligibility(original, versions);
     for (const entry of manifest.cases) if (!entry.ineligible.length) eligible.add(entry.id);
   }
   assert.deepEqual(original.cases.filter(entry => entry.ineligible.length && !eligible.has(entry.id)).map(entry => entry.id), []);

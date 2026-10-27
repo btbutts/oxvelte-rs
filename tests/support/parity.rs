@@ -58,6 +58,31 @@ pub fn runner_arguments(args: impl IntoIterator<Item = String>) -> Result<Runner
     Ok(result)
 }
 
+/// Fixture configs written against upstream's repo layout embed
+/// `tests/fixtures/...` paths (SvelteKit `files.routes` settings). Map that
+/// virtual prefix onto the case's real location inside the corpus; `filename`
+/// is the manifest path whose first segment selects the fixture root.
+pub fn rewrite_fixture_paths(config: &Value, corpus: &Path, filename: &str) -> Value {
+    let root = filename.split('/').next().unwrap_or("upstream");
+    let prefix = corpus.join(root).to_string_lossy().replace('\\', "/");
+    let mut config = config.clone();
+    for pointer in [
+        "/settings/svelte/kit/files/routes",
+        "/languageOptions/parserOptions/svelteConfig/kit/files/routes",
+    ] {
+        let rewritten = config.pointer(pointer).and_then(Value::as_str).and_then(|routes| {
+            routes
+                .strip_prefix("tests/fixtures/rules")
+                .or_else(|| routes.strip_prefix("tests/fixtures"))
+                .map(|rest| format!("{prefix}{rest}"))
+        });
+        if let Some(rewritten) = rewritten {
+            *config.pointer_mut(pointer).unwrap() = json!(rewritten);
+        }
+    }
+    config
+}
+
 /// The imported manifest contains per-case configuration. Type-aware suites also
 /// inherit RULES_PROJECT from their RuleTester, which points to this unchanged
 /// corpus tsconfig. Forward that default only for rules which query types.
@@ -74,7 +99,7 @@ pub fn fixture_settings(
     let project = config
         .pointer("/languageOptions/parserOptions/project")
         .cloned()
-        .unwrap_or_else(|| json!("tests/fixtures/rules/tsconfig.json"));
+        .unwrap_or_else(|| json!("upstream/tsconfig.json"));
     fn resolve(project: Value, root: &Path) -> Value {
         match project {
             Value::String(path) => {

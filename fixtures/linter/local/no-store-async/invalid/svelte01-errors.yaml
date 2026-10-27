@@ -1,0 +1,12 @@
+- message: Do not pass async functions to svelte stores.
+  line: 3
+  column: 29
+  suggestions: null
+- message: Do not pass async functions to svelte stores.
+  line: 4
+  column: 29
+  suggestions: null
+- message: Do not pass async functions to svelte stores.
+  line: 5
+  column: 25
+  suggestions: null

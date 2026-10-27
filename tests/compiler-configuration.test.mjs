@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path';
 
 const repo = dirname(dirname(fileURLToPath(import.meta.url)));
 const runtime = join(repo, 'scripts/compiler-runtime');
-const fixtures = join(repo, 'fixtures/upstream/eslint-plugin-svelte/tests/fixtures/rules/valid-compile');
+const fixtures = join(repo, 'fixtures/linter/upstream/valid-compile');
 function request(input) {
   const child = spawnSync(process.execPath, [join(runtime, 'bridge.cjs')], {
     input: JSON.stringify(input) + '\n', encoding: 'utf8',

@@ -1,7 +1,8 @@
 # Proposal: pinned rule fixtures — one home, one automated update pipeline
 
-Status: proposal, not started. This document is meant to be readable on its own,
-without knowing the codebase first.
+Status: proposal. Stage 1 (parser-fixture pipeline) landed 27OCT2026; Stage 2
+(eslint rule fixtures) is in progress. This document is meant to be readable
+on its own, without knowing the codebase first.
 
 ## Background: why we have two fixture collections today
 
@@ -20,8 +21,9 @@ Today those fixtures live in two places:
   Eleven-plus of its `-errors.yaml` files have already been hand-corrected to
   match upstream's current expectations.
 - `fixtures/upstream/eslint-plugin-svelte/` — a newer, machine-generated copy.
-  The script `scripts/upstream-parity/import.mjs` reads upstream's fixtures at
-  one pinned commit and converts all of their expectation files into a single
+  The script `scripts/get-fixtures/import.mjs` (renamed from
+  `scripts/upstream-parity/` in Stage 1) reads upstream's fixtures at one
+  pinned commit and converts all of their expectation files into a single
   `manifest.json`. These are checked by `cargo test --test upstream_parity`.
 
 The second collection was built next to the first instead of replacing it, so
@@ -68,11 +70,13 @@ repo. Only some of it is load-bearing:
 3. Store each test case in exactly one place.
 4. Make the whole update a single command, after one manual cleanup.
 5. Source everything programmatically — no hand-copied fixture trees, no
-   vendored upstream directories that nothing reads.
-   The only exception to this are hand-copied rules that no longer have
-   an upstream candidate, particularly within `eslint-plugin-svelte` as just
-   because the upstream deletes a rule, does not mean that we automatically
-   do.
+   vendored upstream directories that nothing reads. The only exception is
+   `fixtures/linter/local/`: our own cases that upstream never had (or dropped)
+   are kept by hand, deliberately, and are never written by the importer.
+6. Never hand-edit an upstream fixture to make our output match. If our linter
+   disagrees with an upstream expectation, the test goes red and the fix lands
+   in our Rust code — editing the expectation would defeat the point of being
+   a drop-in replacement.
 
 ## Pins: release tags, not commit hashes
 
@@ -92,8 +96,8 @@ https://github.com/sveltejs/svelte/archive/refs/tags/svelte@5.57.3.tar.gz
 
 These are the same on-the-fly source archives GitHub generates for a commit
 hash — just addressed by tag. Nothing about downloading or extracting them
-differs from the commit-based plan; only the URL and the pin variables change.
-The pins in `.cargo/config.toml` are therefore:
+differs from a commit pin; only the URL and the pin variables change.
+The pins in `.cargo/config.toml` (landed in Stage 1):
 
 ```toml
 [env]
@@ -105,52 +109,49 @@ Bumping a fixture source = editing one version number in one file.
 
 ## Implementation sequence (chronological)
 
-The work lands in two stages. Stage 1 is deliberately small: it builds all of
-the shared machinery (launcher, downloader, sync/status helpers) against the
-simpler of the two sources — the Svelte parser fixtures — and proves it
-end-to-end before the ESLint fixture migration touches anything.
+The work lands in two stages. Stage 1 built all of the shared machinery
+(launcher, downloader, sync/status helpers) against the simpler of the two
+sources — the Svelte parser fixtures — and proved it end-to-end before the
+ESLint fixture migration touches anything.
 
-### Stage 1 — parser fixtures (`cargo get-svelte-fixtures`)
+### Stage 1 — parser fixtures (`cargo get-svelte-fixtures`) — LANDED 27OCT2026
 
-1. **`.cargo/config.toml`** — add `OXVELTE_FIXTURES_SVELTE_TAG = "5.57.3"`
-   (and `OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG = "3.23.1"` now, so all
-   pins live together from the start), the optional `OXVELTE_JS_RUNTIME`
-   override comment, and the `[alias]` entries for both commands.
-2. **`Cargo.toml`** — add the `[[bin]]` target for `launcher` (path
-   `scripts/launcher.rs`).
-3. **Rename `scripts/upstream-parity/` → `scripts/get-fixtures/`** — the
-   directory's job is fetching fixtures. Update references that move with it
-   (`docs/upstream-parity.md`, CI, `dev-setup.sh`). Make its `package.json`
-   scripts runtime-neutral (shebang + `"./import.mjs"` entries — see
-   "Running it" below).
-4. **Write `scripts/launcher.rs`** — thin launcher: parse `--get-svelte-fixtures`
-   / `--get-eslint-fixtures`, forward the matching `*_TAG` pin from the
-   environment, select the JS runtime (bun first, node fallback,
-   `OXVELTE_JS_RUNTIME` override), install `node_modules` in the script
-   directory if absent, and execute `import.mjs` with cwd =
-   `scripts/get-fixtures/`. No import logic in the launcher.
-5. **Write `scripts/get-fixtures/github.mjs`** — the shared download /
-   extract / sync helpers described below. Written generically from the start
-   so Stage 2 reuses all of it unchanged.
-6. **Extend `import.mjs`** — argument parsing plus the svelte job: fetch the
-   `svelte@5.57.3` tarball, extract the two parser sample trees, sync them
-   into `fixtures/parser/{legacy,modern}/` with per-rule status output.
-7. **Validate Stage 1** — run `cargo get-svelte-fixtures`, then
-   `cargo test --lib`. The first run doubles as a diff audit: the existing
-   hand-copied parser fixtures should report mostly `SKIP`/`UPDATE`; any
-   `CREATE` is a sample upstream added since the hand-copy, and the
-   `no upstream candidate` list flags anything we hold that upstream renamed
-   or dropped. Review that output before moving on.
+1. **`.cargo/config.toml`** — `OXVELTE_FIXTURES_SVELTE_TAG = "5.57.3"`,
+   `OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG = "3.23.1"`, the optional
+   `OXVELTE_JS_RUNTIME` override comment, and the `[alias]` entries.
+2. **`Cargo.toml`** — `[[bin]] launcher` (path `scripts/launcher.rs`).
+3. **Renamed `scripts/upstream-parity/` → `scripts/get-fixtures/`** —
+   references moved with it (`.gitignore`, `ci.yml`, `dev-setup.sh`,
+   `docs/upstream-parity.md`, the version-matrix doc); `package.json` renamed
+   to `oxvelte-get-fixtures` and its `import` script made runtime-neutral
+   (`./import.mjs` + shebang).
+4. **`scripts/launcher.rs`** — thin launcher: parses the job flag, forwards
+   the matching `*_TAG` pin, selects the JS runtime (bun first, node fallback,
+   `OXVELTE_JS_RUNTIME` override), installs `node_modules` in the script
+   directory if absent, executes `import.mjs` with cwd =
+   `scripts/get-fixtures/`.
+5. **`scripts/get-fixtures/github.mjs`** — `fetchGithubRelease`,
+   `extractMembers`, `syncRuleDirs` (see its section below).
+6. **`import.mjs`** — argument-driven; the svelte job works;
+   `--get-eslint-fixtures` errors until Stage 2. The legacy
+   git-checkout import path was removed; `import.test.mjs` still passes (6/6).
+7. **Validation result** — the pipeline runs correctly, but syncing at the
+   5.57.3 pin turns 26 parser fixture tests red: the old hand-copy matches
+   *our serializer*, not any released svelte version (verified by bisecting
+   5.40.0 → 5.57.3). Fixtures were restored to the old copy (suite green,
+   624 passing); the parser-parity workstream is tracked in
+   `docs/research/parser/parser-parity.md` and must land before
+   `cargo get-svelte-fixtures` output is ever committed.
 
 ### Stage 2 — ESLint rule fixtures (`cargo get-eslint-fixtures`)
 
 1. **Step zero: the one-time dedupe** (manual — see its section below).
-   Required before this stage, not before Stage 1.
 2. **Extend `import.mjs`** with the eslint job: extract rule cases into
-   `fixtures/linter/` (per-rule sync + status output), extract `src/rules/`
-   to `tmp/` for metadata only, place `LICENSE` and the synthetic
-   `package.json` at the fixture-home root, and update `manifest.json` with
-   merge semantics (never regenerate wholesale).
+   `fixtures/linter/upstream/` (per-rule sync + status output), extract
+   `src/rules/` to `tmp/` for metadata only, place `LICENSE` and the synthetic
+   `package.json` at the fixture-home root, and update `manifest.json` over
+   BOTH roots (`upstream/` + `local/`) with merge semantics (never regenerate
+   wholesale).
 3. **Repoint the test harnesses** — `tests/upstream_parity.rs` (`CORPUS` →
    `fixtures/linter`, `REVISION` reads the tag env var), `src/lib.rs` fixture
    tests read the manifest, `scripts/version-matrix/run.mjs` path repoint.
@@ -162,25 +163,34 @@ end-to-end before the ESLint fixture migration touches anything.
 
 ## Step zero: the one-time dedupe (manual, done once — Stage 2 prerequisite)
 
-Before the eslint job runs, reconcile the two existing collections by hand:
+Dedupe analysis (run 27OCT2026, CRLF-normalized): 78 local rule dirs, 84
+upstream. **No local-only rules** — every local rule exists upstream; 6
+upstream-only rules we gain automatically. 42 shared rules are byte-identical.
+36 shared rules differ, of which 33 differ **only by extra local-only case
+files** (~100 files of our own regression cases) and 3 have changed shared
+files (`button-has-type`, `valid-style-parse`,
+`valid-prop-names-in-kit-pages`).
 
-1. For each rule folder in `fixtures/linter/`, check whether the same rule and
-   cases exist in `fixtures/upstream/eslint-plugin-svelte/tests/fixtures/rules/`.
-   Known state from earlier analysis: ~1,227 of the shared cases are
-   content-identical (after CRLF→LF), upstream has ~69 cases we lack, and we
-   hold **~55 local-only cases** that upstream has since deleted or never had.
-2. Where a case exists in both, keep the **upstream copy** (our
-   `-errors.yaml` files have already been corrected toward upstream, so the
-   upstream expectations are the trusted ones).
-3. Where a case exists only in `fixtures/linter/`, keep it in place — it stays
-   as our copy of a rule upstream dropped (or a local regression case). These
-   are precisely the cases goal #2 protects.
-4. Where upstream has cases we lack, they arrive automatically on the first
-   run of the new import pipeline — nothing to copy by hand.
+The manual reconciliation:
 
-After this step, `fixtures/linter/` is already the superset collection: every
-upstream case we care about plus every local-only case we've retained,
-including rules that may have been deleted/removed upstream in a later release.
+1. **Relocate the local-only case files.** For each of the ~33 rules with
+   extras, move the local-only files from `fixtures/linter/<rule>/...` into
+   the mirrored path under `fixtures/linter/local/<rule>/...` (e.g.
+   `fixtures/linter/no-dupe-on-directives/invalid/token-equivalence-*` →
+   `fixtures/linter/local/no-dupe-on-directives/invalid/token-equivalence-*`).
+   Mechanical, script-assisted, reviewed via git diff. Once done,
+   `import.mjs` never writes to `local/` again.
+2. **Changed shared files: upstream wins.** Our variants of files that exist
+   at the same path in both trees are discarded (goal #6 — we do not fork
+   upstream expectations; a red test means our Rust code needs work). No
+   copying needed: the first sync brings upstream's versions.
+3. **Identical rules need nothing** — the first sync recreates them under
+   `fixtures/linter/upstream/`.
+4. **Delete the old tree.** Once `fixtures/linter/upstream/` is populated and
+   the suite passes, the old `fixtures/linter/<rule>/` directories and
+   `fixtures/upstream/` are deleted.
+
+After this step, every case lives in exactly one of the two roots.
 
 ## Target layout (after the pipeline lands)
 
@@ -189,9 +199,14 @@ fixtures/linter/                  # the ONE fixture home
   manifest.json                   # generated expectation index (updated, never regenerated wholesale)
   LICENSE                         # upstream eslint-plugin-svelte license
   package.json                    # synthetic: binds the Svelte version signal (replaces today's tests/package.json)
-  <rule>/
-    valid/   *.svelte (+ companions)
-    invalid/ *.svelte, *-errors.yaml, *-config.json/_config.json, *-requirements.json, *-output.svelte
+  upstream/                       # byte-identical mirror of upstream's tests/fixtures/rules/ — sync target
+    <rule>/
+      valid/   *.svelte (+ companions)
+      invalid/ *.svelte, *-errors.yaml, *-config.json/_config.json, *-requirements.json, *-output.svelte
+  local/                          # our own cases, same layout, hand-maintained — import.mjs never writes here
+    <rule>/
+      valid/   *.svelte (+ companions)
+      invalid/ *.svelte + companions
 fixtures/parser/                  # parser AST samples from sveltejs/svelte (see below)
   legacy/<sample>/{input.svelte,output.json}
   modern/<sample>/{input.svelte,output.json}
@@ -200,7 +215,13 @@ fixtures/parser/                  # parser AST samples from sveltejs/svelte (see
 Gone: `fixtures/upstream/eslint-plugin-svelte/` entirely — no `src/rules/`
 TypeScript, no `tests/src/`, no `tests/utils/`, no second copy of the cases.
 
-## The shared downloader: `scripts/get-fixtures/github.mjs`
+Because `local/` mirrors the upstream layout exactly, the rule name of every
+case is its path relative to the root (`local/block-lang/invalid/x` → rule
+`block-lang` → `svelte/block-lang` in the runner) — no new rule names, no
+mapping table, and the manifest can treat the two roots as one additive
+corpus.
+
+## The shared downloader: `scripts/get-fixtures/github.mjs` (landed Stage 1)
 
 Both fixture imports need the same capabilities, and both source repos ship the
 same kind of tag tarball. All download/extract/sync logic lives in this one
@@ -208,41 +229,26 @@ module so `import.mjs` stays small and focused on processing (fixture handling
 and manifest generation). Every function is generic — no repo names, no fixture
 paths, no rule knowledge inside:
 
-- **`fetch_github_release(owner, repo, tag)`** — downloads
+- **`fetchGithubRelease(owner, repo, tag, destDir)`** — streams
   `https://github.com/<owner>/<repo>/archive/refs/tags/<repo>@<tag>.tar.gz`
-  into a throwaway `tmp/` dir and returns the archive path. Same shape as the
-  `fetch_github_repo` we already built in `build.rs`, just in JavaScript.
-- **`extract_members(archivePath, selections)`** — extracts chosen members
-  from the tarball to chosen destinations, where `selections` is a list of
-  `{ members, dest }` pairs. Called as many times as needed, including
-  multiple times against the same tarball when different file sets go to
-  different destinations (Stage 1: parser-legacy samples →
-  `fixtures/parser/legacy/`, parser-modern samples → `fixtures/parser/modern/`;
-  Stage 2: rule cases → `fixtures/linter/`, `src/rules/` → `tmp/`, provenance
-  files → the `fixtures/linter/` root).
-- **`sync_rule_dirs(sourceDir, destDir, labelPrefix)`** — the per-rule copy
+  into a throwaway temp dir and returns the archive path.
+- **`extractMembers(archivePath, destDir, prefixes)`** — extracts regular
+  files whose root-stripped path starts with one of `prefixes` into `destDir`,
+  preserving structure. Called as many times as needed, including multiple
+  times against the same tarball when different file sets go to different
+  destinations. (Dependency-free tar.gz reader: ustar + GNU longname + pax.)
+- **`syncRuleDirs(sourceDir, destDir, labelPrefix)`** — the per-rule copy
   and status engine (details in the next section). Works for both sources
   because both lay out rules the same way: one directory per rule, named
   after the rule, directly under the source root
   (`parser-legacy/samples/<name>/`, `tests/fixtures/rules/<name>/`).
 
 `import.mjs` imports these; it owns no download/extract logic of its own.
-Write the helpers with plain `for` loops over rule directories and file lists
-(the same repetitive-structure style `import.mjs` already uses well), and keep
-the whole module readable — the two jobs should share every code path except
-their extraction selections, label prefixes, and (eslint only) the manifest
-build.
-
-> **Rename:** `scripts/upstream-parity/` becomes `scripts/get-fixtures/` when
-> this lands — the directory's job is fetching fixtures, and it will hold
-> both `import.mjs` and `github.mjs`. References elsewhere
-> (`docs/upstream-parity.md`, CI, `dev-setup.sh`) move with it.
 
 ## Per-rule status reporting (both sources)
 
 Every run prints one line per rule processed, then a closing block for local
-rules the tarball didn't touch. Rule labels come from a small helper that maps
-(source kind, rule directory name) to:
+rules the tarball didn't touch. Rule labels:
 
 - `Svelte Legacy Parser - <name>` (parser-legacy samples)
 - `Svelte Modern Parser - <name>` (parser-modern samples)
@@ -260,13 +266,15 @@ Statuses:
 - **`SKIP`** — every file in the rule is identical; nothing written.
 
 Change detection is a direct byte comparison (`Buffer.equals` on the existing
-and incoming file contents). No hashing — the files are small (a parser rule
-is just `input.svelte` + `output.json`), and we only need "different or not",
-never what the difference is.
+and incoming file contents). No hashing — the files are small and we only need
+"different or not", never what the difference is.
 
-**Additive only, always:** a run can create or overwrite, never delete. After
-the per-rule lines, print the local rules that had no counterpart in the
-tarball:
+**Additive only, always:** a run can create or overwrite, never delete. The
+closing "rules with no upstream candidate" block lists directories in the
+**sync target** with no counterpart in the tarball — for the eslint job that
+means `fixtures/linter/upstream/` only (a rule upstream later deletes stays
+and is listed); `fixtures/linter/local/` is never scanned, since it is ours
+by definition.
 
 ```
 Svelte Modern Parser - if-block: SKIP
@@ -277,41 +285,34 @@ Svelte Legacy Parser - animation: CREATE
 
 rules with no upstream candidate:
   Svelte Legacy Parser - <name>
-  ESLint Rule - <name>
   ...
 ```
 
-The same output contract applies to the eslint job (`ESLint Rule - indent:
-UPDATE`, etc.) — the only difference between the two jobs is the directory
-depth between the source root and each rule folder, which the extraction
-selections absorb.
-
 ## The updated `import.mjs` execution flow
 
-`import.mjs` becomes argument-driven (invoked via the launcher, below) and
-handles two jobs. Shared behavior: the pinned tag arrives as a forwarded
-environment variable (from `.cargo/config.toml`) — the hardcoded
-`export const revision = '...'` goes away, and the manifest's `revision`
-field becomes the tag (e.g. `eslint-plugin-svelte@3.23.1`).
+`import.mjs` is argument-driven (invoked via the launcher, below) and handles
+two jobs. Shared behavior: the pinned tag arrives as a forwarded environment
+variable (from `.cargo/config.toml`); the manifest's `revision` field becomes
+the tag (e.g. `eslint-plugin-svelte@3.23.1`).
 
-### Job 1: `--get-eslint-fixtures` (rule fixtures + manifest)
+### Job 1: `--get-eslint-fixtures` (rule fixtures + manifest) — Stage 2
 
-1. **Download.** `fetch_github_release("sveltejs", "eslint-plugin-svelte",
-   <pinned tag>)` into `tmp/`.
-2. **Extract rule cases and sync into the fixture home.** Extract
+1. **Download.** `fetchGithubRelease("sveltejs", "eslint-plugin-svelte",
+   <pinned tag>, tmp)` — into an OS temp dir.
+2. **Extract rule cases and sync into the upstream root.** Extract
    `packages/eslint-plugin-svelte/tests/fixtures/rules/**` from the tarball,
-   then `sync_rule_dirs(<extracted rules dir>, "fixtures/linter", "ESLint Rule")`
-   applies per-rule semantics: a rule copied from upstream completely replaces
-   the same-named local directory — same files, no extras, none missing — so
-   upstream edits to a living rule arrive in kind on the next run. The
-   tarball's `tests/fixtures/rules/` prefix maps onto the fixture-home root —
-   the layouts are already identical, including `@typescript-eslint/`.
-3. **Extract `src/rules/**` to `tmp/` only.** The TypeScript rule sources are
-   needed *only* while building manifest entries (the `fixable` flag and
-   Svelte-version gate per rule). They are read from `tmp/src/rules/` and
-   discarded with `tmp/` — they never enter the repo. (Today's
-   `const sourceFile = \`src/rules/${rule}.ts\`` lookup just repoints at the
-   `tmp/` copy; the filenames are unchanged.)
+   then `syncRuleDirs(<extracted rules dir>, "fixtures/linter/upstream",
+   "ESLint Rule")` applies per-rule semantics: a rule copied from upstream
+   completely replaces the same-named directory there — same files, no
+   extras, none missing — so upstream edits to a living rule arrive in kind
+   on the next run, and the directory stays byte-identical to upstream.
+   `fixtures/linter/local/` is untouched.
+3. **Extract `src/rules/**` to the temp dir only.** The TypeScript rule
+   sources are needed *only* while building manifest entries (the `fixable`
+   flag and Svelte-version gate per rule). They are read from
+   `<tmp>/src/rules/` and discarded with the temp dir — they never enter the
+   repo. (Today's `const sourceFile = \`src/rules/${rule}.ts\`` lookup just
+   repoints at the temp copy; the filenames are unchanged.)
 4. **Extract provenance files to the fixture-home root.** Upstream's
    `LICENSE` lands at `fixtures/linter/LICENSE`. The synthetic
    `package.json` binding the pinned Svelte version (today's
@@ -319,16 +320,23 @@ field becomes the tag (e.g. `eslint-plugin-svelte@3.23.1`).
    still needed: `svelte_version_info_for_file` (`src/linter/mod.rs`) walks
    up from a linted file to the nearest `package.json` declaring svelte, and
    the version-matrix runner rebuilds per-profile environments from it.
-5. **Build the manifest over ALL of `fixtures/linter/`.** `import.mjs` keeps
-   its current discovery logic **unchanged** — walk every rule directory,
-   find the `valid`/`invalid` segments, discover inputs and companions
-   (`_config.json` et al.) exactly as `buildManifest()` does today. The only
-   change is the root it points at: `fixtures/linter/` instead of
-   `tests/fixtures/rules/`. Because the root is the merged fixture home, the
-   manifest covers upstream-refreshed rules, local-only rules, and the
+5. **Build the manifest over BOTH roots.** `import.mjs` keeps its current
+   discovery logic — walk rule directories, find the `valid`/`invalid`
+   segments, discover inputs and companions (`_config.json` et al.) exactly
+   as `buildManifest()` does today — but applied to `fixtures/linter/upstream/`
+   and `fixtures/linter/local/` as one additive corpus:
+   - a case's **rule** is its path relative to the root (the root segment
+     `upstream/` or `local/` is stripped), so `local/block-lang/...` cases map
+     to `svelte/block-lang` exactly like upstream's do;
+   - a case's **id** stays root-stripped (`block-lang/invalid/foo-input.svelte`)
+     for continuity with today's ids — collisions are impossible because a
+     case lives in exactly one root;
+   - **filename** (what the Rust test reads from disk) and the **files hash
+     inventory** use the full path including the root segment.
+   The manifest covers upstream-refreshed rules, every `local/` case, and the
    hand-built pseudo-rule folders (`valid-compile`, `valid-each-key`,
-   `valid-prop-names-in-kit-pages`, `valid-style-parse`) — everything gets
-   manifest entries, one schema for all.
+   `valid-prop-names-in-kit-pages`, `valid-style-parse`) — which live under
+   `local/` after step zero — one schema for all.
 6. **Update the manifest — never regenerate it wholesale, and never delete
    rules.** The merge rules are simple:
    - Cases present in the fresh upstream archive: entries are **updated** (or
@@ -342,37 +350,41 @@ field becomes the tag (e.g. `eslint-plugin-svelte@3.23.1`).
      and restorable. If we ever choose to retire a rule upstream dropped,
      that's a manual act on our side (delete the folder and the Rust rule) —
      never something `import.mjs` does for us.
-7. **Print the per-rule status report** (format above) and **discard `tmp/`.**
-   Nothing temporary survives the run.
+7. **Print the per-rule status report** (format above) and **discard the temp
+   dir.** Nothing temporary survives the run.
 
 After this job, `fixtures/upstream/eslint-plugin-svelte/` no longer exists and
 `fixtures/linter/` is the single home both test suites read.
 
-### Job 2: `--get-svelte-fixtures` (parser fixtures)
+### Job 2: `--get-svelte-fixtures` (parser fixtures) — landed Stage 1
 
-The parser samples in `fixtures/parser/` (currently a March 2026 hand-copy
-from a deleted `prepare.sh`) become programmatic too:
+The parser samples in `fixtures/parser/` (a March 2026 hand-copy from a
+deleted `prepare.sh`) are now programmatic. **Blocked on parser parity:** the
+hand-copy matches our serializer, not any upstream release, so syncing at the
+5.57.3 pin turns the parser fixture tests red until our parser is brought in
+line — see `docs/research/parser/parser-parity.md`. Do not re-run this job
+and commit the result until that workstream lands.
 
-1. `fetch_github_release("sveltejs", "svelte", <pinned tag>)` into `tmp/`.
-2. Two `extract_members` selections from the same tarball:
-   `packages/svelte/tests/parser-legacy/samples/**` and
-   `packages/svelte/tests/parser-modern/samples/**`.
-3. Two `sync_rule_dirs` calls: parser-legacy samples → `fixtures/parser/legacy/`
-   with label prefix `Svelte Legacy Parser`, parser-modern samples →
-   `fixtures/parser/modern/` with label prefix `Svelte Modern Parser`.
-4. Print the per-rule status report (format above) and discard `tmp/`. No
-   manifest — these fixtures are self-describing (`input.svelte` +
-   `output.json` per sample) and are consumed by the `cargo test --lib`
-   harnesses in `src/lib.rs` unchanged.
+Mechanics (working): `fetchGithubRelease("sveltejs", "svelte", <pinned tag>)`,
+one `extractMembers` call covering
+`packages/svelte/tests/parser-legacy/samples/` and
+`packages/svelte/tests/parser-modern/samples/`, then one `syncRuleDirs` call
+per suite into `fixtures/parser/{legacy,modern}/` with the matching label
+prefix, status report, temp dir discarded. No manifest — these fixtures are
+self-describing (`input.svelte` + `output.json` per sample) and are consumed
+by the `cargo test --lib` harnesses in `src/lib.rs` unchanged.
 
 ## Test-harness changes required
 
 - `tests/upstream_parity.rs` — point `CORPUS` at `fixtures/linter` and read
   `fixtures/linter/manifest.json`. The hash-inventory check (`verify_files`)
-  now covers the merged tree; the pinned-revision check and the baseline's
-  `manifestHash`/`revision` coupling stay as they are, with `REVISION` read
-  from `OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG` so the importer and the
-  test suite can never disagree about which release is pinned.
+  now covers the merged tree (both roots); the pinned-revision check and the
+  baseline's `manifestHash`/`revision` coupling stay as they are, with
+  `REVISION` read from `OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG` so the
+  importer and the test suite can never disagree about which release is
+  pinned. The runner's rule mapping (`svelte/<rule>`, `@`-namespaces) is
+  unchanged — manifest `rule` fields are root-stripped, so no mapping changes
+  are needed for `local/` cases.
 - `src/lib.rs` fixture tests (`cargo test --lib`) — switch from reading each
   rule's loose `-errors.yaml` files to reading expectations from the same
   `manifest.json`, so both suites share one source of truth and one basic
@@ -389,7 +401,7 @@ from a deleted `prepare.sh`) become programmatic too:
 - `tests/upstream-parity-baseline.json` — regenerate once after the migration
   (`--update-baseline`), since manifest hash and case identifiers move.
 
-## Running it: cargo aliases, one place for pins
+## Running it: cargo aliases, one place for pins (landed Stage 1)
 
 1. **Environment variables in `.cargo/config.toml`** (alongside the existing
    `OXVELTE_CSS_SRC_*` pins) — release-tag pins and the runtime override only;
@@ -413,9 +425,7 @@ from a deleted `prepare.sh`) become programmatic too:
    logic. Runtime selection:
 
    - If `OXVELTE_JS_RUNTIME` is set, use exactly that.
-   - Otherwise probe PATH: **`bun` first, then `node`**. Both are
-     Homebrew-installable; bun's runtime is faster, and users with only
-     node/npm are never forced into a second ecosystem. macOS, Linux, and
+   - Otherwise probe PATH: **`bun` first, then `node`**. macOS, Linux, and
      Windows must all work.
    - Ensure dependencies before running: if `scripts/get-fixtures/node_modules/`
      is absent, install from that directory first — `bun install` on the bun
@@ -424,25 +434,17 @@ from a deleted `prepare.sh`) become programmatic too:
      is not a concern).
    - Execute from the script's own directory (cwd =
      `scripts/get-fixtures/`): on the bun path
-     `bun run --bun import.mjs --<job> …`; on the node path
-     `node import.mjs --<job> …`. The launcher invokes the runtime binary
-     directly on the file — it already knows which runtime it selected, so
-     package.json scripts are not involved.
+     `bun run --bun import.mjs --<job>`; on the node path
+     `node import.mjs --<job>`.
 
    The `--bun` flag matters because of bun's shebang deferral: by default bun
    respects a `#!/usr/bin/env node` shebang and defers to node; `--bun`
    forces Bun's own runtime. Same rule for package CLIs (`bunx --bun <pkg>`).
 
 3. **`scripts/get-fixtures/package.json`** — the `import`/`test` scripts stay
-   for CI and manual use, but become runtime-neutral: `import.mjs` gains a
-   `#!/usr/bin/env node` shebang and the scripts call it directly
-   (`"import": "./import.mjs"`, `"test": "…"` likewise). Then `npm run
-   import` executes it with node (via the shebang) and `bun run --bun import`
-   forces bun's runtime — the exact mechanism `--bun` exists for. Note:
-   `$npm_execpath` is **not** usable as a runtime selector here — it points
-   at the package-manager CLI (the bun binary under bun, but `npm-cli.js`
-   under npm), so it works for `$npm_execpath install`-style commands but
-   cannot run a JS file under both managers.
+   for CI and manual use; `import` is runtime-neutral (`./import.mjs` with a
+   `#!/usr/bin/env node` shebang). `$npm_execpath` is **not** usable as a
+   runtime selector — it points at the package-manager CLI, not a JS runtime.
 
 4. **Aliases** in `.cargo/config.toml`:
 
@@ -456,13 +458,14 @@ from a deleted `prepare.sh`) become programmatic too:
 
 - One fixture home (`fixtures/linter/`), one expectation index
   (`manifest.json`), two cargo commands to refresh either fixture source.
+- A byte-identical mirror of upstream (`upstream/`) we never hand-edit, side
+  by side with our own cases (`local/`) the importer never touches — both
+  validated by the same manifest and the same test process.
 - Nothing upstream deletes can silently disappear from our support — the
   manifest merge preserves retired rules' metadata forever.
 - No vendored dead weight: upstream's TypeScript rule sources and test suites
-  never enter the repo; they are read from a throwaway `tmp/` dir or not
+  never enter the repo; they are read from a throwaway temp dir or not
   downloaded at all.
-- Parser fixtures stop being a fossilized hand-copy and become a pinned,
-  refreshable import like everything else.
 - After a pin move, a failing test always means "a rule's behavior changed
   upstream and our Rust code needs updating" — never "the fixture bookkeeping
   is stale."
@@ -511,28 +514,38 @@ PATH only, so the change is: probe for `bun` first, then `node`.
   independent: our `oxc` pin (`=0.128.0`) is old; an upgrade (e.g. toward
   0.155.x) is its own workstream.
 
-## Open questions — settled 25OCT2026
+## Open questions — settled
 
-- **Rule deleted upstream → keep, automatically.** No prompt, no decision
-  file, no comparison logic in `import.mjs`. The sync is additive-only:
-  anything upstream removed simply isn't overwritten — it stays, and appears
-  in the `no upstream candidate` list. Retiring one of our rules is always a
-  manual act on our side.
+- **Rule deleted upstream → keep, automatically (25OCT2026).** No prompt, no
+  decision file, no comparison logic in `import.mjs`. The sync is
+  additive-only: anything upstream removed simply isn't overwritten — it
+  stays, and appears in the `no upstream candidate` list. Retiring one of our
+  rules is always a manual act on our side.
 - **Pseudo-rule folders (`valid-compile`, `valid-each-key`,
   `valid-prop-names-in-kit-pages`, `valid-style-parse`) → manifest entries
-  like everything else.** The manifest covers ALL of `fixtures/linter/`, so
-  the Rust tests have exactly one process: read inputs from
-  `fixtures/linter/`, validate against `fixtures/linter/manifest.json`.
-- **Layout mapping → identity.** Upstream's `tests/fixtures/rules/<rule>/
-  {valid,invalid}/...` and our `fixtures/linter/<rule>/{valid,invalid}/...`
-  follow the same schema (including `@typescript-eslint/`), so the sync is a
-  straight per-rule-directory overwrite with no remapping.
-- **`src/rules/*.ts` lookup → repoint to `tmp/`.** The metadata reader keeps
-  using the rule name (`src/rules/${rule}.ts`) against the `tmp/` extraction;
-  filenames are unchanged, only the root differs.
-- **`scripts/version-matrix/run.mjs` → path repoint only.** It reads the
-  manifest and synthetic `package.json` from `fixtures/linter/`; nothing
-  about its flow changes.
-- **Pins → release tags (settled 26OCT2026).** Both sources are pinned by
-  release tag (`*_TAG` env vars), downloaded as GitHub tag source archives.
-  Same tarball mechanics as a commit pin, friendlier to read and bump.
+  like everything else (25OCT2026).** The manifest covers ALL of
+  `fixtures/linter/` (both roots), so the Rust tests have exactly one
+  process: read inputs from `fixtures/linter/`, validate against
+  `fixtures/linter/manifest.json`.
+- **Local-only cases inside shared upstream rules → split roots
+  (27OCT2026).** The dedupe analysis found ~100 local-only case files inside
+  33 rules that also exist upstream, which whole-rule byte-identical sync
+  would have deleted. Resolution: two sibling roots —
+  `fixtures/linter/upstream/` (byte-identical sync target, never hand-edited)
+  and `fixtures/linter/local/` (our cases, same layout, importer never
+  writes). Rule names derive from the root-relative path, so the runner needs
+  no mapping changes.
+- **Layout mapping → identity (25OCT2026).** Upstream's
+  `tests/fixtures/rules/<rule>/{valid,invalid}/...` and our
+  `fixtures/linter/{upstream,local}/<rule>/{valid,invalid}/...` follow the
+  same schema (including `@typescript-eslint/`), so the sync is a straight
+  per-rule-directory overwrite with no remapping.
+- **`src/rules/*.ts` lookup → repoint to the temp dir (25OCT2026).** The
+  metadata reader keeps using the rule name (`src/rules/${rule}.ts`) against
+  the temporary extraction; filenames are unchanged, only the root differs.
+- **`scripts/version-matrix/run.mjs` → path repoint only (25OCT2026).** It
+  reads the manifest and synthetic `package.json` from `fixtures/linter/`;
+  nothing about its flow changes.
+- **Pins → release tags (26OCT2026).** Both sources are pinned by release tag
+  (`*_TAG` env vars), downloaded as GitHub tag source archives. Same tarball
+  mechanics as a commit pin, friendlier to read and bump.

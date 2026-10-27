@@ -63,7 +63,7 @@ fn independent_matrix_runs_require_explicit_baseline_handling() {
 #[test]
 fn type_aware_fixture_configuration_uses_the_imported_suite_project() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("fixtures/upstream/eslint-plugin-svelte");
+        .join("fixtures/linter");
     let manifest: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(root.join("manifest.json")).unwrap())
             .unwrap();
@@ -75,7 +75,7 @@ fn type_aware_fixture_configuration_uses_the_imported_suite_project() {
         .filter(|case| case["rule"] == rule)
         .collect();
     assert_eq!(cases.len(), 7);
-    let expected = root.join("tests/fixtures/rules/tsconfig.json");
+    let expected = root.join("upstream/tsconfig.json");
     let project: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(&expected).unwrap()).unwrap();
     assert_eq!(project["compilerOptions"]["strict"], true);
