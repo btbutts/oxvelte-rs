@@ -160,9 +160,13 @@ fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value 
 
     let has_comments = expr_str.contains("//") || expr_str.contains("/*");
 
-    // If expression contains comments and expr_start is large enough for the wrapper approach,
-    // use Parser::parse() with a wrapper to get full comment information
-    if has_comments && expr_start >= 7 {
+    // If the expression contains comments, use Parser::parse() with a wrapper
+    // to get full comment information. The 7-byte "void (\n" prefix maps back
+    // to expression coordinates by subtraction, which underflows when the
+    // expression starts near byte 0 — in that case the tree is built from a
+    // direct parse (positions already absolute) and only the comment
+    // attachment metadata comes from the wrapper parse.
+    if has_comments {
         let wrapper = format!("void (\n{}\n)", expr_str);
         let alloc = Allocator::default();
         let parse_result = Parser::new(&alloc, &wrapper, SourceType::mjs()).parse();
@@ -171,24 +175,62 @@ fn expression_to_estree(source: &str, expr_str: &str, expr_start: u32) -> Value 
             if let Some(oxc::ast::ast::Statement::ExpressionStatement(es)) = parse_result.program.body.first() {
                 if let oxc::ast::ast::Expression::UnaryExpression(unary) = &es.expression {
                     if let oxc::ast::ast::Expression::ParenthesizedExpression(paren) = &unary.argument {
-                        let inner_expr = &paren.expression;
                         let wrapper_prefix_len = 7u32; // "void (\n"
-                        let offset = expr_start - wrapper_prefix_len;
-                        let mut result = estree_expr(inner_expr, source, offset);
-
                         let comments = &parse_result.program.comments;
-                        if !comments.is_empty() {
-                            attach_expression_comments(
-                                &mut result,
-                                comments,
-                                expr_str,
-                                expr_start,
-                                wrapper_prefix_len,
-                                source,
-                            );
+
+                        if expr_start >= wrapper_prefix_len {
+                            let offset = expr_start - wrapper_prefix_len;
+                            let mut result = estree_expr(&paren.expression, source, offset);
+
+                            if !comments.is_empty() {
+                                attach_expression_comments(
+                                    &mut result,
+                                    comments,
+                                    expr_str,
+                                    expr_start,
+                                    wrapper_prefix_len,
+                                    source,
+                                );
+                            }
+
+                            return result;
                         }
 
-                        return result;
+                        let mut built = None;
+                        {
+                            let alloc_direct = Allocator::default();
+                            if let Ok(expr) = Parser::new(&alloc_direct, expr_str, SourceType::mjs()).parse_expression()
+                            {
+                                if !expr_str.ends_with('.')
+                                    && only_trailing_trivia(&expr_str[expr.span().end as usize..])
+                                {
+                                    built = Some(estree_expr(&expr, source, expr_start));
+                                }
+                            }
+                        }
+                        if built.is_none() {
+                            let alloc_ts = Allocator::default();
+                            if let Ok(expr) = Parser::new(&alloc_ts, expr_str, SourceType::ts()).parse_expression() {
+                                if !expr_str.ends_with('.')
+                                    && only_trailing_trivia(&expr_str[expr.span().end as usize..])
+                                {
+                                    built = Some(estree_expr(&expr, source, expr_start));
+                                }
+                            }
+                        }
+                        if let Some(mut result) = built {
+                            if !comments.is_empty() {
+                                attach_expression_comments(
+                                    &mut result,
+                                    comments,
+                                    expr_str,
+                                    expr_start,
+                                    wrapper_prefix_len,
+                                    source,
+                                );
+                            }
+                            return result;
+                        }
                     }
                 }
             }
@@ -1258,8 +1300,17 @@ fn attach_comment_recursive(
         let node_start = obj.get("start").and_then(|v| v.as_u64()).unwrap_or(u64::MAX) as u32;
         let node_end = obj.get("end").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
 
-        // Check if this node is the leading target (attached_to matches node start)
-        if node_start == attached_to {
+        // Check if this node is the leading target. oxc reports
+        // `attached_to` as the byte right after the comment, so the target
+        // node either starts exactly there or after a whitespace-only gap
+        // (e.g. `/**/ 42` or `instanceof /* probe */ Object`).
+        let is_leading_target = node_start == attached_to
+            || (node_start > attached_to
+                && attached_to > comment_start
+                && source
+                    .get(attached_to as usize..node_start as usize)
+                    .is_some_and(|gap| gap.trim().is_empty()));
+        if is_leading_target {
             let node_end_line = offset_to_loc(source, node_end as usize).0;
             let comment_line = offset_to_loc(source, comment_start as usize).0;
             let field = if comment_line == node_end_line && comment_start >= node_end {
@@ -1369,32 +1420,6 @@ fn strip_internal_fields_value(value: &mut Value) {
 
 /// Adjust all column values +1 in loc objects for multi-line destructured patterns.
 /// The Svelte compiler uses acorn which has a different column convention for patterns.
-fn adjust_binding_columns(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            // Check if this is a loc-like object with line/column
-            if map.contains_key("line") && map.contains_key("column") {
-                if let Some(line) = map.get("line").and_then(|v| v.as_u64()) {
-                    if line > 1 {
-                        if let Some(col) = map.get("column").and_then(|v| v.as_u64()) {
-                            map.insert("column".to_string(), json!(col + 1));
-                        }
-                    }
-                }
-            }
-            for (_, v) in map.iter_mut() {
-                adjust_binding_columns(v);
-            }
-        }
-        Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                adjust_binding_columns(v);
-            }
-        }
-        _ => {}
-    }
-}
-
 fn estree_binding_pat(pat: &oxc::ast::ast::BindingPattern<'_>, source: &str, offset: u32) -> Value {
     match pat {
         oxc::ast::ast::BindingPattern::BindingIdentifier(ident) => {
@@ -1668,10 +1693,92 @@ fn serialize_filtered_children_ctx(
 
 /// Decode HTML entities in text.
 /// Only decodes entities with proper semicolons (e.g., &amp; but not &amp without semicolon).
-fn decode_entities(s: &str) -> String {
+/// Windows-1252 fallback for code points 128-159, mirroring svelte's
+/// `windows_1252` table (phases/1-parse/utils/html.js).
+const WINDOWS_1252: [u32; 32] = [
+    8364, 129, 8218, 402, 8222, 8230, 8224, 8225, 710, 8240, 352, 8249, 338, 141, 381, 143, 144, 8216, 8217, 8220,
+    8221, 8226, 8211, 8212, 732, 8482, 353, 8250, 339, 157, 382, 376,
+];
+
+/// Port of svelte's `validate_code`: corrects code points the browser would
+/// have rewritten during tokenization. A line feed becomes a plain space in
+/// text content (it collapses with surrounding whitespace anyway) but is
+/// significant in attribute values, so it survives there.
+fn validate_entity_code(code: u32, is_attribute_value: bool) -> u32 {
+    if code == 10 && !is_attribute_value {
+        return 32;
+    }
+    if code < 128 {
+        return code;
+    }
+    if code <= 159 {
+        return WINDOWS_1252[(code - 128) as usize];
+    }
+    if code < 55296 {
+        return code;
+    }
+    // UTF-16 surrogate halves
+    if code <= 57343 {
+        return 0;
+    }
+    if code <= 65535 {
+        return code;
+    }
+    if (65536..=131071).contains(&code) {
+        return code;
+    }
+    if (131072..=196607).contains(&code) {
+        return code;
+    }
+    if (917504..=917631).contains(&code) || (917760..=917999).contains(&code) {
+        return code;
+    }
+    0
+}
+
+fn decode_entities(s: &str, is_attribute_value: bool) -> String {
     let mut result = String::with_capacity(s.len());
     let mut chars = s.chars().peekable();
     while let Some(ch) = chars.next() {
+        if ch == '&' && chars.peek() == Some(&'#') {
+            // Numeric character reference: `&#123;` or `&#x1F600;` —
+            // semicolon optional, mirroring upstream's pattern
+            // `#(?:[xX][a-fA-F\d]+|\d+)(?:;)?`.
+            let mut consumed = String::from("&#");
+            chars.next();
+            let is_hex = matches!(chars.peek(), Some('x') | Some('X'));
+            if is_hex {
+                consumed.push(chars.next().unwrap());
+            }
+            let mut digits = String::new();
+            while let Some(&c) = chars.peek() {
+                let valid = if is_hex {
+                    c.is_ascii_hexdigit()
+                } else {
+                    c.is_ascii_digit()
+                };
+                if !valid {
+                    break;
+                }
+                digits.push(c);
+                consumed.push(c);
+                chars.next();
+            }
+            if chars.peek() == Some(&';') {
+                consumed.push(';');
+                chars.next();
+            }
+            // Upstream passes the text through unchanged when the reference
+            // is unparseable or codes point zero.
+            match u32::from_str_radix(&digits, if is_hex { 16 } else { 10 }) {
+                Ok(code) if code != 0 => {
+                    let validated = validate_entity_code(code, is_attribute_value);
+                    result.push(char::from_u32(validated).unwrap_or('\0'));
+                }
+                _ => result.push_str(&consumed),
+            }
+            continue;
+        }
         if ch == '&' {
             // Collect the entity name
             let mut entity = String::new();
@@ -1697,13 +1804,8 @@ fn decode_entities(s: &str) -> String {
                     "&lt;" => result.push('<'),
                     "&gt;" => result.push('>'),
                     "&quot;" => result.push('"'),
-                    "&#39;" => result.push('\''),
                     "&apos;" => result.push('\''),
                     "&nbsp;" => result.push('\u{00A0}'),
-                    "&#x27;" => result.push('\''),
-                    "&#x2F;" => result.push('/'),
-                    "&#60;" => result.push('<'),
-                    "&#62;" => result.push('>'),
                     _ => result.push_str(&entity),
                 }
             } else {
@@ -1928,7 +2030,7 @@ fn serialize_attr_value_modern(value: &AttributeValue, meta: &AttributeMeta, sou
                 "end": value_span.end,
                 "type": "Text",
                 "raw": s,
-                "data": decode_entities(s)
+                "data": decode_entities(s, true)
             }])
         }
         AttributeValue::Expression(expr) => {
@@ -1955,7 +2057,7 @@ fn serialize_attr_value_modern(value: &AttributeValue, meta: &AttributeMeta, sou
                         "end": part_meta.span.end,
                         "type": "Text",
                         "raw": s,
-                        "data": decode_entities(s)
+                        "data": decode_entities(s, true)
                     }),
                     AttributeValuePart::Expression(expr) => {
                         let expression_span = part_meta.expression_span.unwrap_or(part_meta.span);
@@ -2136,7 +2238,7 @@ fn serialize_raw_tag_attributes(source: &str, attrs_span: oxc::span::Span) -> Ve
                     "end": value_end as u32,
                     "type": "Text",
                     "raw": raw,
-                    "data": decode_entities(raw)
+                    "data": decode_entities(raw, true)
                 }])
             } else {
                 let value_start = pos;
@@ -2154,7 +2256,7 @@ fn serialize_raw_tag_attributes(source: &str, attrs_span: oxc::span::Span) -> Ve
                     "end": pos as u32,
                     "type": "Text",
                     "raw": raw,
-                    "data": decode_entities(raw)
+                    "data": decode_entities(raw, true)
                 }])
             }
         } else {
@@ -2382,14 +2484,15 @@ fn to_modern_json_inner(ast: &SvelteAst, source: &str) -> Value {
     let css_val = if let Some(style) = &ast.css {
         let content_start = style.content_span.start;
         let content_end = style.content_span.end;
-        let legacy_children = crate::parser::css::parse_css_children(&style.content, content_start);
-        let children = convert_css_to_modern(&legacy_children);
+        let parsed = crate::parser::css::parse_css(&style.content, content_start);
+        let children = convert_css_to_modern(&parsed.children);
         json!({
             "type": "StyleSheet",
             "start": style.span.start,
             "end": style.span.end,
             "attributes": serialize_raw_tag_attributes(source, style.attrs_span),
             "children": children,
+            "comments": parsed.comments,
             "content": {
                 "start": content_start,
                 "end": content_end,
@@ -2692,7 +2795,7 @@ fn serialize_node_modern_ctx(
                 "start": t.span.start,
                 "end": t.span.end,
                 "raw": t.data,
-                "data": decode_entities(&t.data)
+                "data": decode_entities(&t.data, false)
             })
         }
         TemplateNode::Comment(c) => {
@@ -2811,13 +2914,12 @@ fn serialize_node_modern_ctx(
                 if let Some(oxc::ast::ast::Statement::VariableDeclaration(decl)) = result.program.body.first() {
                     if let Some(declarator) = decl.declarations.first() {
                         let mut pat = estree_binding_pat(&declarator.id, source, ctx_start - 4);
-                        // Add loc and adjust columns for destructured patterns
+                        // Add loc for destructured patterns
                         if let Some(obj) = pat.as_object_mut() {
                             let s = obj.get("start").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                             let e = obj.get("end").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
                             obj.insert("loc".to_string(), loc_json(source, s, e));
                         }
-                        adjust_binding_columns(&mut pat);
                         pat
                     } else {
                         json!({ "type": "Identifier", "name": context_str, "start": ctx_start, "end": ctx_end })
@@ -3006,12 +3108,16 @@ fn serialize_node_modern_ctx(
             })
         }
         TemplateNode::ConstTag(c) => {
-            json!({
-                "type": if c.kind == TemplateDeclarationKind::Let { "LetTag" } else { "ConstTag" },
-                "start": c.span.start,
-                "end": c.span.end,
-                "declaration": serialize_const_declaration_modern(c, source)
-            })
+            if is_bare_declaration_tag(source, c.span) {
+                serialize_declaration_tag(c, source)
+            } else {
+                json!({
+                    "type": if c.kind == TemplateDeclarationKind::Let { "LetTag" } else { "ConstTag" },
+                    "start": c.span.start,
+                    "end": c.span.end,
+                    "declaration": serialize_const_declaration_modern(c, source)
+                })
+            }
         }
     }
 }
@@ -3190,13 +3296,15 @@ fn serialize_css_legacy(style: &Style, _source: &str) -> Value {
     let content_end = style.content_span.end;
 
     // Parse CSS children and strip internal fields
-    let mut children = crate::parser::css::parse_css_children(&style.content, content_start);
+    let parsed = crate::parser::css::parse_css(&style.content, content_start);
+    let mut children = parsed.children;
     strip_internal_fields(&mut children);
 
     json!({
         "type": "Style",
         "start": style.span.start,
         "end": style.span.end,
+        "comments": parsed.comments,
         "attributes": [],
         "children": children,
         "content": {
@@ -4080,12 +4188,16 @@ fn serialize_node_legacy_ctx(node: &TemplateNode, source: &str, in_svelte_head: 
             })
         }
         TemplateNode::ConstTag(c) => {
-            json!({
-                "type": if c.kind == TemplateDeclarationKind::Let { "LetTag" } else { "ConstTag" },
-                "start": c.span.start,
-                "end": c.span.end,
-                "expression": serialize_const_expression_legacy(c, source)
-            })
+            if is_bare_declaration_tag(source, c.span) {
+                serialize_declaration_tag(c, source)
+            } else {
+                json!({
+                    "type": if c.kind == TemplateDeclarationKind::Let { "LetTag" } else { "ConstTag" },
+                    "start": c.span.start,
+                    "end": c.span.end,
+                    "expression": serialize_const_expression_legacy(c, source)
+                })
+            }
         }
         TemplateNode::RenderTag(r) => {
             let expr_start = trimmed_span_start(r.expression_span, &r.expression);
@@ -4192,9 +4304,7 @@ fn serialize_node_legacy_ctx(node: &TemplateNode, source: &str, in_svelte_head: 
                 if let Some(oxc::ast::ast::Statement::VariableDeclaration(decl)) = result.program.body.first() {
                     if let Some(declarator) = decl.declarations.first() {
                         // Offset: ctx_start minus the "var " prefix (4 chars)
-                        let mut pat = estree_binding_pat(&declarator.id, source, ctx_start - 4);
-                        adjust_binding_columns(&mut pat);
-                        pat
+                        estree_binding_pat(&declarator.id, source, ctx_start - 4)
                     } else {
                         json!({ "type": "Identifier", "name": context_str, "start": ctx_start, "end": ctx_end })
                     }
@@ -4470,7 +4580,7 @@ fn serialize_text_legacy(text: &Text, include_raw: bool) -> Value {
         "type": "Text",
         "start": text.span.start,
         "end": text.span.end,
-        "data": decode_entities(&text.data)
+        "data": decode_entities(&text.data, false)
     });
     if include_raw {
         value["raw"] = json!(text.data);
@@ -4536,6 +4646,48 @@ fn serialize_const_declaration_modern(const_tag: &ConstTag, source: &str) -> Val
     }
 
     declaration
+}
+
+/// True when the tag uses the bare `{let ...}` / `{const ...}` syntax
+/// (svelte 5.56+, PR #18282) rather than the `{@const ...}` form. Upstream
+/// serializes bare declarations as `DeclarationTag` nodes.
+fn is_bare_declaration_tag(source: &str, span: oxc::span::Span) -> bool {
+    !source[span.start as usize + 1..].trim_start().starts_with('@')
+}
+
+/// Serialize a bare `{let ...}` / `{const ...}` tag as upstream's
+/// `DeclarationTag`. A declaration that fails to parse degrades to a
+/// synthetic VariableDeclaration with an empty-name Identifier declarator
+/// parked at the closing `}` (upstream's loose-mode recovery in
+/// `read_declaration`, phases/1-parse/state/tag.js).
+fn serialize_declaration_tag(tag: &ConstTag, source: &str) -> Value {
+    let declaration = match serialize_const_declaration_modern(tag, source) {
+        Value::Null => {
+            let after_brace = &source[tag.span.start as usize + 1..tag.span.end as usize];
+            let kw_start = tag.span.start + 1 + (after_brace.len() - after_brace.trim_start().len()) as u32;
+            let brace = tag.span.end - 1; // position of the closing `}`
+            json!({
+                "type": "VariableDeclaration",
+                "kind": tag.kind.keyword(),
+                "declarations": [{
+                    "type": "VariableDeclarator",
+                    "id": { "type": "Identifier", "name": "", "start": brace, "end": brace },
+                    "init": null,
+                    "start": brace,
+                    "end": brace
+                }],
+                "start": kw_start,
+                "end": brace
+            })
+        }
+        declaration => declaration,
+    };
+    json!({
+        "type": "DeclarationTag",
+        "start": tag.span.start,
+        "end": tag.span.end,
+        "declaration": declaration
+    })
 }
 
 fn serialize_const_expression_legacy(const_tag: &ConstTag, source: &str) -> Value {
@@ -4811,7 +4963,7 @@ fn serialize_attr_value_legacy(value: &AttributeValue, meta: &AttributeMeta, sou
                 "end": value_span.end,
                 "type": "Text",
                 "raw": s,
-                "data": decode_entities(s)
+                "data": decode_entities(s, true)
             }])
         }
         AttributeValue::Expression(expr) => {
@@ -4836,7 +4988,7 @@ fn serialize_attr_value_legacy(value: &AttributeValue, meta: &AttributeMeta, sou
                             "end": part_meta.span.end,
                             "type": "Text",
                             "raw": s,
-                            "data": decode_entities(s)
+                            "data": decode_entities(s, true)
                         })
                     }
                     AttributeValuePart::Expression(expr) => {

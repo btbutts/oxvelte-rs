@@ -2,7 +2,7 @@
 	"css": null,
 	"js": [],
 	"start": 0,
-	"end": 90,
+	"end": 89,
 	"type": "Root",
 	"fragment": {
 		"type": "Fragment",
@@ -225,6 +225,5 @@
 			}
 		]
 	},
-	"options": null,
-	"comments": []
+	"options": null
 }

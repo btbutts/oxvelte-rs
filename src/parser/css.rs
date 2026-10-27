@@ -25,6 +25,7 @@ pub fn parse_css(css: &str, offset: u32) -> CssParseResult {
     let children = parser.parse_rules();
     CssParseResult {
         children,
+        comments: parser.comments,
         errors: parser.errors,
         error_positions: parser.error_positions,
         position: parser.pos,
@@ -52,6 +53,9 @@ pub struct CssParseError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CssParseResult {
     pub children: Vec<Value>,
+    /// `CSSComment` nodes for every `/* */` comment, in source order.
+    /// Positions are absolute byte offsets in the original source document.
+    pub comments: Vec<Value>,
     /// Structured parser diagnostics. Positions are relative to the CSS input.
     pub errors: Vec<CssParseError>,
     /// Legacy compatibility positions. Prefer `errors` for new code.
@@ -64,6 +68,8 @@ pub struct CssParser<'a> {
     pub source: &'a str,
     pub pos: usize,
     pub offset: u32,
+    /// `CSSComment` nodes collected from `/* */` comments, in source order.
+    pub comments: Vec<Value>,
     /// Structured parser diagnostics. Positions are relative to `source`.
     pub errors: Vec<CssParseError>,
     /// Positions where parsing failed and recovery was needed.
@@ -78,6 +84,7 @@ impl<'a> CssParser<'a> {
             source,
             pos: 0,
             offset,
+            comments: Vec::new(),
             errors: Vec::new(),
             error_positions: Vec::new(),
         }
@@ -272,17 +279,26 @@ impl<'a> CssParser<'a> {
                 }));
             } else if self.eat("::") {
                 let name = self.read_identifier();
-                relative_selector.selectors.push(json!({
+                let mut args = None;
+
+                if self.eat("(") {
+                    args = self.read_selector_list(true);
+                    self.expect(")");
+                }
+
+                let mut selector = json!({
                     "type": "PseudoElementSelector",
                     "name": name,
                     "start": self.abs(start),
                     "end": self.abs(self.pos)
-                }));
-
-                if self.eat("(") {
-                    let _ = self.read_selector_list(true);
-                    self.expect(")");
+                });
+                if let Some(args) = args {
+                    selector
+                        .as_object_mut()
+                        .expect("selector node is an object")
+                        .insert("args".to_string(), args);
                 }
+                relative_selector.selectors.push(selector);
             } else if self.eat(":") {
                 let name = self.read_identifier();
                 let mut args = Value::Null;
@@ -814,7 +830,8 @@ impl<'a> CssParser<'a> {
             if rest.starts_with(word) {
                 let end = start + word.len();
                 if self.nth_has_required_suffix(end) {
-                    return Some((word.to_string(), end));
+                    let value_end = self.nth_value_end(end);
+                    return Some((self.source[start..value_end].to_string(), value_end));
                 }
             }
         }
@@ -874,7 +891,12 @@ impl<'a> CssParser<'a> {
         if ws > pos && self.source[ws..].starts_with("of") {
             let after_of = ws + 2;
             if after_of < self.source.len() {
-                return self.current_char_at(after_of).is_some_and(is_css_whitespace);
+                // The `of` identifier ends at any non-ident byte — minifiers
+                // drop the whitespace (`2n of.important`), so whitespace is
+                // not required here (upstream #18611, svelte 5.56.10).
+                return self
+                    .current_char_at(after_of)
+                    .is_some_and(|c| !is_valid_identifier_char(c));
             }
         }
 
@@ -891,6 +913,9 @@ impl<'a> CssParser<'a> {
                 }
                 return end;
             }
+            // Minified form (`2n of.important`): the value ends right
+            // after `of`.
+            return end;
         }
         pos
     }
@@ -951,9 +976,17 @@ impl<'a> CssParser<'a> {
                 || self.source[self.pos..].starts_with("//")
             {
                 if self.source[self.pos..].starts_with("/*") {
+                    let start = self.pos;
                     self.pos += 2;
                     if let Some(end) = self.source[self.pos..].find("*/") {
+                        let value = &self.source[self.pos..self.pos + end];
                         self.pos += end + 2;
+                        self.comments.push(json!({
+                            "type": "CSSComment",
+                            "value": value,
+                            "start": self.abs(start),
+                            "end": self.abs(self.pos)
+                        }));
                     } else {
                         self.error_at(self.pos.saturating_sub(2), CssParseErrorKind::UnclosedComment);
                         self.pos = self.source.len();
@@ -1213,6 +1246,8 @@ mod tests {
         let mut parser = CssParser::new(".container { .item { // scss-style comment\n color: red; } }", 0);
         let children = parser.parse_rules();
         assert!(parser.error_positions.is_empty());
+        // `//` line comments are skipped, not collected.
+        assert!(parser.comments.is_empty());
         assert_eq!(children.len(), 1);
         let block_children = children[0]["block"]["children"].as_array().unwrap();
         assert_eq!(block_children[0]["type"], "Rule");
@@ -1370,11 +1405,77 @@ mod tests {
     }
 
     #[test]
-    fn skips_css_and_html_comments() {
-        let children = parse_css_children("<!-- ignored --> /* ignored */ div { color: red; }", 0);
-        assert_eq!(children.len(), 1);
-        assert_eq!(children[0]["type"], "Rule");
-        assert_eq!(children[0]["prelude"]["children"][0]["children"][0]["name"], "div");
+    fn collects_css_comments_but_not_html_comments() {
+        let result = parse_css("<!-- ignored --> /* kept */ div { color: red; }", 0);
+        assert_eq!(result.children.len(), 1);
+        assert_eq!(result.children[0]["type"], "Rule");
+        assert_eq!(
+            result.children[0]["prelude"]["children"][0]["children"][0]["name"],
+            "div"
+        );
+        assert_eq!(
+            result.comments,
+            vec![json!({
+                "type": "CSSComment",
+                "value": " kept ",
+                "start": 17,
+                "end": 27
+            })]
+        );
+    }
+
+    #[test]
+    fn collects_comments_inside_selector_lists() {
+        let result = parse_css(":is( /*button*/ button, /*p after h1*/ h1 + p ) {}", 0);
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        let values: Vec<_> = result
+            .comments
+            .iter()
+            .map(|comment| comment["value"].as_str().unwrap())
+            .collect();
+        assert_eq!(values, ["button", "p after h1"]);
+    }
+
+    #[test]
+    fn pseudo_element_args_are_captured_as_selector_list() {
+        let result = parse_css(
+            "::view-transition-old(x-y) { color: red; } ::before { color: blue; }",
+            0,
+        );
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+
+        let with_args = &result.children[0]["prelude"]["children"][0]["children"][0];
+        assert_eq!(with_args["type"], "PseudoElementSelector");
+        // `end` spans through the closing paren.
+        assert_eq!(with_args["end"], "::view-transition-old(x-y)".len());
+        let args = &with_args["args"];
+        assert_eq!(args["type"], "SelectorList");
+        // parse_css returns the legacy selector shape (flat Selector children).
+        assert_eq!(
+            args["children"][0]["children"][0],
+            json!({
+                "type": "TypeSelector",
+                "name": "x-y",
+                "start": 22,
+                "end": 25
+            })
+        );
+
+        let plain = &result.children[1]["prelude"]["children"][0]["children"][0];
+        assert_eq!(plain["type"], "PseudoElementSelector");
+        assert_eq!(plain["name"], "before");
+        // `args` is absent (not null) when there are no parens.
+        assert!(plain.get("args").is_none());
+    }
+
+    #[test]
+    fn unclosed_comment_still_errors_and_is_not_collected() {
+        let result = parse_css("div { color: red; } /* unterminated", 0);
+        assert_eq!(
+            result.errors.first().map(|error| error.kind),
+            Some(CssParseErrorKind::UnclosedComment)
+        );
+        assert!(result.comments.is_empty());
     }
 
     #[test]

@@ -1041,6 +1041,9 @@ mod parser_fixture_tests {
 
         let input =
             std::fs::read_to_string(&input_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", input_path, e));
+        // Mirror upstream's parser harness: fixtures describe the input
+        // with trailing whitespace and carriage returns stripped.
+        let input = input.trim_end().replace('\r', "");
         let expected_str =
             std::fs::read_to_string(&output_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", output_path, e));
 
@@ -1049,7 +1052,17 @@ mod parser_fixture_tests {
 
         let alloc = oxc::allocator::Allocator::default();
         let result = parser::parse(&input, &alloc);
-        let actual = to_legacy_json(&result.ast, &input);
+        let mut actual = to_legacy_json(&result.ast, &input);
+
+        // Fixtures committed before svelte 5.56.9 have no css `comments`
+        // key, so drop it before comparing (same rule as root `comments`).
+        if expected.get("css").and_then(|css| css.get("comments")).is_none() {
+            if let Some(css) = actual.get_mut("css") {
+                if let Some(map) = css.as_object_mut() {
+                    map.remove("comments");
+                }
+            }
+        }
 
         let diffs = json_diff(&expected, &actual, "");
         assert!(
@@ -1072,6 +1085,7 @@ mod parser_fixture_tests {
     }
 
     legacy_fixture_test!(legacy_element_with_text, "element-with-text");
+    legacy_fixture_test!(legacy_convert_entities_line_feed, "convert-entities-line-feed");
     legacy_fixture_test!(legacy_self_closing_element, "self-closing-element");
     legacy_fixture_test!(legacy_comment, "comment");
     legacy_fixture_test!(legacy_elements, "elements");
@@ -1221,6 +1235,9 @@ mod modern_fixture_tests {
 
         let input =
             std::fs::read_to_string(&input_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", input_path, e));
+        // Mirror upstream's parser harness: fixtures describe the input
+        // with trailing whitespace and carriage returns stripped.
+        let input = input.trim_end().replace('\r', "");
         let expected_str =
             std::fs::read_to_string(&output_path).unwrap_or_else(|e| panic!("Cannot read {}: {}", output_path, e));
 
@@ -1229,7 +1246,25 @@ mod modern_fixture_tests {
 
         let alloc = oxc::allocator::Allocator::default();
         let result = parser::parse(&input, &alloc);
-        let actual = to_modern_json(&result.ast, &input);
+        let mut actual = to_modern_json(&result.ast, &input);
+
+        // Mirror upstream's parser-modern harness: fixtures committed before
+        // svelte 5.53 have no root `comments` key, so drop it before comparing.
+        if expected.get("comments").is_none() {
+            if let Some(map) = actual.as_object_mut() {
+                map.remove("comments");
+            }
+        }
+
+        // Fixtures committed before svelte 5.56.9 have no css `comments`
+        // key, so drop it before comparing (same rule as root `comments`).
+        if expected.get("css").and_then(|css| css.get("comments")).is_none() {
+            if let Some(css) = actual.get_mut("css") {
+                if let Some(map) = css.as_object_mut() {
+                    map.remove("comments");
+                }
+            }
+        }
 
         let diffs = json_diff(&expected, &actual, "");
         assert!(
@@ -1274,6 +1309,14 @@ mod modern_fixture_tests {
     modern_fixture_test!(modern_semicolon_inside_quotes, "semicolon-inside-quotes");
     modern_fixture_test!(modern_template_shadowroot, "template-shadowroot");
     modern_fixture_test!(modern_typescript_in_event_handler, "typescript-in-event-handler");
+    modern_fixture_test!(modern_const_tag_parenthesized_init, "const-tag-parenthesized-init");
+    modern_fixture_test!(modern_css_nth_of_minified, "css-nth-of-minified");
+    modern_fixture_test!(modern_parens, "parens");
+    modern_fixture_test!(
+        modern_tag_type_identifier_probe_comment,
+        "tag-type-identifier-probe-comment"
+    );
+    modern_fixture_test!(modern_loose_declaration_tag, "loose-declaration-tag");
     modern_fixture_test!(modern_loose_valid_each_as, "loose-valid-each-as");
     modern_fixture_test!(modern_loose_invalid_block, "loose-invalid-block");
     modern_fixture_test!(modern_loose_invalid_expression, "loose-invalid-expression");

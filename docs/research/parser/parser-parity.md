@@ -1,11 +1,10 @@
 # Research: parser parity with `sveltejs/svelte`
 
-Status: research complete (27OCT2026). All five divergences root-caused to
-specific upstream PRs/releases and empirically verified against the real
-`svelte@5.57.3` package; `Root.comments` and `Root.end` resolved as
-harness-side fixes (see Decisions locked). Ready for implementation.
-Related: `docs/research/test/pinned-rules.md` (Stage 1 landed the
-`cargo get-svelte-fixtures` pipeline this document depends on).
+Status: **complete** (27OCT2026). All five tracked divergences fixed,
+fixtures re-synced to `svelte@5.57.3`, cssparser 0.38 / selectors 0.41
+upgraded, and the six newly-CREATEd upstream fixtures all pass — including
+loose-mode `DeclarationTag` (research + correction landed; see its
+section).
 
 ## The problem
 
@@ -302,25 +301,66 @@ Validation after the bump: `cargo check`, `cargo clippy`, `cargo test --lib`
 `no_unused_class_name` fixtures in the linter suite), plus
 `cargo test --features custom-rules` for the full matrix.
 
+## `DeclarationTag` (resolved 27OCT2026)
+
+**Archaeology:** introduced by
+[sveltejs/svelte#18282](https://github.com/sveltejs/svelte/pull/18282)
+("feat: allow declarations in the template"), first shipped in **svelte
+5.56.0**; docs: <https://svelte.dev/docs/svelte/declaration-tags>. Follow-up
+robustness fixes in 5.56.1–5.57.x (#18330, #18348, #18353).
+
+**Upstream semantics** (from `phases/1-parse/state/tag.js` at 5.57.3):
+
+- `{let ...}` / `{const ...}` (**no `@`**) parse as `DeclarationTag` with a
+  full ESTree `VariableDeclaration` payload — in strict mode too, not just
+  loose. Only `kind: "let" | "const"` allowed (`var`/`interface`/`enum`
+  error; a leading `type` is tentatively parsed and rejected as a TS type
+  alias, falling back to ExpressionTag when it's actually an expression).
+- **`LetTag` no longer exists upstream at all** — `{@let}` is a parse error
+  in both modes; `{@const}` still produces `ConstTag` (never
+  DeclarationTag). The dichotomy is `ConstTag` (`{@const}`, legacy syntax)
+  vs `DeclarationTag` (`{let}`/`{const}`, 5.56+).
+- Loose-mode degradation: if acorn's `parse_statement_at` throws and
+  `parser.loose`, upstream synthesizes a `VariableDeclaration` spanning the
+  keyword to the matching `}`, with a single declarator whose `id` is an
+  empty-name `Identifier` parked zero-width at the `}` and `init: null`
+  (tag.js:92-123).
+- Legacy AST: `legacy.js:265-267` passes `DeclarationTag` through
+  unchanged (no ConstTag-style conversion).
+
+**Correction landed:** the Rust AST is unchanged (`TemplateNode::ConstTag`
+keeps both syntaxes; the linter is unaffected). Only the serializers branch
+on the source text after `{`: `@`-prefixed → `ConstTag` as before; bare →
+`DeclarationTag` via `serialize_declaration_tag`
+(`src/parser/serialize.rs`), which reuses the existing declaration payload
+builder for clean parses and emits the degraded synthetic declarator when
+the declaration fails to parse. Both modern and legacy serializers were
+updated (legacy matches upstream's passthrough). The
+`modern_loose_declaration_tag` fixture test is registered and passes, and
+`tests/parser_lint_contract.rs` was updated to expect `DeclarationTag` for
+bare `{let ...}`.
+
+**Assumptions not covered by any upstream fixture** (noted for the future):
+the exact loc/key shape of a *valid* bare declaration payload (we reuse the
+`ConstTag` declaration serializer), and upstream's strict-mode errors for
+`{var ...}` / `{@let}` (we stay lenient).
+
 ## Open decisions (for the user)
 
-1. **Staging of capability work.** Changes (3) and (4) add parser
-   *capability* (CSS comment collection, pseudo-element arg trees);
-   change (5) is a deletion of `adjust_binding_columns`. All must land in
-   the bundled commit per decision 4 above, but the *work* can still be
-   built and reviewed in stages. Order of attack within the workstream?
-2. **Stale upstream sample.** Keep syncing `implicitly-closed-li-block`
+1. **Stale upstream sample.** Keep syncing `implicitly-closed-li-block`
    (whose upstream output cannot be reproduced by its own compiler), or
    carry it as a local-only sample?
 
-## Interim state (until this lands)
+## Current state (27OCT2026)
 
-- `fixtures/parser/` remains at the old hand-copy; `cargo test --lib` is
-  green (625 passing).
-- `OXVELTE_FIXTURES_SVELTE_TAG` stays pinned at `5.57.3` in
-  `.cargo/config.toml`, but **`cargo get-svelte-fixtures` must not be
-  re-run (and its output must not be committed) until this workstream
-  lands** — running it turns the parser fixture tests red, by design.
-- Once the parser matches upstream at the pin, re-run
-  `cargo get-svelte-fixtures`, review the `UPDATE`/`CREATE`/`SKIP` report,
-  and commit fixtures and parser changes together.
+- The five tracked divergences are implemented and `fixtures/parser/` is
+  re-synced to `svelte@5.57.3` via `cargo get-svelte-fixtures` (25 UPDATEs,
+  6 CREATEs). The harness changes, serializer work, and fixture re-sync land
+  together in one bundled commit, per decision 4.
+- All six newly-CREATEd fixtures pass: the four contained additions
+  (entity line-feed decoding, minified `:nth-child(2n of.foo)`, two
+  expression `leadingComments` cases), `const-tag-parenthesized-init`
+  (passed as-is), and `loose-declaration-tag` (DeclarationTag correction).
+  `cargo test --lib`: 635/635; all integration suites and upstream parity
+  green.
+- `cargo get-svelte-fixtures` is safe to re-run any time from now on.

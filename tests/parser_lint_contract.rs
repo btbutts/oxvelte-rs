@@ -168,7 +168,9 @@ fn modern_let_serialization_keeps_mutability_and_identifier_offsets() {
     let parsed = parser::parse_for_lint(source, &alloc);
     let json = parser::serialize::to_modern_json(&parsed.ast, source);
     let tag = &json["fragment"]["nodes"][0];
-    assert_eq!(tag["type"], "LetTag");
+    // Bare `{let ...}` declarations serialize as upstream 5.56+ `DeclarationTag`
+    // (sveltejs/svelte#18282); `LetTag` no longer exists upstream.
+    assert_eq!(tag["type"], "DeclarationTag");
     assert_eq!(tag["declaration"]["kind"], "let");
     assert_eq!(tag["declaration"]["start"], 2);
     assert_eq!(
