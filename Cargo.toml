@@ -18,6 +18,13 @@ path = "src/lib.rs"
 name = "oxvelte"
 path = "src/main.rs"
 
+# Thin launcher behind the `cargo get-eslint-fixtures` / `cargo
+# get-svelte-fixtures` aliases (see .cargo/config.toml and
+# docs/research/test/pinned-rules.md). Not part of the shipped linter.
+[[bin]]
+name = "launcher"
+path = "scripts/launcher.rs"
+
 [features]
 default = []
 custom-rules = ["dep:boa_engine"]

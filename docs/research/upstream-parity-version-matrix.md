@@ -23,7 +23,7 @@ The original skips comprised 54 older-Svelte cases, six newer-Svelte cases, thre
 Install the importer dependencies, then run the matrix from the repository root:
 
 ```sh
-npm ci --prefix scripts/upstream-parity --ignore-scripts --no-audit --no-fund
+npm ci --prefix scripts/get-fixtures --ignore-scripts --no-audit --no-fund
 node scripts/version-matrix/run.mjs
 ```
 

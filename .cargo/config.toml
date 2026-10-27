@@ -26,3 +26,19 @@ OXVELTE_CSS_SRC_W3C_WEBREF_COMMIT = "64111c5ac4fccf60f45bc266a322ea3fad8098f4"
 # final property count as cargo warnings while generating the CSS property
 # list. When "false" (default), only genuine failures are warned about.
 OXVELTE_BUILD_SHOW_CSS_PROP_GEN_STATS = "false"
+
+# Pinned upstream release tags for the fixture importers (see
+# docs/research/test/pinned-rules.md). Bump a version to pull a newer
+# fixture set, then run the matching alias: `cargo get-svelte-fixtures`
+# refreshes fixtures/parser/ from sveltejs/svelte, `cargo get-eslint-fixtures`
+# refreshes fixtures/linter/ from sveltejs/eslint-plugin-svelte.
+OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG = "3.23.1"
+OXVELTE_FIXTURES_SVELTE_TAG = "5.57.3"
+
+# Optional JavaScript runtime override for the fixture importer launcher:
+# "bun" or "node". Unset = auto-detect (bun preferred, node fallback).
+# OXVELTE_JS_RUNTIME = "node"
+
+[alias]
+get-eslint-fixtures = "run --bin launcher -- --get-eslint-fixtures"
+get-svelte-fixtures = "run --bin launcher -- --get-svelte-fixtures"

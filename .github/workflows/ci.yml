@@ -38,9 +38,9 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
-        working-directory: scripts/upstream-parity
+        working-directory: scripts/get-fixtures
       - run: npm test
-        working-directory: scripts/upstream-parity
+        working-directory: scripts/get-fixtures
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: scripts/compiler-runtime
       - run: npm test
@@ -71,7 +71,7 @@ jobs:
         with:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
-        working-directory: scripts/upstream-parity
+        working-directory: scripts/get-fixtures
       - run: node --test scripts/version-matrix/run.test.mjs
       - run: node scripts/version-matrix/run.mjs --profile ${{ matrix.profile }}
       - uses: actions/upload-artifact@v4

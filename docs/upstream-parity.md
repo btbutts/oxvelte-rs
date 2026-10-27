@@ -77,10 +77,11 @@ The initial baseline was inspected for the priority rules and grouped by issue c
 The importer has separate Node dependencies. Regular parity runs require Cargo, Node.js and the pinned compiler runtime above. CI installs both dependency sets and sets the runtime path on Windows and Linux.
 
 ```sh
-git clone https://github.com/sveltejs/eslint-plugin-svelte /path/to/upstream
-npm ci --prefix scripts/upstream-parity --ignore-scripts
-node scripts/upstream-parity/import.mjs /path/to/upstream --check
+npm ci --prefix scripts/get-fixtures --ignore-scripts
+cargo get-eslint-fixtures
 ```
+
+Note: the importer is being reworked into the cargo-driven, tag-pinned pipeline described in [the pinned-rules plan](research/test/pinned-rules.md); until that lands, the command above is the planned interface and this section still describes the current corpus.
 
 The importer reads the pinned Git blobs, including support files, rule sources, test sources and the MIT license. Local modifications and Git line-ending conversion cannot alter the import. It reproduces the upstream loader's filename discovery, JSON/JS/CJS config precedence and dependency filters. It exports original YAML diagnostics and fix outputs to `manifest.json`, preserving suggestions and parser/config metadata. JS/CJS configs are retained unchanged; eligible compiler configuration modules are executed by the compiler bridge. Missing error/fix snapshots fail the import; it never generates expectations by running Oxvelte.
 

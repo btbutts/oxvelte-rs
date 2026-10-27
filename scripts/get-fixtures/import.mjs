@@ -1,8 +1,9 @@
+#!/usr/bin/env node
 // Mirrors discovery/config precedence in the pinned tests/utils/utils.ts.
 // This exports raw cases, without generating or rewriting upstream expectations.
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse as parseYaml } from 'yaml';
@@ -10,6 +11,7 @@ import semver from 'semver';
 import ts from 'typescript';
 import { createRequire } from 'node:module';
 import { builtinRules } from 'eslint/use-at-your-own-risk';
+import { extractMembers, fetchGithubRelease, syncRuleDirs } from './github.mjs';
 
 export const revision = '18339c886320151148568063c5801bf69cb51027';
 export const environment = {
@@ -20,10 +22,7 @@ const require = createRequire(import.meta.url);
 if (require('eslint/package.json').version !== environment.eslint) throw new Error('Installed ESLint does not match the declared parity environment');
 if (ts.version !== environment.typescript) throw new Error('Installed TypeScript does not match the declared parity environment');
 const repository = 'https://github.com/sveltejs/eslint-plugin-svelte';
-const packagePrefix = 'packages/eslint-plugin-svelte/';
-const fixturesPrefix = `${packagePrefix}tests/fixtures/rules/`;
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const corpusRoot = path.join(repoRoot, 'fixtures/upstream/eslint-plugin-svelte');
 export const digest = (bytes) => createHash('sha256').update(bytes).digest('hex');
 export const suffix = (name) => /\.svelte\.[jt]s$/u.test(name) ? name.slice(-10) : path.extname(name);
 export const isInput = (name) => {
@@ -173,62 +172,48 @@ export function buildManifest(files, versions = environment, coreRules = builtin
   };
 }
 
-function main() {
-  const [checkout, ...args] = process.argv.slice(2);
-  if (!checkout || args.some((arg) => arg !== '--check')) throw new Error('Usage: node import.mjs <upstream-git-checkout> [--check]');
-  const check = args.includes('--check');
-  const git = (...args) => execFileSync('git', ['-C', checkout, ...args], { maxBuffer: 32 * 1024 * 1024 });
-  if (git('rev-parse', `${revision}^{commit}`).toString().trim() !== revision) throw new Error('Pinned commit is unavailable');
-  // Read Git blobs rather than the working tree. CRLF conversion and local
-  // edits must not change the imported upstream expectations or their hashes.
-  const entries = git('ls-tree', '-rz', revision, '--', `${packagePrefix}tests`, `${packagePrefix}src/rules`, `${packagePrefix}package.json`, 'LICENSE')
-    .toString('utf8').split('\0').filter(Boolean).map((entry) => {
-      const [metadata, name] = entry.split('\t');
-      const [mode, type, hash] = metadata.split(' ');
-      if (type !== 'blob' || !['100644', '100755'].includes(mode)) throw new Error(`Unsupported Git entry: ${name}`);
-      return { name, hash };
-    });
-  // cat-file --batch preserves binary bytes and avoids one process per file.
-  const batch = execFileSync('git', ['-C', checkout, 'cat-file', '--batch'], {
-    input: entries.map((entry) => entry.hash).join('\n') + '\n', maxBuffer: 32 * 1024 * 1024,
-  });
-  const files = new Map();
-  let offset = 0;
-  for (const entry of entries) {
-    const newline = batch.indexOf(10, offset);
-    const size = Number(batch.subarray(offset, newline).toString().split(' ').at(-1));
-    if (!Number.isSafeInteger(size)) throw new Error('Invalid cat-file response');
-    const bytes = batch.subarray(newline + 1, newline + 1 + size);
-    offset = newline + 1 + size + 1;
-    files.set(entry.name === 'LICENSE' ? 'LICENSE' : entry.name.slice(packagePrefix.length), bytes);
-  }
-  const manifest = buildManifest(files);
-  // Bind the package-version signal used by Oxvelte to the declared target.
-  // Keep upstream's package.json above unchanged for provenance.
-  files.set('tests/package.json', Buffer.from(JSON.stringify({ private: true, dependencies: { svelte: environment.svelte } }, null, 2) + '\n'));
-  manifest.files['tests/package.json'] = digest(files.get('tests/package.json'));
-  const manifestBytes = Buffer.from(JSON.stringify(manifest, null, 2) + '\n');
-  files.set('manifest.json', manifestBytes);
-  for (const [name, bytes] of files) {
-    const destination = path.join(corpusRoot, ...name.split('/'));
-    if (check) {
-      if (!existsSync(destination) || !readFileSync(destination).equals(bytes)) throw new Error(`Import differs: ${name}`);
-    } else {
-      if (existsSync(destination) && !readFileSync(destination).equals(bytes)) throw new Error(`Refusing to overwrite modified import: ${name}`);
-      mkdirSync(path.dirname(destination), { recursive: true });
-      writeFileSync(destination, bytes);
+// Job: refresh fixtures/parser/{legacy,modern}/ from the pinned sveltejs/svelte
+// release tag. Additive only — see docs/research/test/pinned-rules.md.
+async function importSvelteParserFixtures() {
+  const tag = process.env.OXVELTE_FIXTURES_SVELTE_TAG;
+  if (!tag) throw new Error('OXVELTE_FIXTURES_SVELTE_TAG is not set; run via `cargo get-svelte-fixtures`');
+  const suites = [
+    { prefix: 'packages/svelte/tests/parser-legacy/samples/', dest: 'fixtures/parser/legacy', label: 'Svelte Legacy Parser' },
+    { prefix: 'packages/svelte/tests/parser-modern/samples/', dest: 'fixtures/parser/modern', label: 'Svelte Modern Parser' },
+  ];
+  const tmp = mkdtempSync(path.join(os.tmpdir(), 'oxvelte-fixtures-'));
+  try {
+    console.log(`Fetching sveltejs/svelte@${tag}...`);
+    const archive = await fetchGithubRelease('sveltejs', 'svelte', tag, tmp);
+    const extracted = path.join(tmp, 'extracted');
+    extractMembers(archive, extracted, suites.map((suite) => suite.prefix));
+    const untouched = [];
+    for (const suite of suites) {
+      const source = path.join(extracted, ...suite.prefix.split('/'));
+      if (!existsSync(source)) throw new Error(`Archive has no ${suite.prefix} — upstream layout changed?`);
+      untouched.push(...syncRuleDirs(source, path.join(repoRoot, suite.dest), suite.label));
     }
-  }
-  // Fail on stale files too; refreshes must deliberately account for removals.
-  function verifyDirectory(dir, relative = '') {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const name = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) verifyDirectory(path.join(dir, entry.name), name);
-      else if (!files.has(name)) throw new Error(`Unexpected imported file: ${name}`);
+    if (untouched.length) {
+      console.log('\nrules with no upstream candidate:');
+      for (const label of untouched.sort()) console.log(`  ${label}`);
     }
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
   }
-  verifyDirectory(corpusRoot);
-  console.log(`${check ? 'Verified' : 'Imported'} ${manifest.cases.length} cases across ${manifest.ruleCount} rules at ${revision}`);
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();
+async function main() {
+  const [job] = process.argv.slice(2);
+  if (job === '--get-svelte-fixtures') return importSvelteParserFixtures();
+  if (job === '--get-eslint-fixtures') {
+    throw new Error('--get-eslint-fixtures is not implemented yet (stage 2 of docs/research/test/pinned-rules.md)');
+  }
+  throw new Error('Usage: import.mjs --get-svelte-fixtures | --get-eslint-fixtures');
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`error: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

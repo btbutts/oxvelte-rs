@@ -7,8 +7,8 @@ set -euo pipefail
 #   - scripts/compiler-runtime/node_modules — the Svelte compiler and friends.
 #     src/compiler.rs drives the compiler through Node.js, and the compiler
 #     fixture tests under `cargo test --lib` fail without these packages.
-#   - scripts/upstream-parity/node_modules — the upstream parity harness
-#     (scripts/upstream-parity/import.mjs, npm test there).
+#   - scripts/get-fixtures/node_modules — the upstream parity harness
+#     (scripts/get-fixtures/import.mjs, npm test there).
 #
 # Safe to run repeatedly: a directory is only reinstalled when its
 # node_modules is missing or its package-lock.json is newer than the last
@@ -25,7 +25,7 @@ done
 
 npm_projects=(
   scripts/compiler-runtime
-  scripts/upstream-parity
+  scripts/get-fixtures
 )
 
 for dir in "${npm_projects[@]}"; do
