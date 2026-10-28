@@ -58,9 +58,19 @@ harness = false
 
 [profile.release]
 opt-level = 3
-lto = "fat"
+lto = true
 codegen-units = 1
 strip = "symbols"
+incremental = true
+debug-assertions = false
+
+[profile.dev]
+opt-level = 3
+lto = "thin"
+codegen-units = 32
+debug = true
+incremental = true
+debug-assertions = true
 
 [build-dependencies]
 flate2 = "1.1.10"
