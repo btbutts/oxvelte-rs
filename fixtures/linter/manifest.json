@@ -26,7 +26,7 @@
       }
     }
   },
-  "ruleCount": 83,
+  "ruleCount": 84,
   "cases": [
     {
       "id": "@typescript-eslint/no-unnecessary-condition/invalid/binary-expression01-input.svelte",
@@ -30988,6 +30988,447 @@
           ]
         }
       ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/cjs/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/cjs/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.cjs` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.cjs`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/cjs/Foo.svelte.cjs",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/cjs/Foo.svelte.cjs",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/cts/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/cts/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.cts` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.cts`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/cts/Foo.svelte.cts",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/cts/Foo.svelte.cts",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/js/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/js/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.js` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.js`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/js/Foo.svelte.js",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/js/Foo.svelte.js",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/jsx/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/jsx/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.jsx` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.jsx`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/jsx/Foo.svelte.jsx",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/jsx/Foo.svelte.jsx",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/mjs/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/mjs/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.mjs` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.mjs`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/mjs/Foo.svelte.mjs",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/mjs/Foo.svelte.mjs",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/mts/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/mts/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.mts` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.mts`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/mts/Foo.svelte.mts",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/mts/Foo.svelte.mts",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/ts/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/ts/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.ts` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.ts`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/ts/Foo.svelte.ts",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/ts/Foo.svelte.ts",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/tsx/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/tsx/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "The module `Foo.svelte.tsx` has the same name as this component. TypeScript resolves the import `./Foo.svelte` to that module, not to this component. Rename `Foo.svelte.tsx`.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/invalid/tsx/Foo.svelte.tsx",
+      "rule": "no-conflicting-module-names",
+      "kind": "invalid",
+      "filename": "upstream/no-conflicting-module-names/invalid/tsx/Foo.svelte.tsx",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [
+        {
+          "message": "This module has the same name as the component `Foo.svelte`. TypeScript resolves the import `./Foo.svelte` to this module, not to the component. Rename this file.",
+          "line": 1,
+          "column": 1
+        }
+      ],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/declaration-sibling-d-svelte/Bar.d.svelte.ts",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/declaration-sibling-d-svelte/Bar.d.svelte.ts",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/declaration-sibling-d-svelte/Bar.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/declaration-sibling-d-svelte/Bar.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/declaration-sibling/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/declaration-sibling/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/declaration-sibling/Foo.svelte.d.ts",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/declaration-sibling/Foo.svelte.d.ts",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/different-module/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/different-module/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/different-module/foo-state.svelte.ts",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/different-module/foo-state.svelte.ts",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
+      "output": null
+    },
+    {
+      "id": "no-conflicting-module-names/valid/no-sibling/Foo.svelte",
+      "rule": "no-conflicting-module-names",
+      "kind": "valid",
+      "filename": "upstream/no-conflicting-module-names/valid/no-sibling/Foo.svelte",
+      "configFile": null,
+      "config": {},
+      "executableConfig": false,
+      "requirements": {},
+      "ineligible": [],
+      "gates": [],
+      "fixable": false,
+      "errors": [],
       "output": null
     },
     {

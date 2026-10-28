@@ -1,11 +1,19 @@
 # Plan: implement `svelte/no-conflicting-module-names`
 
-Status: researched 28OCT2026, not yet implemented. This is the one rule that
-has synced fixtures in `fixtures/linter/upstream/` (eslint-plugin-svelte
-3.23.1) but no Rust implementation — the other 83 upstream fixture rules are
-all covered (`indent` lives in the `indent/` module directory;
+Status: **implemented** (28OCT2026). This was the one rule that had synced
+fixtures in `fixtures/linter/upstream/` (eslint-plugin-svelte 3.23.1) but no
+Rust implementation — the other 83 upstream fixture rules were already
+covered (`indent` lives in the `indent/` module directory;
 `@typescript-eslint/no-unnecessary-condition` maps to our native
-`no_unnecessary_condition.rs`).
+`no_unnecessary_condition.rs`). Landed: the rule
+(`src/linter/rules/no_conflicting_module_names.rs` with the pure
+`sibling_conflict` check), registration, all-8-extension module routing
+(`linter::svelte_module_ts_kind` shared by `main.rs`, the lib fixture
+harness, and `tests/upstream_parity.rs`), synthesized manifest cases (23,
+all passing in the fixture suite and upstream parity), and the general
+`src/watch.rs` notify worker (debounced event loop, sibling re-check) with
+unit tests. Service-mode CLI argument and JSON stdio protocol remain
+deferred to the editor-extension project, as planned.
 
 ## What the rule does
 

@@ -220,8 +220,8 @@ fn lint_case(lint: &Linter, source: &str, path: &str, config: RuleConfig, issues
         if !errors.is_empty() {
             issues.insert("parse_errors".into(), json!(errors));
         }
-        if path.ends_with(".svelte.js") || path.ends_with(".svelte.ts") {
-            lint.lint_svelte_script_with_config_and_path(source, path.ends_with(".ts"), config, path)
+        if let Some(is_ts) = oxvelte::linter::svelte_module_ts_kind(path) {
+            lint.lint_svelte_script_with_config_and_path(source, is_ts, config, path)
         } else {
             lint.lint_script_with_config_and_path(source, config, path)
         }

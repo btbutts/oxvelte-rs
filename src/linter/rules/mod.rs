@@ -14,6 +14,7 @@ mod no_at_const_tags;
 mod no_at_debug_tags;
 mod no_at_html_tags;
 mod no_bind_value_on_checkable_inputs;
+pub mod no_conflicting_module_names;
 mod no_dom_manipulating;
 mod no_dupe_else_if_blocks;
 mod no_dupe_on_directives;
@@ -250,6 +251,7 @@ pub fn all_rules() -> Vec<Box<dyn Rule>> {
         Box::new(prefer_derived_over_derived_by::PreferDerivedOverDerivedBy),
         Box::new(prefer_attribute_interpolation::PreferAttributeInterpolation),
         Box::new(no_bind_value_on_checkable_inputs::NoBindValueOnCheckableInputs),
+        Box::new(no_conflicting_module_names::NoConflictingModuleNames),
         Box::new(require_stores_init::RequireStoresInit),
         Box::new(no_add_event_listener::NoAddEventListener),
         Box::new(block_lang::BlockLang),

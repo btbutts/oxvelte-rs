@@ -244,7 +244,7 @@ fn cmd_lint(
             };
             let path_str = path.to_string_lossy();
             let is_svelte = path.extension().is_some_and(|e| e == "svelte");
-            let is_svelte_module = path_str.ends_with(".svelte.js") || path_str.ends_with(".svelte.ts");
+            let svelte_module_kind = linter::svelte_module_ts_kind(&path_str);
             let file_path_owned = path_str.to_string();
             // None means an internal panic — the file is skipped entirely.
             let run_lint = |source: &str| -> Option<Vec<linter::LintDiagnostic>> {
@@ -286,8 +286,7 @@ fn cmd_lint(
                             None
                         }
                     }
-                } else if is_svelte_module {
-                    let is_ts = path_str.ends_with(".ts");
+                } else if let Some(is_ts) = svelte_module_kind {
                     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         lint.lint_svelte_script_with_project_config_and_path(source, is_ts, &config, &file_path_owned)
                     })) {

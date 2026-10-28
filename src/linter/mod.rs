@@ -731,6 +731,30 @@ fn is_ts_like_path(file_path: &str) -> bool {
     file_path.ends_with(".ts") || file_path.ends_with(".mts")
 }
 
+/// If `file_path` names a `.svelte.<ext>` runes module, returns
+/// `Some(is_ts)` for script-lint routing (`true` for the TypeScript-flavored
+/// extensions). Covers all eight module extensions that
+/// `svelte/no-conflicting-module-names` and Svelte's runes modules
+/// recognize: `.ts .tsx .js .jsx .mts .cts .mjs .cjs`.
+pub fn svelte_module_ts_kind(file_path: &str) -> Option<bool> {
+    let name = file_path.rsplit(['/', '\\']).next().unwrap_or(file_path);
+    for (ext, is_ts) in [
+        (".svelte.ts", true),
+        (".svelte.tsx", true),
+        (".svelte.mts", true),
+        (".svelte.cts", true),
+        (".svelte.js", false),
+        (".svelte.jsx", false),
+        (".svelte.mjs", false),
+        (".svelte.cjs", false),
+    ] {
+        if name.ends_with(ext) {
+            return Some(is_ts);
+        }
+    }
+    None
+}
+
 /// Byte offset in the original source where a `<script ...>` block's content starts
 /// (i.e. just after the open tag's `>`).
 fn script_content_offset(script: &Script, _source: &str) -> u32 {

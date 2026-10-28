@@ -178,6 +178,44 @@ export function buildManifest(files, versions = environment, coreRules = builtin
       config, executableConfig: Boolean(executableConfig), requirements, ineligible: [...ineligible(requirements, versions), ...metadata.ineligible],
       gates: metadata.gates, fixable, errors, output });
   }
+  // `no-conflicting-module-names` is validated upstream by custom
+  // RuleTester tests over ordinary filenames (no `*-input.svelte`, no
+  // `-errors.yaml`), so the loader loop above skips it. Synthesize its
+  // cases from the directory layout; expectations mirror upstream
+  // tests/src/rules/no-conflicting-module-names.ts (one error per invalid
+  // file, line 1 column 1).
+  const NCNM = 'no-conflicting-module-names';
+  const NCNM_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx', '.mts', '.cts', '.mjs', '.cjs'];
+  const ncnmPrefix = `tests/fixtures/rules/${NCNM}/`;
+  const ncnmFiles = [...files.keys()].filter((name) => name.startsWith(ncnmPrefix));
+  if (ncnmFiles.length) {
+    if (!ruleMetadataCache.has(`src/rules/${NCNM}.ts`)) ruleMetadataCache.set(`src/rules/${NCNM}.ts`, ruleMetadata(get(`src/rules/${NCNM}.ts`) ?? '', versions, coreRules));
+    const metadata = ruleMetadataCache.get(`src/rules/${NCNM}.ts`);
+    for (const fullPath of ncnmFiles) {
+      const id = fullPath.slice('tests/fixtures/rules/'.length);
+      const rel = fullPath.slice(ncnmPrefix.length);
+      const parts = rel.split('/');
+      const kind = parts[0];
+      if (kind !== 'valid' && kind !== 'invalid') continue;
+      const base = parts.at(-1);
+      rules.add(NCNM);
+      let errors = [];
+      if (kind === 'invalid') {
+        if (base.endsWith('.svelte')) {
+          const ext = NCNM_EXTENSIONS.find((e) => ncnmFiles.includes(`${ncnmPrefix}${rel.slice(0, -base.length)}${base}${e}`));
+          const moduleName = `${base}${ext}`;
+          errors = [{ message: `The module \`${moduleName}\` has the same name as this component. TypeScript resolves the import \`./${base}\` to that module, not to this component. Rename \`${moduleName}\`.`, line: 1, column: 1 }];
+        } else {
+          const ext = NCNM_EXTENSIONS.find((e) => base.endsWith(e));
+          const svelteName = base.slice(0, -ext.length);
+          errors = [{ message: `This module has the same name as the component \`${svelteName}\`. TypeScript resolves the import \`./${svelteName}\` to this module, not to the component. Rename this file.`, line: 1, column: 1 }];
+        }
+      }
+      cases.push({ id, rule: NCNM, kind, filename: fullPath, configFile: null,
+        config: {}, executableConfig: false, requirements: {}, ineligible: [...ineligible({}, versions), ...metadata.ineligible],
+        gates: metadata.gates, fixable: false, errors, output: null });
+    }
+  }
   cases.sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
   if (!cases.length) throw new Error('No fixture cases discovered');
   return { schema: 1, repository, revision, version: '3.23.0', environment: versions,

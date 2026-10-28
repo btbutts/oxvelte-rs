@@ -4,6 +4,7 @@ mod compiler_ignore;
 pub mod config;
 pub mod linter;
 pub mod parser;
+pub mod watch;
 
 #[cfg(feature = "custom-rules")]
 pub mod custom_rules;
@@ -154,8 +155,7 @@ mod linter_fixture_tests {
             let alloc = oxc::allocator::Allocator::default();
             let result = parser::parse(source, &alloc);
             lint.lint_with_config_and_path(&result.ast, source, config, file_path)
-        } else if file_path.ends_with(".svelte.js") || file_path.ends_with(".svelte.ts") {
-            let is_ts = file_path.ends_with(".ts");
+        } else if let Some(is_ts) = crate::linter::svelte_module_ts_kind(file_path) {
             lint.lint_svelte_script_with_config_and_path(source, is_ts, config, file_path)
         } else {
             lint.lint_script_with_config_and_path(source, config, file_path)
@@ -338,6 +338,14 @@ mod linter_fixture_tests {
     #[test]
     fn linter_no_at_debug_tags_invalid() {
         run_linter_invalid("no-at-debug-tags");
+    }
+    #[test]
+    fn linter_no_conflicting_module_names_valid() {
+        run_linter_valid("no-conflicting-module-names");
+    }
+    #[test]
+    fn linter_no_conflicting_module_names_invalid() {
+        run_linter_invalid("no-conflicting-module-names");
     }
     #[test]
     fn linter_button_has_type_valid() {

@@ -7,7 +7,7 @@
 > [!NOTE]
 > **This is a fork of [tolgaouz/oxvelte](https://github.com/tolgaouz/oxvelte).** oxvelte was created by [@tolgaouz](https://github.com/tolgaouz), and all credit for the original design and implementation goes to him. The original repository looks to be no longer actively developed, so this fork ([billpeet/oxvelte](https://github.com/billpeet/oxvelte)) continues the work. It is not affiliated with or endorsed by the original author.
 
-A Svelte linter with native Rust rules and optional bun/Node.js compiler and type checks. All 1,293 eligible fixtures in the pinned [eslint-plugin-svelte](https://github.com/sveltejs/eslint-plugin-svelte) suite match. See the [parity report](docs/research/upstream-parity-seventh-wave.md) for scope and runtime requirements.
+A Svelte linter with native Rust rules and optional bun/Node.js compiler and type checks. All 1,316 eligible fixtures in the pinned [eslint-plugin-svelte](https://github.com/sveltejs/eslint-plugin-svelte) suite match. See the [parity report](docs/research/upstream-parity-seventh-wave.md) for scope and runtime requirements.
 
 All 1,362 imported cases pass across the [pinned version matrix](docs/research/upstream-parity-version-matrix.md), including the 67 cases skipped in the primary environment.
 
