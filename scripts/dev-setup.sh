@@ -21,10 +21,26 @@ set -euo pipefail
 # or its package.json is newer than the last install, and the fixture trees
 # are only fetched when empty. release.sh runs this script before building
 # and testing.
+#
+# Usage: dev-setup.sh [--skip-cargo-tests]
+#   --skip-cargo-tests  Do not run `cargo test --release` after fetching
+#                       fixtures (by default the full release-profile test
+#                       suite runs whenever fixtures were fetched).
 
 cd "$(dirname "$0")/.."
 
 SCRIPTS_BIN=()
+SKIP_CARGO_TESTS=false
+
+for arg in "$@"; do
+    case "$arg" in
+        --skip-cargo-tests) SKIP_CARGO_TESTS=true ;;
+        *)
+            printf '%s\n' "error: unknown argument '$arg' (supported: --skip-cargo-tests)" >&2
+            exit 2
+            ;;
+    esac
+done
 
 # 1. Populate paths
 for tool in bun node npm cargo; do
@@ -93,9 +109,12 @@ needs_fixtures() {
     [ -z "$(find "$1" -mindepth 1 -print -quit)" ]
 }
 
+changed_fixtures=""
+
 if needs_fixtures fixtures/parser/upstream; then
     echo "Fetching parser fixtures (cargo get-svelte-fixtures)..."
     cargo get-svelte-fixtures
+    changed_fixtures="1"
 else
     echo "fixtures/parser: parser fixtures already populated."
 fi
@@ -103,8 +122,17 @@ fi
 if needs_fixtures fixtures/linter/upstream; then
     echo "Fetching ESLint rule fixtures (cargo get-eslint-fixtures)..."
     cargo get-eslint-fixtures
+    changed_fixtures="1"
 else
     echo "fixtures/linter/upstream: ESLint rule fixtures already populated."
+fi
+
+# Freshly fetched fixtures have never been exercised on this machine — prove
+# them (and the freshly built tree) with the full release-profile test suite,
+# unless --skip-cargo-tests was passed.
+if [ "$changed_fixtures" = "1" ] && [ "$SKIP_CARGO_TESTS" != "true" ]; then
+    echo "Fixtures were fetched; running the full test suite (cargo test --release)..."
+    cargo test --release
 fi
 
 echo "Dev dependencies are ready."

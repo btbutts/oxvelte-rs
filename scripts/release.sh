@@ -27,8 +27,10 @@ echo ""
 
 # Make sure the local dependencies the build and tests need are installed —
 # the compiler fixture tests below fail without the Svelte compiler packages
-# under scripts/compiler-runtime/node_modules.
-"$(dirname "$0")/dev-setup.sh"
+# under scripts/compiler-runtime/node_modules. This script runs its own test
+# suites below, so dev-setup.sh's post-fetch `cargo test --release` is
+# skipped here.
+"$(dirname "$0")/dev-setup.sh" --skip-cargo-tests
 echo ""
 
 # Update Cargo.toml
