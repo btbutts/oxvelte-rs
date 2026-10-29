@@ -1,4 +1,0 @@
-- message: Unexpected top-level browser global variable "window".
-  line: 3
-  column: 28
-  suggestions: null

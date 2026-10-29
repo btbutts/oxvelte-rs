@@ -1,9 +1,0 @@
-{
-	"options": [
-		{
-			"checkImportedTypes": true,
-			"ignoreTypePatterns": ["BaseProps"],
-			"ignorePropertyPatterns": ["/^(_|baz)/"]
-		}
-	]
-}

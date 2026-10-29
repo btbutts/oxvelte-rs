@@ -1042,8 +1042,20 @@ mod parser_fixture_tests {
         diffs
     }
 
+    // Parser fixtures live under two roots: `upstream/` (byte-identical sync
+    // target for the pinned sveltejs/svelte release) and `local/` (our own
+    // hand-maintained samples the importer never writes).
+    pub(crate) fn parser_fixture_dir(suite: &str, name: &str) -> String {
+        let upstream = format!("fixtures/parser/upstream/{}/{}", suite, name);
+        if std::path::Path::new(&upstream).is_dir() {
+            upstream
+        } else {
+            format!("fixtures/parser/local/{}/{}", suite, name)
+        }
+    }
+
     fn run_legacy_fixture(name: &str) {
-        let fixture_dir = format!("fixtures/parser/legacy/{}", name);
+        let fixture_dir = parser_fixture_dir("legacy", name);
         let input_path = format!("{}/input.svelte", fixture_dir);
         let output_path = format!("{}/output.json", fixture_dir);
 
@@ -1237,7 +1249,7 @@ mod modern_fixture_tests {
     }
 
     fn run_modern_fixture(name: &str) {
-        let fixture_dir = format!("fixtures/parser/modern/{}", name);
+        let fixture_dir = crate::parser_fixture_tests::parser_fixture_dir("modern", name);
         let input_path = format!("{}/input.svelte", fixture_dir);
         let output_path = format!("{}/output.json", fixture_dir);
 

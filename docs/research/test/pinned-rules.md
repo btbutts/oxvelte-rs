@@ -210,8 +210,12 @@ fixtures/linter/                  # the ONE fixture home
       valid/   *.svelte (+ companions)
       invalid/ *.svelte + companions
 fixtures/parser/                  # parser AST samples from sveltejs/svelte (see below)
-  legacy/<sample>/{input.svelte,output.json}
-  modern/<sample>/{input.svelte,output.json}
+  upstream/                       # byte-identical mirror of upstream's parser samples — sync target
+    legacy/<sample>/{input.svelte,output.json}
+    modern/<sample>/{input.svelte,output.json}
+  local/                          # our own samples, same layout, hand-maintained — import.mjs never writes here
+    legacy/<sample>/{input.svelte,output.json}
+    modern/<sample>/{input.svelte,output.json}
 ```
 
 Gone: `fixtures/upstream/eslint-plugin-svelte/` entirely — no `src/rules/`
@@ -371,10 +375,13 @@ Mechanics (working): `fetchGithubRelease("sveltejs", "svelte", <pinned tag>)`,
 one `extractMembers` call covering
 `packages/svelte/tests/parser-legacy/samples/` and
 `packages/svelte/tests/parser-modern/samples/`, then one `syncRuleDirs` call
-per suite into `fixtures/parser/{legacy,modern}/` with the matching label
-prefix, status report, temp dir discarded. No manifest — these fixtures are
-self-describing (`input.svelte` + `output.json` per sample) and are consumed
-by the `cargo test --lib` harnesses in `src/lib.rs` unchanged.
+per suite into `fixtures/parser/upstream/{legacy,modern}/` with the matching
+label prefix, status report, temp dir discarded. No manifest — these fixtures
+are self-describing (`input.svelte` + `output.json` per sample) and are
+consumed by the `cargo test --lib` harnesses in `src/lib.rs`, which resolve
+each sample under `fixtures/parser/upstream/` first and fall back to
+`fixtures/parser/local/` for our own hand-maintained samples
+(`loose-unclosed-nested-at-eof`).
 
 ## Test-harness changes required
 

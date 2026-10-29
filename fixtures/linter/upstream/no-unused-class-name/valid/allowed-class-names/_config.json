@@ -1,3 +1,0 @@
-{
-	"options": [{ "allowedClassNames": ["div-class", "span-class", "/^p-\\d{1,2}$/"] }]
-}

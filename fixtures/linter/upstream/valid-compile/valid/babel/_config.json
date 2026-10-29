@@ -1,7 +1,0 @@
-{
-	"languageOptions": {
-		"parserOptions": {
-			"parser": "@babel/eslint-parser"
-		}
-	}
-}

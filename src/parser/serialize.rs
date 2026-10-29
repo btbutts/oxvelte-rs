@@ -2,7 +2,7 @@
 //!
 //! This module converts our internal AST representation into `serde_json::Value`
 //! matching the expected output from the Svelte 4 compiler's parser, so we can
-//! compare against the test fixtures in `fixtures/parser/legacy/`.
+//! compare against the test fixtures in `fixtures/parser/upstream/legacy/`.
 
 use crate::ast::*;
 use serde_json::{Value, json};

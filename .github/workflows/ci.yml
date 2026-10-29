@@ -21,6 +21,10 @@ jobs:
           node-version: 22
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: scripts/compiler-runtime
+      # The pinned upstream fixture trees are not tracked in git (see
+      # docs/research/test/pinned-rules.md); fetch them before testing.
+      - run: cargo get-svelte-fixtures
+      - run: cargo get-eslint-fixtures
       - run: cargo test --lib
       - run: cargo test --test parser_lint_contract
       - run: cargo build --release
@@ -48,6 +52,10 @@ jobs:
         working-directory: scripts/compiler-runtime
       - run: node --test tests/compiler-configuration.test.mjs
       - run: node --test scripts/summarize-parity.test.mjs
+      # The pinned upstream fixture trees are not tracked in git; fetch them
+      # before running the parity suites.
+      - run: cargo get-svelte-fixtures
+      - run: cargo get-eslint-fixtures
       - run: cargo test --locked --test upstream_adapter
       - run: cargo test --locked --test jobsys_regressions
       - run: cargo test --locked --test upstream_parity -- --report reports/upstream-parity.json
@@ -74,6 +82,10 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
         working-directory: scripts/get-fixtures
       - run: node --test scripts/version-matrix/run.test.mjs
+      # The pinned upstream fixture trees are not tracked in git; fetch them
+      # before running the version matrix.
+      - run: cargo get-svelte-fixtures
+      - run: cargo get-eslint-fixtures
       - run: node scripts/version-matrix/run.mjs --profile ${{ matrix.profile }}
       - uses: actions/upload-artifact@v4
         if: always()

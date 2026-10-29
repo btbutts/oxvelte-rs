@@ -1,8 +1,0 @@
-{
-	"options": [
-		{
-			"script": ["ts", "typescript", null],
-			"style": ["ts", "typescript", null]
-		}
-	]
-}

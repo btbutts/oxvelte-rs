@@ -1,7 +1,0 @@
-{
-	"options": [
-		{
-			"ignorePropertyPatterns": ["/^[#$@_~]/"]
-		}
-	]
-}

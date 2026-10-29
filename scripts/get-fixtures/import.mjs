@@ -325,14 +325,16 @@ async function importEslintRuleFixtures() {
   }
 }
 
-// Job: refresh fixtures/parser/{legacy,modern}/ from the pinned sveltejs/svelte
-// release tag. Additive only — see docs/research/test/pinned-rules.md.
+// Job: refresh fixtures/parser/upstream/{legacy,modern}/ from the pinned
+// sveltejs/svelte release tag. Additive only — see
+// docs/research/test/pinned-rules.md. fixtures/parser/local/ is never
+// written.
 async function importSvelteParserFixtures() {
   const tag = process.env.OXVELTE_FIXTURES_SVELTE_TAG;
   if (!tag) throw new Error('OXVELTE_FIXTURES_SVELTE_TAG is not set; run via `cargo get-svelte-fixtures`');
   const suites = [
-    { prefix: 'packages/svelte/tests/parser-legacy/samples/', dest: 'fixtures/parser/legacy', label: 'Svelte Legacy Parser' },
-    { prefix: 'packages/svelte/tests/parser-modern/samples/', dest: 'fixtures/parser/modern', label: 'Svelte Modern Parser' },
+    { prefix: 'packages/svelte/tests/parser-legacy/samples/', dest: 'fixtures/parser/upstream/legacy', label: 'Svelte Legacy Parser' },
+    { prefix: 'packages/svelte/tests/parser-modern/samples/', dest: 'fixtures/parser/upstream/modern', label: 'Svelte Modern Parser' },
   ];
   const tmp = mkdtempSync(path.join(os.tmpdir(), 'oxvelte-fixtures-'));
   try {
