@@ -9,83 +9,63 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
+  tests:
     env:
       OXVELTE_COMPILER_RUNTIME: ${{ github.workspace }}/scripts/compiler-runtime
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --ignore-scripts
-        working-directory: scripts/compiler-runtime
-      # The pinned upstream fixture trees are not tracked in git (see
-      # docs/research/test/pinned-rules.md); fetch them before testing.
-      - run: cargo get-svelte-fixtures
-      - run: cargo get-eslint-fixtures
-      - run: cargo test --lib
-      - run: cargo test --test parser_lint_contract
-      - run: cargo build --release
-
-  upstream-parity:
-    env:
-      OXVELTE_COMPILER_RUNTIME: ${{ github.workspace }}/scripts/compiler-runtime
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --ignore-scripts
-        working-directory: scripts/get-fixtures
-      - run: bun test
-        working-directory: scripts/get-fixtures
-      - run: bun install --ignore-scripts
-        working-directory: scripts/compiler-runtime
-      - run: bun test
-        working-directory: scripts/compiler-runtime
-      - run: bun test tests/compiler-configuration.test.mjs
-      - run: bun test scripts/summarize-parity.test.mjs
-      # The pinned upstream fixture trees are not tracked in git; fetch them
-      # before running the parity suites. The launcher's runtime probe picks
-      # bun here, so import.mjs runs under bun.
-      - run: cargo get-svelte-fixtures
-      - run: cargo get-eslint-fixtures
-      - run: cargo test --locked --test upstream_adapter
-      - run: cargo test --locked --test jobsys_regressions
-      - run: cargo test --locked --test upstream_parity -- --report reports/upstream-parity.json
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: upstream-parity-${{ matrix.os }}
-          path: reports/upstream-parity.json
-
-
-  upstream-version-matrix:
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
-        profile: [modern, svelte4, legacyparser, svelte3]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: oven-sh/setup-bun@v2
-      - run: bun install --ignore-scripts
-        working-directory: scripts/get-fixtures
-      - run: bun test scripts/version-matrix/run.test.mjs
-      # The pinned upstream fixture trees are not tracked in git; fetch them
-      # before running the version matrix.
-      - run: cargo get-svelte-fixtures
-      - run: cargo get-eslint-fixtures
-      - run: bun scripts/version-matrix/run.mjs --profile ${{ matrix.profile }}
+
+      - name: Install JS dependencies
+        shell: bash
+        run: |
+          (cd scripts/compiler-runtime && bun install --ignore-scripts)
+          (cd scripts/get-fixtures && bun install --ignore-scripts)
+
+      # The pinned upstream fixture trees are not tracked in git (see
+      # docs/research/test/pinned-rules.md); fetch them before anything that
+      # reads them. The launcher prefers bun, so import.mjs runs under bun.
+      - name: Fetch pinned upstream fixtures
+        run: |
+          cargo get-svelte-fixtures
+          cargo get-eslint-fixtures
+
+      - name: Run JS test suites
+        shell: bash
+        run: |
+          (cd scripts/get-fixtures && bun test)
+          (cd scripts/compiler-runtime && bun test)
+          bun test tests/compiler-configuration.test.mjs
+          bun test scripts/summarize-parity.test.mjs
+          bun test scripts/version-matrix/run.test.mjs
+
+      - name: Run Rust test suites
+        run: |
+          cargo test --lib
+          cargo test --test parser_lint_contract
+          cargo test --locked --test upstream_adapter
+          cargo test --locked --test jobsys_regressions
+          cargo test --locked --test upstream_parity -- --report reports/upstream-parity.json
+
+      # Sequential profiles: the parity test binary is compiled once above
+      # and reused by every profile, so this adds no compilation cost.
+      - name: Run upstream version matrix
+        shell: bash
+        run: |
+          for profile in modern svelte4 legacyparser svelte3; do
+            bun scripts/version-matrix/run.mjs --profile "$profile"
+          done
+
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: upstream-matrix-${{ matrix.profile }}-${{ matrix.os }}
+          name: test-reports-${{ matrix.os }}
           path: |
-            reports/version-matrix/${{ matrix.profile }}/parity.json
-            reports/version-matrix/summary-${{ matrix.profile }}.json
+            reports/upstream-parity.json
+            reports/version-matrix/
