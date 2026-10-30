@@ -428,7 +428,10 @@ mod tests {
             OsString::from("bun")
         );
         assert_eq!(
-            resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["node", {"path": existing_str}]}))).unwrap(),
+            resolve_js_runtime(Some(
+                &serde_json::json!({"js-runtime": ["node", {"path": existing_str}]})
+            ))
+            .unwrap(),
             OsString::from(existing_str)
         );
         assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": "deno"}))).is_err());

@@ -189,7 +189,8 @@ pub fn is_regression(baseline: &Signatures, id: &str, dimension: &str, signature
 }
 
 pub fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
+    // sha2 0.11's output Array no longer implements LowerHex — hex-encode by hand.
+    Sha256::digest(bytes).iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 /// The linter sees the real source file for project resolution. Messages compare
