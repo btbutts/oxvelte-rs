@@ -31,7 +31,11 @@ jobs:
       # The pinned upstream fixture trees are not tracked in git (see
       # docs/research/test/pinned-rules.md); fetch them before anything that
       # reads them. The launcher prefers bun, so import.mjs runs under bun.
+      # All multi-command steps use bash everywhere: the Windows default
+      # (pwsh) does not stop on native command failures, which would mask a
+      # failing middle command behind a passing last one.
       - name: Fetch pinned upstream fixtures
+        shell: bash
         run: |
           cargo get-svelte-fixtures
           cargo get-eslint-fixtures
@@ -46,6 +50,7 @@ jobs:
           bun test scripts/version-matrix/run.test.mjs
 
       - name: Run Rust test suites
+        shell: bash
         run: |
           cargo test --lib
           cargo test --test parser_lint_contract

@@ -421,13 +421,15 @@ mod tests {
     #[test]
     fn js_runtime_config_parsing() {
         use std::ffi::OsString;
+        let existing = std::env::current_exe().unwrap();
+        let existing_str = existing.to_str().unwrap();
         assert_eq!(
             resolve_js_runtime(Some(&serde_json::json!({"js-runtime": "bun"}))).unwrap(),
             OsString::from("bun")
         );
         assert_eq!(
-            resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["node", {"path": "/bin/sh"}]}))).unwrap(),
-            OsString::from("/bin/sh")
+            resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["node", {"path": existing_str}]}))).unwrap(),
+            OsString::from(existing_str)
         );
         assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": "deno"}))).is_err());
         assert!(
@@ -436,7 +438,7 @@ mod tests {
             ))
             .is_err()
         );
-        assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": [{"path": "/bin/sh"}]}))).is_err());
+        assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": [{"path": existing_str}]}))).is_err());
         assert!(resolve_js_runtime(Some(&serde_json::json!({"js-runtime": ["bun"]}))).is_err());
     }
 }
