@@ -59,25 +59,26 @@ elif [[ "${SCRIPTS_BIN[*]}" != *"/cargo"* ]]; then
     exit 1
 fi
 
-# 2. Designate the JavaScript runtime: bun preferred, node fallback. node
-# cannot install packages by itself, so on the node-only path js_runtime
-# holds npm's path and the install runs through it.
-js_runtime=""
+# 2. Designate the JavaScript tooling: bun preferred, node fallback.
+# js_runtime is the interpreter (bun or node — runs -p/-e expressions);
+# js_installer is the package installer (bun, or npm on the node-only path,
+# since node cannot install packages by itself).
 for bin in "${SCRIPTS_BIN[@]}"; do
     case "$bin" in
-        */bun) js_runtime="$bin"; break ;;
+        */bun) js_runtime="$bin"; js_installer="$bin"; break ;;
     esac
 done
 if [ -z "$js_runtime" ]; then
     if [[ "${SCRIPTS_BIN[*]}" != *"/npm"* ]]; then
         printf '%s%s%s\n' "error: " \
-            "'node' was found but 'npm' was not; " \
-            "install npm, or install bun to replace both." >&2
+            "'node' was found in PATH but 'npm' was not; " \
+            "include npm, or install bun to replace both." >&2
         exit 1
     fi
     for bin in "${SCRIPTS_BIN[@]}"; do
         case "$bin" in
-            */npm) js_runtime="$bin"; break ;;
+            */node) js_runtime="$bin" ;;
+            */npm)  js_installer="$bin" ;;
         esac
     done
 fi
@@ -90,16 +91,54 @@ js_projects=(
 for dir in "${js_projects[@]}"; do
     stamp="${dir}/node_modules/.dev-setup-stamp"
     if [ ! -d "${dir}/node_modules" ]; then
-        echo "Installing JS dependencies in ${dir} with $(basename "$js_runtime") (node_modules is missing)..."
+        echo "Installing JS dependencies in ${dir} with $(basename "$js_installer") (node_modules is missing)..."
     elif [ ! -f "$stamp" ] || [ "${dir}/package.json" -nt "$stamp" ]; then
-        echo "Reinstalling JS dependencies in ${dir} with $(basename "$js_runtime") (package.json changed)..."
+        echo "Reinstalling JS dependencies in ${dir} with $(basename "$js_installer") (package.json changed)..."
     else
         echo "${dir}: JS dependencies up to date."
         continue
     fi
-    (cd "$dir" && "$js_runtime" install --ignore-scripts)
+    (cd "$dir" && "$js_installer" install --ignore-scripts)
     touch "$stamp"
 done
+
+# Keep the vendored sourcemap-codec in lockstep with the pinned dependency:
+# scripts/compiler.rs embeds vendor/sourcemap-codec.cjs into the binary via
+# include_str!, and that file is simply the upstream UMD build with our
+# license header prepended. Regenerate it whenever the pinned version in
+# scripts/compiler-runtime/package.json no longer matches the header. Paths
+# are resolved absolutely so the script works from any invocation directory.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+codec_dir="$SCRIPT_DIR/compiler-runtime"
+codec_source="$codec_dir/node_modules/@jridgewell/sourcemap-codec/dist/sourcemap-codec.umd.js"
+codec_target="$codec_dir/vendor/sourcemap-codec.cjs"
+codec_license="$codec_dir/vendor/sourcemap-codec.LICENSE"
+
+vendor_ver=""
+if [ -f "$codec_target" ]; then
+    # The first header line carries the version: /* @jridgewell/sourcemap-codec X.Y.Z, MIT.
+    vendor_ver=$(head -n 1 "$codec_target" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || true)
+fi
+
+pkg_ver=$("$js_runtime" -p "require('$codec_dir/package.json').dependencies['@jridgewell/sourcemap-codec']")
+
+if [ -n "$pkg_ver" ] && [ "$pkg_ver" != "null" ] && [ "$pkg_ver" != "undefined" ] && [ "$pkg_ver" != "$vendor_ver" ]; then
+    echo "Syncing vendored sourcemap-codec to version $pkg_ver (vendored: ${vendor_ver:-none})..."
+    # Make sure node_modules actually holds the pinned version before copying
+    # from it — the js_projects loop above skips installs that look up to date.
+    (cd "$codec_dir" && "$js_installer" install --ignore-scripts)
+    {
+        echo "/* @jridgewell/sourcemap-codec $pkg_ver, MIT."
+        cat "$codec_license"
+        echo "*/"
+        cat "$codec_source"
+    } > "${codec_target}.tmp" && mv "${codec_target}.tmp" "$codec_target"
+    # The embedded runtime changed; prove it with the full suite below.
+    changed_fixtures="1"
+else
+    echo "sourcemap-codec: vendored copy matches pinned version ($pkg_ver)."
+fi
 
 # Fetch the pinned upstream fixture trees when they are missing or empty.
 # import.mjs creates these directories on first sync; our hand-maintained
@@ -108,8 +147,6 @@ needs_fixtures() {
     [ -d "$1" ] || return 0
     [ -z "$(find "$1" -mindepth 1 -print -quit)" ]
 }
-
-changed_fixtures=""
 
 if needs_fixtures fixtures/parser/upstream; then
     echo "Fetching parser fixtures (cargo get-svelte-fixtures)..."

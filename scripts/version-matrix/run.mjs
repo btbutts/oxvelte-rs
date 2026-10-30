@@ -96,7 +96,30 @@ export function summarizeMatrix(original, reports) {
     uncovered: skippedCases.filter((entry) => !entry.covered).map((entry) => entry.id), cases: skippedCases };
 }
 
+// Locate an executable on PATH (bun is a real binary everywhere; npm needs
+// the npm-cli.js dance below because it is a shell script on Windows).
+function findOnPath(bin) {
+  const exts = process.platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
+  for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+    for (const ext of exts) {
+      const candidate = path.join(directory, bin + ext);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
+}
+
 function install(name) {
+  // bun preferred, npm fallback — the same runtime policy as
+  // scripts/dev-setup.sh and scripts/launcher.rs. Profile dependencies are
+  // exact pins (verified after install below), so either installer lands the
+  // same tree.
+  const bun = findOnPath('bun');
+  if (bun) {
+    const result = spawnSync(bun, ['install', '--ignore-scripts'], { cwd: path.join(profilesRoot, name), stdio: 'inherit' });
+    if (result.error || result.status !== 0) throw new Error(`bun install failed for ${name}: ${result.error?.message ?? result.status}`);
+    return;
+  }
   const args = ['ci', '--prefix', path.join(profilesRoot, name), '--ignore-scripts', '--no-audit', '--no-fund'];
   let result;
   if (process.platform === 'win32') {
@@ -105,7 +128,7 @@ function install(name) {
     const candidates = [process.env.npm_execpath, ...[path.dirname(process.execPath), ...(process.env.PATH ?? '').split(path.delimiter)]
       .map((directory) => path.join(directory, 'node_modules/npm/bin/npm-cli.js'))];
     const cli = candidates.find((candidate) => candidate && existsSync(candidate));
-    if (!cli) throw new Error('Cannot locate npm-cli.js; install each profile with npm ci and use --no-install');
+    if (!cli) throw new Error('Cannot locate bun or npm-cli.js; install each profile with bun install or npm ci and use --no-install');
     result = spawnSync(process.execPath, [cli, ...args], { cwd: root, stdio: 'inherit' });
   } else result = spawnSync('npm', args, { cwd: root, stdio: 'inherit' });
   if (result.error || result.status !== 0) throw new Error(`npm ci failed for ${name}: ${result.error?.message ?? result.status}`);

@@ -16,10 +16,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --ignore-scripts
         working-directory: scripts/compiler-runtime
       # The pinned upstream fixture trees are not tracked in git (see
       # docs/research/test/pinned-rules.md); fetch them before testing.
@@ -39,21 +37,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --ignore-scripts
         working-directory: scripts/get-fixtures
-      - run: npm test
+      - run: bun test
         working-directory: scripts/get-fixtures
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: bun install --ignore-scripts
         working-directory: scripts/compiler-runtime
-      - run: npm test
+      - run: bun test
         working-directory: scripts/compiler-runtime
-      - run: node --test tests/compiler-configuration.test.mjs
-      - run: node --test scripts/summarize-parity.test.mjs
+      - run: bun test tests/compiler-configuration.test.mjs
+      - run: bun test scripts/summarize-parity.test.mjs
       # The pinned upstream fixture trees are not tracked in git; fetch them
-      # before running the parity suites.
+      # before running the parity suites. The launcher's runtime probe picks
+      # bun here, so import.mjs runs under bun.
       - run: cargo get-svelte-fixtures
       - run: cargo get-eslint-fixtures
       - run: cargo test --locked --test upstream_adapter
@@ -76,17 +73,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --ignore-scripts
         working-directory: scripts/get-fixtures
-      - run: node --test scripts/version-matrix/run.test.mjs
+      - run: bun test scripts/version-matrix/run.test.mjs
       # The pinned upstream fixture trees are not tracked in git; fetch them
       # before running the version matrix.
       - run: cargo get-svelte-fixtures
       - run: cargo get-eslint-fixtures
-      - run: node scripts/version-matrix/run.mjs --profile ${{ matrix.profile }}
+      - run: bun scripts/version-matrix/run.mjs --profile ${{ matrix.profile }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:

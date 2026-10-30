@@ -3,6 +3,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+// The sessions below point at temp-dir components; default the runtime to
+// this directory (which has typescript installed) so the tests do not depend
+// on OXVELTE_COMPILER_RUNTIME being set in the environment — same fallback as
+// typescript-conditions.test.cjs.
+process.env.OXVELTE_COMPILER_RUNTIME ||= __dirname;
 const { createSession } = require('./typescript-service.cjs');
 
 function session(script, extras = {}) {

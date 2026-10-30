@@ -12,10 +12,38 @@ const sourceMapCodec = typeof embeddedSourceMapCodec === 'undefined'
 const protocolWrite = process.stdout.write.bind(process.stdout);
 const diagnosticWrite = process.stderr.write.bind(process.stderr);
 process.stdout.write = (...args) => diagnosticWrite(...args);
+// bun's console methods write to the real stdout natively without going
+// through process.stdout.write, so patch them too (a harmless duplicate under
+// node, where they already route through the patched write above).
+const { format: formatDiagnostic } = require('node:util');
+for (const method of ['log', 'info', 'warn', 'error', 'debug']) {
+  console[method] = (...args) => diagnosticWrite(formatDiagnostic(...args) + '\n');
+}
 function resolver(filename) {
   const root = process.env.OXVELTE_COMPILER_RUNTIME;
   const anchor = root ? path.join(path.resolve(root), 'package.json') : path.resolve(filename || path.join(process.cwd(), '__oxvelte__.svelte'));
-  return createRequire(anchor);
+  const req = createRequire(anchor);
+  // bun's resolution silently falls back to node_modules unrelated to the
+  // anchor (e.g. this script's own), substituting our pinned packages for
+  // ones missing from the project. Keep bare-specifier resolution anchored
+  // to the component's ancestry so missing packages produce the actionable
+  // errors below under every runtime. The check is lexical (no realpath) so
+  // symlinked packages inside the tree still count.
+  const resolveAnchored = (id) => {
+    if (id.startsWith('.') || path.isAbsolute(id)) return req.resolve(id);
+    const resolved = req.resolve(id);
+    const packageRoot = id.startsWith('@') ? id.split('/').slice(0, 2).join('/') : id.split('/')[0];
+    for (let dir = path.dirname(anchor); ; dir = path.dirname(dir)) {
+      if (path.dirname(dir) === dir) break;
+      if (existsSync(path.join(dir, 'node_modules', packageRoot))) return resolved;
+    }
+    const error = new Error(`Cannot find module '${id}'\nRequire stack:\n- ${anchor}`);
+    error.code = 'MODULE_NOT_FOUND';
+    throw error;
+  };
+  const anchoredRequire = (id) => req(resolveAnchored(id));
+  anchoredRequire.resolve = resolveAnchored;
+  return anchoredRequire;
 }
 function lineStarts(text) {
   const starts = [0];
@@ -51,7 +79,7 @@ function byteToIndex(source, byte) { return Buffer.from(source).subarray(0, byte
 // Preserve stateful hooks while their module graph is unchanged. Hash contents,
 // rather than mtimes, so rapid same-size edits and preserved timestamps reload.
 const configGraphs = new Map();
-const { readFileSync } = require('node:fs');
+const { readFileSync, existsSync } = require('node:fs');
 const { createHash } = require('node:crypto');
 function contentHash(filename) {
   try { return createHash('sha256').update(readFileSync(filename)).digest('hex'); }
@@ -150,9 +178,27 @@ async function run(request) {
         const setting = settings.svelte?.compileOptions?.postcss;
         if (setting === false) throw new Error('PostCSS disabled');
         const configPath = setting?.configFilePath || process.env.OXVELTE_COMPILER_RUNTIME || process.cwd();
-        const config = await req('postcss-load-config')({ cwd: process.cwd(), from: (filename || '__oxvelte__') + '.css' }, configPath);
-        if (config.file) snapshotConfigGraph(config.file);
-        const result = req('postcss')(config.plugins).process(input, { ...config.options, map: { inline: false } });
+        // Load a postcss.config.* file ourselves, through the tracked and
+        // content-hash-invalidated require machinery: postcss-load-config
+        // caches its config search results (lilconfig caches by default), so
+        // edits to helpers the config requires would never propagate. It
+        // stays as the fallback for .postcssrc / package.json key configs.
+        const configFile = ['postcss.config.cjs', 'postcss.config.js', 'postcss.config.mjs', 'postcss.config.json']
+          .map((name) => path.join(configPath, name)).find((candidate) => existsSync(candidate));
+        let plugins, configOptions;
+        if (configFile) {
+          const exported = requireCurrentConfig(req, configFile);
+          const loaded = exported?.default ?? exported;
+          const resolved = typeof loaded === 'function'
+            ? await loaded({ cwd: configPath, from: (filename || '__oxvelte__') + '.css', env: process.env.NODE_ENV || 'production' })
+            : loaded;
+          plugins = resolved.plugins; configOptions = resolved.options || {};
+        } else {
+          const config = await req('postcss-load-config')({ cwd: process.cwd(), from: (filename || '__oxvelte__') + '.css' }, configPath);
+          if (config.file) snapshotConfigGraph(config.file);
+          plugins = config.plugins; configOptions = config.options;
+        }
+        const result = req('postcss')(plugins).process(input, { ...configOptions, map: { inline: false } });
         output = result.content; mappings = result.map.toJSON().mappings;
       }
     } catch { /* Unsupported or unavailable preprocessors follow upstream's stripped-style path. */ }
@@ -181,10 +227,23 @@ async function run(request) {
       output = result.outputText; mappings = JSON.parse(result.sourceMapText).mappings;
     } else {
       const babel = req('@babel/core');
-      const options = { sourceType: 'module', sourceMaps: true, minified: false, ast: false, code: true, cwd: process.env.OXVELTE_COMPILER_RUNTIME || process.cwd() };
-      const config = babel.loadPartialConfig(options);
+      const cwd = process.env.OXVELTE_COMPILER_RUNTIME || process.cwd();
+      const options = { sourceType: 'module', sourceMaps: true, minified: false, ast: false, code: true, cwd };
+      // Load the root Babel config ourselves, through the tracked and
+      // content-hash-invalidated require machinery: babel.loadPartialConfig
+      // caches the root config keyed on its mtime, so edits to helpers the
+      // config requires would never propagate. Babel still discovers .babelrc
+      // files; we only take over the root config file.
+      const rootConfig = ['babel.config.cjs', 'babel.config.js', 'babel.config.json', 'babel.config.mjs']
+        .map((name) => path.join(cwd, name)).find((candidate) => existsSync(candidate));
+      let rootOptions = {};
+      if (rootConfig) {
+        const exported = requireCurrentConfig(req, rootConfig);
+        rootOptions = exported?.default ?? exported;
+      }
+      const config = babel.loadPartialConfig(rootConfig ? { ...options, configFile: false } : options);
       for (const file of config?.files || []) snapshotConfigGraph(file);
-      const result = babel.transformSync(input, { ...options, ...config?.options, configFile: false, babelrc: false });
+      const result = babel.transformSync(input, { ...options, ...config?.options, ...rootOptions, configFile: false, babelrc: false });
       output = result.code; mappings = result.map.mappings;
     }
     const decode = sourceMapCodec.decode;
