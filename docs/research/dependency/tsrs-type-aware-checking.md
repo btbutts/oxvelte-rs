@@ -200,21 +200,97 @@ options were priced:
   `tsrs/sync` export of the npm package, ~4 MB unpacked, which spawns
   `tsrs --api` itself and accepts `tsserverPath`). Smallest diff, but keeps
   JavaScript in the type-checking path forever.
-- *Rust-native* — oxvelte spawns `tsrs --api` and speaks MessagePack
-  directly (`rmp-serde`); `typescript-conditions.cjs` (179 lines) and the
-  type-checking half of `typescript-service.cjs` (145 lines: virtual-file
-  construction, tsconfig discovery) get Rust counterparts.
+- *Rust-native* — oxvelte spawns `tsrs --api` and speaks the wire protocol
+  directly; `typescript-conditions.cjs` (179 lines) and the type-checking
+  half of `typescript-service.cjs` (145 lines: virtual-file construction,
+  tsconfig discovery) get Rust counterparts.
 
 **Chosen: Rust-native.** All of our rules are already Rust, tsrs is Rust,
 and MessagePack is the protocol we intend to reuse when this binary is
 wrapped by a VS Code extension — the client is a foundation, not throwaway.
 The embedded JS sidecar stays shipped regardless as the permanent TS ≤ 5
-path. Implementation phases:
+path.
 
-1. **Spike** — answer the wire-format question above.
-2. **Plumbing** — MessagePack client (`rmp-serde`), `tsrs --api` spawn and
-   framing, binary resolution (project `node_modules/.bin` walked up, then
-   PATH, never cached), project TS-version detection (nearest
+### Wire protocol (verified 31OCT2026 against upstream sources)
+
+Read from `crates/tsrs_api_transport/src/msgpack.rs` and its upstream
+original, `microsoft/TypeScript tsc/internal/api/protocol_msgpack.go`:
+
+**The "MessagePack protocol" is not generic MessagePack data — no MessagePack
+crate applies.** The wire format is a hand-rolled tuple envelope:
+
+```
+[MessageType, method (bin), payload (bin)]
+```
+
+- A fixed 3-element array marker (`0x93`), the message type as a positive
+  fixint (or `uint8`), then two length-prefixed binary fields (`bin8/16/32`,
+  markers `0xC4`–`0xC6`). Those five byte constants are the *entirety* of
+  MessagePack on the wire.
+- **Payloads are JSON text**, not MessagePack: upstream marshals params and
+  results with `json.Marshal` into the payload bin (with a `RawBinary`
+  escape hatch). So the struct-as-array vs struct-as-map differences between
+  `rmp-serde`, `messagepack-serde`, and `msgpacker` never apply — structs
+  never pass through MessagePack at all.
+- There are **no request IDs**: requests and responses are matched by method
+  name, so requests on one connection are strictly sequential.
+- Message types (client view): we send `Request` (1); the server answers
+  `CallResponse` (2) or `CallError` (3, payload is a plain error string). The
+  server may send `Call` (6) tuples for FS callbacks when `-callbacks` is
+  enabled — we answer those with `Response` (4) / `Error` (5).
+
+**Decision: hand-port the framing, use `serde_json` for payloads.** The
+framing is ~150 lines of pure `std::io` code with no dependencies; porting
+tsrs's `msgpack.rs` (Apache-2.0 — credit in `THIRD_PARTY_NOTICES`) gives us
+byte-exact wire compatibility by construction, while every payload goes
+through the `serde`/`serde_json` stack we already have. Adding `rmp-serde`
+or any MessagePack crate would buy us five byte constants and pull in
+serializers we would never call.
+
+### Source layout (settled 31OCT2026)
+
+All gated behind `#[cfg(feature = "tsrs-inference")]`:
+
+```
+src/
+  transport/
+    mod.rs            — framing-agnostic shared pieces: TransportError,
+                        Message/Response, DEFAULT_MAX_FRAME_BYTES,
+                        read_exact_bounded. The future VS Code extension
+                        transport reuses this module.
+    message_pack.rs   — the tuple framing above (port of tsrs's msgpack.rs):
+                        MessageType, Tuple, MessagePackReader/Writer
+    json_rpc.rs       — later: the `-async` JSON-RPC framing, added when the
+                        VS Code extension work begins (different message
+                        shapes, same transport/mod.rs base)
+  tsrs/
+    mod.rs            — TsrsClient: spawn `tsrs --api`, session lifecycle
+                        (initialize, createSnapshot/updateSnapshot, close),
+                        sequential request/response, FS-callback replies
+    resolve.rs        — binary resolution (project node_modules/.bin walked
+                        up from the linted file, then PATH; never cached) and
+                        project TS-version detection (nearest
+                        node_modules/typescript/package.json)
+    protocol.rs       — serde types for the methods we call: params and
+                        result shapes (handles, flags, spans)
+    conditions.rs     — the no-unnecessary-condition checks ported from
+                        typescript-conditions.cjs, driven through TsrsClient;
+                        no_unnecessary_condition.rs dispatches here for
+                        TS6+ components when settings.tsrs is on
+```
+
+The VS Code extension channel lands later as its own module on top of
+`src/transport/` — same framing base, different datasets, exactly the
+separation the layout above is built for.
+
+Implementation phases:
+
+1. **Spike** — answer the wire-format question above (what arrives inline
+   with a type handle: flags, union parts), by driving the framing +
+   `createSnapshot` + `getTypeAtLocation` by hand.
+2. **Plumbing** — `src/transport/`, `TsrsClient` spawn/lifecycle, binary
+   resolution (project `node_modules/.bin` walked up, then PATH, never
+   cached), project TS-version detection (nearest
    `node_modules/typescript/package.json`), the `settings.tsrs` gate, the
    `tsrs-inference` feature flag.
 3. **Ports** — virtual-file construction + tsconfig setup (from
