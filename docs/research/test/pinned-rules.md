@@ -522,18 +522,21 @@ compiler-backed and type-aware cases, passes under bun.
 - Type-aware checking in Rust via `tsrs` ([oxc-project/tsrs](https://github.com/oxc-project/tsrs),
   the Rust port of the TypeScript 7 type checker): for projects on TypeScript
   6+, route type-aware rules (today `no-unnecessary-condition`, via
-  `typescript-service.cjs` + `typescript-conditions.cjs`) to an embedded
-  `tsrs` host instead of the Node sidecar. Rationale: TS6 is the bridge
-  release — a project compiling cleanly on TS6 is TS7-safe, and the type
-  system is continuous between 6 and 7 — so tsrs's TS7-conformant checker is
-  valid for TS6+ projects. The sidecar stays for TS ≤ 5 projects (our matrix
-  verifies typescript-service.cjs back to 5.2.2). **Design settled — see
-  `docs/research/dependency/tsrs-type-aware-checking.md`.** Summary: optional
-  Cargo features (`tsrs-inference` = support code, `tsrs-inference-build` =
-  compile the pinned tsrs binary at build time); source/homebrew builds
-  compile tsrs as a sidecar binary; npm/bun installs get it as a package
-  dependency, never compiled; a `settings.tsrs` boolean in
-  `oxvelte.config.json` toggles the tsrs path at runtime. Related but
+  `typescript-service.cjs` + `typescript-conditions.cjs`) to an external
+  `tsrs` binary (`tsrs --api`) instead of the Node sidecar. Rationale: TS6 is
+  the bridge release — a project compiling cleanly on TS6 is TS7-safe, and the
+  type system is continuous between 6 and 7 — so tsrs's TS7-conformant checker
+  is valid for TS6+ projects. The sidecar stays for TS ≤ 5 projects (our
+  matrix verifies typescript-service.cjs back to 5.2.2). **Design settled —
+  see `docs/research/dependency/tsrs-type-aware-checking.md`.** Summary: one
+  optional Cargo feature (`tsrs-inference` = support code that locates and
+  drives an external tsrs binary; oxvelte never fetches, compiles, or embeds
+  tsrs itself); tsrs is installed separately per channel (its own Homebrew
+  formula declared as a dependency of ours, `cargo install`, or npm into the
+  user's project); at runtime the project's `node_modules/.bin/tsrs` is
+  preferred, then PATH; a `settings.tsrs` boolean (default `false`) in
+  `oxvelte.config.json` opts the project into the tsrs path — compiling the
+  feature in changes nothing until the setting is enabled. Related but
   independent: our `oxc` pin (`=0.128.0`) is old; an upgrade (e.g. toward
   0.155.x) is its own workstream.
 

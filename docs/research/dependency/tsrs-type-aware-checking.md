@@ -1,17 +1,22 @@
 # tsrs type-aware checking — research report
 
-Status: research complete 25OCT2026, awaiting decision. No code changes yet.
+Status: design settled 30OCT2026 — single `tsrs-inference` feature driving an
+external `tsrs` binary resolved at runtime; no build-time tsrs compilation.
+Ready for implementation planning. No code changes yet.
 
 ### Preface:
 Type-aware lint rules (today: `svelte/no-unnecessary-condition`) currently run
 through JavaScript embedded in the binary: `src/compiler.rs` spawns a Node
 sidecar that loads the *project's own* `typescript` package and answers
 checker queries. The proposal: add an optional Cargo feature, `tsrs-inference`,
-that compiles [tsrs](https://github.com/oxc-project/tsrs) — the Rust port of
-the TypeScript 7 type checker (Cloudflare/VoidZero, incubated in oxc) — into
-`oxvelte` and routes type inference for TypeScript 6+ projects through it,
-natively, with no sidecar. The JS path stays for TS ≤ 5 projects and as a
-user-controllable fallback.
+that compiles support for driving [tsrs](https://github.com/oxc-project/tsrs) —
+the Rust port of the TypeScript 7 type checker (Cloudflare/VoidZero, incubated
+in oxc) — as an *external* sidecar binary (`tsrs --api`), and routes type
+inference for TypeScript 6+ projects through it, natively, with no Node
+sidecar. tsrs itself is never compiled into, or by, `oxvelte`: it is a
+separate install (Homebrew formula, `cargo install`, or the project's own
+`node_modules`) resolved at runtime. The JS path stays for TS ≤ 5 projects
+and as a user-controllable fallback.
 
 Rationale for the TS6+ threshold: TS6 is the bridge release — a project
 compiling cleanly on TS6 (no bridge deprecation warnings) is TS7-safe, and the
@@ -19,20 +24,27 @@ type system is continuous between 6 and 7. So tsrs's TS7-conformant checker is
 valid for any TS6-clean project, which is where most development happens going
 forward.
 
-### Design shape (as proposed)
+### Design shape
 
-- `Cargo.toml`: `tsrs-inference = ["dep:tsrs_compiler", ...]` — same optional,
-  default-off pattern as `custom-rules = ["dep:boa_engine"]`. Crates would be
-  git-pinned (see risks: nothing is on crates.io).
+- `Cargo.toml`: `tsrs-inference` gates only the support code that locates and
+  drives an external `tsrs` binary — same optional, default-off pattern as
+  `custom-rules = ["dep:boa_engine"]`, but with **no tsrs crates in our
+  dependency graph at all**. The formerly proposed `tsrs-inference-build`
+  feature is dropped: `oxvelte` never fetches, compiles, or embeds tsrs.
 - The JS scripts (`typescript-service.cjs`, `typescript-conditions.cjs`)
   remain embedded in the binary no matter what.
-- Runtime toggle: `settings.tsrs` (boolean) in `oxvelte.config.json`. When the
-  feature is compiled in: default on for eligible projects; `false` forces the
-  JS sidecar — an escape hatch if tsrs misbehaves on a given project. The
-  `settings` key is already free-form JSON (`src/config.rs:36,110`), so this
-  needs no config-schema work.
-- Routing per component: TS6+ project → tsrs native path; TS ≤ 5 (or missing
-  typescript install, or opt-out) → existing sidecar, unchanged.
+- Runtime toggle: `settings.tsrs` (boolean, **default `false`**) in
+  `oxvelte.config.json`. Compiling the feature in changes nothing on its own:
+  with the setting absent or `false`, behavior is identical to today (JS
+  sidecar only). `true` opts the project into tsrs routing. The `settings`
+  key is already free-form JSON (`src/config.rs:36,110`), so this needs no
+  config-schema work.
+- Routing per component (only when the feature is compiled in *and*
+  `settings.tsrs: true`): Svelte 5 (modern) components in a TS6+ project →
+  tsrs path; legacy Svelte or TS ≤ 5 (or missing typescript install, or no
+  tsrs binary resolvable) → existing sidecar, unchanged. Enabling the setting
+  is deliberately a dual mode, not a switch: legacy language versions always
+  keep the JavaScript path.
 
 ### What the current path does (what a native path must replicate)
 
@@ -136,126 +148,152 @@ patterns cleanly. What makes this "research, not implementation" today:
    "create arena → build program → query → drop" per-request pattern, which
    matches current behavior but forfeits tsrs's headline watch-mode gains. A
    persistent incremental session is a larger design.
-6. **Alternative worth pricing first** — keep the sidecar but let it spawn
-   tsrs's **Node API** (`tsrs --api`) when the project has tsrs installed:
-   same process model, TS7 speed, zero Rust-embedding risk. Doesn't remove
-   Node, so it only helps if the goal is speed rather than dependency
-   elimination.
+6. ~~**Alternative worth pricing first**~~ — **Chosen 30OCT2026, refined
+   31OCT2026.** Keep the sidecar process model but spawn tsrs's API server
+   (`tsrs --api`) as an external binary instead of the Node bridge: same
+   process model, TS7 speed, zero Rust-embedding risk. This removes blockers
+   1 and 4 entirely — we never pin, compile, or embed tsrs crates, and our
+   binary doesn't grow. Refined 31OCT2026: we drive the server from our own
+   Rust MessagePack client rather than tsrs's JS client SDK (see "Client
+   strategy" below), so the type-checking path is JavaScript-free.
 
 ### Open questions before implementation
 
-- Does (or will) tsrs expose a documented "check these virtual files with this
-  tsconfig" Rust entry point?
-- What is the minimum crate set? (`tsrs_checker` pulls most of the workspace
-  transitively.)
-- How are the bundled `lib.*.d.ts` typings located outside an npm install?
-- Does single-threaded mode guarantee byte-stable diagnostics across identical
-  runs?
-- Policy: is the routing threshold TS6+ (user's proposal) or TS7-only, given
-  the 7.0→7.1 semantic drift tsrs tracks?
+- ~~Does `tsrs --api` expose everything `typescript-conditions` needs~~ —
+  **Answered 31OCT2026 (tsrs 0.20.1-ts7.1.0-beta, installed via Homebrew).**
+  Yes. `tsrs --api` serves MessagePack over stdio (sync) or JSON-RPC
+  (`-async`); upstream's method inventory (npm/sdk/METHODS.md) shows 170/177
+  protocol methods answering under tsrs with the pinned TypeScript SDK suite
+  passing 968/968, including everything `typescript-conditions.cjs` touches:
+  `getTypeAtLocation`, `getBaseConstraintOfType`, `isArrayType`,
+  `getPropertyOfType`, `getTypeOfSymbolAtLocation`, `getIndexInfoOfType`,
+  `getSignaturesOfType`, `getReturnTypeOfSignature`, `isTypeAssignableTo`,
+  plus project plumbing (`parseConfigFile`, `createSnapshot`,
+  `getDefaultProjectForFile`). The bare 21 MB binary embeds the
+  `lib.*.d.ts` typings — verified: it type-checks a strict project with no
+  npm install present.
+- What exactly crosses the wire with each answer? Types are remote handles;
+  whether `TypeFlags` and union parts arrive inline or need extra requests
+  determines the shape of the Rust port. Answer with a spike before building:
+  spawn `tsrs --api`, `createSnapshot` with a virtual file,
+  `getTypeAtLocation` on a few expressions, dump the responses.
+- Does single-threaded/canonical-history mode guarantee byte-stable
+  diagnostics across identical runs? (Check during the spike with repeated
+  runs.)
+- ~~Policy: TS6+ or TS7-only?~~ — **Settled 31OCT2026: TS6+.** TS6 is the
+  bridge release, type-system-continuous with 7. When `settings.tsrs` is
+  enabled, TS6+ projects route to tsrs; TS ≤ 5 projects always keep the JS
+  sidecar (tsrs cannot serve them — it rejects pre-TS7 options), so the
+  embedded JS path is permanent legacy support, not a stopgap.
+
+(Earlier questions about a Rust embedding entry point, minimum crate set, and
+locating `lib.*.d.ts` outside npm are moot under the revised design — we never
+embed, and the tsrs binary bundles its own libs.)
+
+### Client strategy (settled 31OCT2026)
+
+**Rust-native MessagePack client; the rule logic ports to Rust.** Two
+options were priced:
+
+- *JS sidecar + vendored tsrs client SDK* — keep `typescript-conditions.cjs`
+  as JS and swap its `typescript` module for tsrs's client SDK (the
+  `tsrs/sync` export of the npm package, ~4 MB unpacked, which spawns
+  `tsrs --api` itself and accepts `tsserverPath`). Smallest diff, but keeps
+  JavaScript in the type-checking path forever.
+- *Rust-native* — oxvelte spawns `tsrs --api` and speaks MessagePack
+  directly (`rmp-serde`); `typescript-conditions.cjs` (179 lines) and the
+  type-checking half of `typescript-service.cjs` (145 lines: virtual-file
+  construction, tsconfig discovery) get Rust counterparts.
+
+**Chosen: Rust-native.** All of our rules are already Rust, tsrs is Rust,
+and MessagePack is the protocol we intend to reuse when this binary is
+wrapped by a VS Code extension — the client is a foundation, not throwaway.
+The embedded JS sidecar stays shipped regardless as the permanent TS ≤ 5
+path. Implementation phases:
+
+1. **Spike** — answer the wire-format question above.
+2. **Plumbing** — MessagePack client (`rmp-serde`), `tsrs --api` spawn and
+   framing, binary resolution (project `node_modules/.bin` walked up, then
+   PATH, never cached), project TS-version detection (nearest
+   `node_modules/typescript/package.json`), the `settings.tsrs` gate, the
+   `tsrs-inference` feature flag.
+3. **Ports** — virtual-file construction + tsconfig setup (from
+   `typescript-service.cjs`) and the conditions logic (from
+   `typescript-conditions.cjs`) as a tsrs backend for
+   `no_unnecessary_condition.rs`. The Svelte-specific exclusions (mutable
+   root bindings, `$:` blocks) already live in our Rust rule and don't move.
+4. **Parity proof** — byte-exact diagnostics vs the JS sidecar across the
+   version-matrix before the feature is considered reliable.
 
 ### Recommendation
 
-~~Park implementation until tsrs publishes crates~~ **Superseded 25OCT2026:**
-we proceed with the build-time sidecar binary below rather than wait for
-published crates, and swap to plain `dep:` dependencies under the same feature
-flag if/when a documented Rust embedding API ships. The `tsrs-inference`
-feature flag, the `settings.tsrs` toggle, the TS-version routing, and the
-sidecar fallback are all compatible with today's architecture. The
-version-matrix gives us the harness to prove byte-exact diagnostics under
-both paths before we ever ship it default-on.
+~~Park implementation until tsrs publishes crates~~ ~~Superseded 25OCT2026:
+build-time sidecar binary~~ **Settled 30OCT2026:** proceed with the external
+sidecar binary design below. The `tsrs-inference` feature flag (support code
+only), the `settings.tsrs` toggle (default off), the TS-version routing, and
+the JS-sidecar fallback are all compatible with today's architecture, and
+installing tsrs is always the user's or the package manager's concern — never
+our build's. The version-matrix gives us the harness to prove byte-exact
+diagnostics under both paths before we ever consider widening the default.
 
-### Interim approach: build-time sidecar binary (proposed 25OCT2026)
+### ~~Interim approach: build-time sidecar binary~~ (dropped 30OCT2026)
 
-Rather than wait for published crates, the first implementation compiles the
-tsrs **CLI binary at build time** and has `oxvelte` spawn `tsrs --api` as a
-sidecar (same process model as the Node bridge today). Sketch: `build.rs`
-checks `CARGO_FEATURE_TSRS_INFERENCE`; when set, it fetches tsrs at a pinned
-tag (reuse the tarball machinery we already built for the CSS sources — the
-pin lives in `.cargo/config.toml` like the other pins), builds it with cargo,
-and hands the binary path to the main crate via `cargo:rustc-env`. When crates
-are eventually published, this swaps to plain `dep:` dependencies under the
-same feature flag with no user-facing change.
+The 25OCT2026 proposal to have `build.rs` fetch and compile tsrs under a
+`tsrs-inference-build` feature is dropped. oxvelte never compiles tsrs, in any
+configuration: tsrs is a standalone tool with its own distribution channels
+(Homebrew formula, `cargo install`, npm prebuilt binaries), and treating it
+as one is simpler, keeps our build times and binary size flat, and sidesteps
+the cross-compilation and `OUT_DIR`-caching problems that proposal carried.
+The verified size facts (~21 MB prebuilt binary plus ~3–4 MB of bundled
+`lib.*.d.ts` typings) still stand — they are simply shipped by tsrs's own
+packages now, not ours.
 
-**Size facts (verified 25OCT2026 via the npm registry):** the prebuilt tsrs
-platform binary unpacks to **~21 MB** (`@tsrs/darwin-arm64`), plus the bundled
-`lib.*.d.ts` typings (~3–4 MB) that any real type-check needs. So:
+### Distribution design (revised 30OCT2026)
 
-- *Sidecar-binary approach*: our binary doesn't grow at all, but we ship/build
-  a second ~21 MB executable.
-- *Crate-embedding approach (later)*: we could skip the CLI/LSP/WASM crates,
-  but the checker pulls most of the 37-crate workspace transitively, and the
-  lib typings are always required — expect most of that ~21 MB regardless.
-  You cannot subset a prebuilt binary, and you cannot type-check without the
-  libs.
-
-**Refinements needed on the sketch before it's buildable:**
-
-1. **Don't cache the built binary only in `OUT_DIR`.** `OUT_DIR` dies with
-   `cargo clean`, which would force a full tsrs rebuild (a 37-crate release
-   build — many minutes) after every clean. Cache the built binary in a
-   stable location keyed by the pin (same philosophy as
-   `resources/css/known_css_properties.json`), and only copy/link it into
-   `OUT_DIR` per build.
-2. **`cargo install --git` ignores our lockfile and resolves fresh**; driving
-   a plain `cargo build --release` inside an extracted tarball at the pinned
-   tag is more reproducible and reuses our existing `fetch_github_repo`
-   helper. Nested cargo from a build script is workable (the outer build
-   doesn't hold the package-cache lock while scripts run) but blocks other
-   cargo builds and makes first builds slow — document that expectation.
-3. **Cross-compilation breaks the naive version.** `release.yml` builds 8
-   targets; `cargo install` builds for the *host*. `build.rs` receives
-   `TARGET`, so the tsrs build would have to be invoked with `--target` (and
-   the toolchains present) — doable, but the real pain is below.
-4. ~~**Distribution:** a `cargo:rustc-env=TSRS_BIN_PATH=...` path only exists on
-   the machine that compiled it.~~ Resolved by the distribution design below.
-
-### Distribution design (settled 25OCT2026)
-
-Whether `build.rs` compiles tsrs at all depends on how the user obtained
-oxvelte. Two Cargo features drive it (features are additive, so
-`tsrs-inference-build` implies `tsrs-inference`):
+One Cargo feature, and tsrs is never compiled as part of oxvelte:
 
 | Feature | Effect |
 |---|---|
-| `tsrs-inference` | Compiles the Rust support code that knows how to locate and drive a `tsrs` binary (`tsrs --api`). Never compiles tsrs itself. |
-| `tsrs-inference-build` | Implies `tsrs-inference`; `build.rs` additionally fetches the pinned tsrs tarball (pin in `.cargo/config.toml`) and runs `cargo build --release` on it, producing the standalone `tsrs` binary. |
+| `tsrs-inference` | Compiles the Rust support code that locates and drives an external `tsrs` binary (`tsrs --api`). Never fetches, compiles, or embeds tsrs itself. |
+
+`settings.tsrs` defaults to `false`, so a binary built with the feature
+behaves exactly as today's until the user opts in — compiling in tsrs support
+does **not** enable it for TS6+ projects by itself.
 
 Per channel:
 
-- **`cargo build` / `cargo install` from source** — user opts in with
-  `--features tsrs-inference-build`; `build.rs` compiles tsrs from the pinned
-  tarball (cached in a stable location keyed by the pin, per refinement #1).
-  Getting the resulting binary onto PATH is an installer concern, not a
-  build-script concern: `cargo install` only installs a package's own
-  declared bins, so source-build users either run `cargo install tsrs
-  --git …` themselves or add the built binary to PATH. tsrs is a full TS7
-  compiler in its own right, so having it as a standalone binary is a
-  feature, not a burden.
-- **Homebrew tap** — builds from source like the above; the formula passes
-  `--features tsrs-inference-build` and installs *both* binaries into
-  `bin/`, which also satisfies the same-directory resolution rule below.
-- **npm / bun** — tsrs is **never compiled** when building for npm
-  distribution. Instead our package declares `tsrs` as a normal dependency
-  in `package.json` (staged by `scripts/stage-npm.mjs`); npm/bun then fetch
-  the correct prebuilt `@tsrs/<platform>` binary via tsrs's own
-  optionalDependencies — their distribution machinery, not ours. The
-  prebuilt oxvelte binaries in `release.yml` are compiled with
-  `--features tsrs-inference` (support code only, no tsrs build step).
-  Bun installs from the same npm registry, so bun users get identical
-  behavior.
+- **Homebrew tap** — `tsrs` ships as its own formula in our tap, and the
+  `oxvelte` formula declares it as a dependency. The oxvelte formula builds
+  with `--features tsrs-inference` only. Homebrew links both binaries into
+  `bin/` on PATH, which the runtime resolution below finds.
+- **`cargo build` / `cargo install` from source** — built with
+  `--features tsrs-inference`; the user installs tsrs separately (the
+  Homebrew formula, `cargo install`, or npm into their project). tsrs is a
+  full TS7 compiler in its own right, so having it as a standalone binary is
+  a feature, not a burden.
+- **npm / bun** — the prebuilt oxvelte binaries in `release.yml` are compiled
+  with `--features tsrs-inference` (support code only, no tsrs build step).
+  Our package does **not** declare `tsrs` as a dependency: users who want it
+  install it into their project from npm themselves (where its own
+  optionalDependencies fetch the correct prebuilt `@tsrs/<platform>` binary),
+  or rely on a PATH install. Bun installs from the same npm registry, so bun
+  users get identical behavior.
 
 **Runtime resolution order** in the oxvelte binary (when the feature is
-compiled in and `settings.tsrs` is not `false`):
+compiled in *and* `settings.tsrs: true`):
 
 1. The `tsrs` binary in the project's `node_modules/.bin/` (walked up from
    the linted file, the same anchoring the bridge uses for `svelte/compiler`
-   and `typescript` today) — this is the npm/bun path.
-2. The directory containing the running `oxvelte` executable — covers the
-   Homebrew layout where both binaries land in `bin/` together.
-3. `PATH` — covers source builds and anyone who installed tsrs themselves.
+   and `typescript` today). A project-level install always wins, and its
+   presence is recorded in the project's own `package.json`.
+2. `PATH` — covers the Homebrew formula, `cargo install`, and anyone who
+   installed tsrs themselves. (The Homebrew layout needs no special case:
+   both binaries land in the same `bin/`, which is already on PATH.)
 
-An explicit path setting in `oxvelte.config.json` was considered and judged
-unnecessary given the above; it can be added later if a real need appears.
-`settings.tsrs: false` forces the JS sidecar regardless of how tsrs was
-installed.
+Resolution runs on every invocation and is never cached: if a user who was
+running a PATH-installed tsrs later installs tsrs into their project's
+`node_modules/`, the very next `oxvelte` run prefers the project copy
+automatically. If `settings.tsrs` is `true` but no binary resolves at either
+location, warn once and fall back to the JS sidecar. An explicit path setting
+in `oxvelte.config.json` was considered and judged unnecessary given the
+above; it can be added later if a real need appears.
