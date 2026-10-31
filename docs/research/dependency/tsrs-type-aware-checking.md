@@ -294,6 +294,17 @@ src/
                         node_modules/typescript/package.json)
     protocol.rs       — serde types for the methods we call: params and
                         result shapes (handles, flags, spans)
+    session.rs        — TsrsSession (landed 31OCT2026): builds the virtual
+                        .ts file (blanking + projections, ported from
+                        typescript-service.cjs), spawns the client, and
+                        loads a synthetic program over the virtual file via
+                        createPrograms + a "layer" request filesystem — the
+                        component never touches disk. Findings: snapshots
+                        are immutable (updateSnapshot returns the NEW
+                        snapshot id; use it for all later queries) and the
+                        parsed tsconfig options from a createSnapshot
+                        response are accepted verbatim as createPrograms
+                        compilerOptions.
     conditions.rs     — the no-unnecessary-condition checks ported from
                         typescript-conditions.cjs, driven through TsrsClient;
                         no_unnecessary_condition.rs dispatches here for

@@ -5,6 +5,7 @@
 
 pub mod protocol;
 pub mod resolve;
+pub mod session;
 
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};

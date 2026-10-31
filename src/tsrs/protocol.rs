@@ -28,6 +28,21 @@ pub struct ProjectResponse {
     pub current_directory: String,
     #[serde(default)]
     pub dirty: bool,
+    #[serde(default)]
+    pub parsed_command_line: Option<ParsedCommandLineResponse>,
+}
+
+/// The parsed tsconfig of a configured project, as reported in a
+/// `createSnapshot` response.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ParsedCommandLineResponse {
+    #[serde(default)]
+    pub file_names: Vec<String>,
+    #[serde(default)]
+    pub options: serde_json::Value,
+    #[serde(default)]
+    pub errors: Vec<serde_json::Value>,
 }
 
 /// `createSnapshot` response.
