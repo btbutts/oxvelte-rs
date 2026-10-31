@@ -1,8 +1,9 @@
 # tsrs type-aware checking — research report
 
-Status: design settled 30OCT2026 — single `tsrs-inference` feature driving an
-external `tsrs` binary resolved at runtime; no build-time tsrs compilation.
-Ready for implementation planning. No code changes yet.
+Status: design settled 30OCT2026; implementation in progress on branch
+`tsrs-ts6plus` — phase 1 (spike) done 31OCT2026: `src/transport/` framing
+landed and the wire format is verified end to end by
+`tests/tsrs_wire_protocol.rs`.
 
 ### Preface:
 Type-aware lint rules (today: `svelte/no-unnecessary-condition`) currently run
@@ -172,14 +173,34 @@ patterns cleanly. What makes this "research, not implementation" today:
   `getDefaultProjectForFile`). The bare 21 MB binary embeds the
   `lib.*.d.ts` typings — verified: it type-checks a strict project with no
   npm install present.
-- What exactly crosses the wire with each answer? Types are remote handles;
-  whether `TypeFlags` and union parts arrive inline or need extra requests
-  determines the shape of the Rust port. Answer with a spike before building:
-  spawn `tsrs --api`, `createSnapshot` with a virtual file,
-  `getTypeAtLocation` on a few expressions, dump the responses.
-- Does single-threaded/canonical-history mode guarantee byte-stable
-  diagnostics across identical runs? (Check during the spike with repeated
-  runs.)
+- ~~What exactly crosses the wire with each answer?~~ — **Answered 31OCT2026
+  by spike** (now `tests/tsrs_wire_protocol.rs`, run against the Homebrew
+  tsrs 0.20.1-ts7.1.0-beta through our real `src/transport/` framing):
+  - `getTypeAtPosition { snapshot, project, file, position }` returns a full
+    `TypeResponse` per query: `id` (u32), **`flags` inline** (u32 —
+    `TypeFlags`), plus `objectFlags`, `isTupleType`, `intrinsicName`
+    (`"number"`, `"string"`, `"null"`, …) and literal `value` (`"oops"` for a
+    string literal, with `freshType`/`regularType` handles). Object types
+    carry `target` and a `symbol` handle.
+  - **Union/intersection parts are not inline** — fetch them with
+    `getTypesOfType { snapshot, project, objectId }` (note the field name is
+    `objectId`, not `type`), which returns full `TypeResponse`s per part
+    (null = flags 0x8, string = flags 0x20 observed).
+  - Handles on the wire: `snapshot` u64, `project` string (the tsconfig
+    path), `NodeHandle` string, positions are UTF-16 offsets.
+  - **TS7's `TypeFlags` values differ from TS ≤ 5** (observed: null 0x8,
+    string 0x20, number 0x40, string literal 0x400, union 0x8000000) — the
+    conditions port must use the TS7 enum, not values copied from the
+    TS5-era `typescript` package.
+  - `getSemanticDiagnostics { snapshot, project, files }` returns
+    `{ pos, end, startPosition: {line, character}, code, category, text }`.
+  - Requests are answered one tuple per request, strictly sequential, no
+    server-initiated traffic when `-callbacks` is not enabled.
+- ~~Does single-threaded/canonical-history mode guarantee byte-stable
+  diagnostics?~~ — **Spot-checked 31OCT2026:** two separate `tsrs --api`
+  processes answered the spike's full request sequence byte-identically.
+  (Full-project diagnostics determinism still gets its real proof in the
+  phase-4 parity run.)
 - ~~Policy: TS6+ or TS7-only?~~ — **Settled 31OCT2026: TS6+.** TS6 is the
   bridge release, type-system-continuous with 7. When `settings.tsrs` is
   enabled, TS6+ projects route to tsrs; TS ≤ 5 projects always keep the JS
@@ -285,10 +306,13 @@ separation the layout above is built for.
 
 Implementation phases:
 
-1. **Spike** — answer the wire-format question above (what arrives inline
-   with a type handle: flags, union parts), by driving the framing +
-   `createSnapshot` + `getTypeAtLocation` by hand.
-2. **Plumbing** — `src/transport/`, `TsrsClient` spawn/lifecycle, binary
+1. ~~**Spike**~~ — done 31OCT2026 (see "Open questions" for findings):
+   `src/transport/{mod.rs,message_pack.rs}` landed behind the
+   `tsrs-inference` feature, and the spike became the feature-gated smoke
+   test `tests/tsrs_wire_protocol.rs` (skips when no `tsrs` is on PATH);
+   framing, flags, union-part fetching, and diagnostics verified against the
+   installed binary.
+2. **Plumbing** — `TsrsClient` spawn/lifecycle, binary
    resolution (project `node_modules/.bin` walked up, then PATH, never
    cached), project TS-version detection (nearest
    `node_modules/typescript/package.json`), the `settings.tsrs` gate, the
@@ -300,6 +324,39 @@ Implementation phases:
    root bindings, `$:` blocks) already live in our Rust rule and don't move.
 4. **Parity proof** — byte-exact diagnostics vs the JS sidecar across the
    version-matrix before the feature is considered reliable.
+
+### Test strategy (settled 31OCT2026)
+
+- **Features are always on for dev builds and tests; release stays
+  opt-in.** `Cargo.toml` carries `[dev-dependencies] oxvelte = { path = ".",
+  features = ["tsrs-inference", "custom-rules"] }` — a dev-only
+  self-dependency that turns both features on for every `cargo test` and
+  dev build with **no `--features` flags needed anywhere in the dev
+  workflow** (and, as a side effect, makes rust-analyzer see the
+  feature-gated code). The `release` profile is unaffected: features remain
+  explicit opt-ins there (verified: successive `cargo build --release`
+  runs with/without the flags compile different step counts; `cargo test
+  --lib` grew 648 → 649 the moment the trick landed, as the previously
+  cfg-gated custom-rules test activated). Compiled-in never means enabled:
+  `settings.tsrs` (default `false`) remains the runtime switch.
+- **tsrs-specific tests** are gated with `#![cfg(feature = "tsrs-inference")]`
+  (whole-file, like `tests/tsrs_wire_protocol.rs`) and **skip gracefully
+  when no `tsrs` binary is on PATH** — no developer or CI worker is forced
+  to have tsrs installed.
+- **Dual-backend fixture runs are separate test entries, generated, not
+  hand-duplicated.** The fixture harness has one `#[test]` per rule+kind
+  (`linter_<rule>_valid` / `linter_<rule>_invalid`) iterating that rule's
+  manifest cases through shared helpers. For each type-aware rule eligible
+  for both paths (Svelte 5 + TS6+), we add a parallel feature-gated
+  `#[test]` (e.g. `linter_no_unnecessary_condition_invalid_tsrs`) that runs
+  the *same* case-iteration helper with `settings.tsrs` forced on — the
+  case loop and expectations are written once; only a two-line test entry
+  is added per rule+kind. Each backend's run is its own line in the test
+  report, so the count grows visibly (today: one type-aware rule → +2
+  entries, valid and invalid; N eligible rules → +2N). Expectations must
+  match byte-for-byte on both backends; a divergence is a parity failure,
+  not a per-backend expectation file. Non-type-aware rules never touch a
+  type backend and keep exactly one entry each.
 
 ### Recommendation
 

@@ -9,6 +9,9 @@ pub mod watch;
 #[cfg(feature = "custom-rules")]
 pub mod custom_rules;
 
+#[cfg(feature = "tsrs-inference")]
+pub mod transport;
+
 #[cfg(test)]
 mod linter_fixture_tests {
     use crate::config::OxvelteConfig;

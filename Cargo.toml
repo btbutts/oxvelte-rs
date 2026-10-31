@@ -28,6 +28,7 @@ path = "scripts/launcher.rs"
 [features]
 default = []
 custom-rules = ["dep:boa_engine"]
+tsrs-inference = []
 
 [dependencies]
 oxc = { version = "=0.156.0", features = ["full", "serialize"] }
@@ -48,6 +49,7 @@ cssparser = "0.38.0"
 notify = "8.2.1"
 
 [dev-dependencies]
+oxvelte = { path = ".", features = ["tsrs-inference", "custom-rules"] }
 insta = { version = "1.49.0", features = ["json"] }
 sha2 = "0.11.1"
 
