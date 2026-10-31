@@ -312,11 +312,17 @@ Implementation phases:
    test `tests/tsrs_wire_protocol.rs` (skips when no `tsrs` is on PATH);
    framing, flags, union-part fetching, and diagnostics verified against the
    installed binary.
-2. **Plumbing** — `TsrsClient` spawn/lifecycle, binary
-   resolution (project `node_modules/.bin` walked up, then PATH, never
-   cached), project TS-version detection (nearest
-   `node_modules/typescript/package.json`), the `settings.tsrs` gate, the
-   `tsrs-inference` feature flag.
+2. ~~**Plumbing**~~ — done 31OCT2026: `src/tsrs/resolve.rs` (binary
+   resolution — project `node_modules/.bin` walked up from the linted file,
+   then PATH, never cached — plus project TS-version detection from the
+   nearest `node_modules/typescript/package.json` and the TS6+ eligibility
+   check), `src/tsrs/protocol.rs` (serde types for the methods we call), and
+   `src/tsrs/mod.rs` (`TsrsClient`: spawn, `initialize` handshake, typed
+   `request`, snapshot/type/diagnostics helpers, kill-on-drop). 5 new tests
+   (4 resolve unit tests, 1 client round-trip against the real binary, all
+   skipping gracefully without tsrs on PATH). Remaining plumbing: the
+   `settings.tsrs` gate in `src/config.rs` (lands with the phase-3 rule
+   wiring).
 3. **Ports** — virtual-file construction + tsconfig setup (from
    `typescript-service.cjs`) and the conditions logic (from
    `typescript-conditions.cjs`) as a tsrs backend for
