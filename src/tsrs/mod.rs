@@ -6,8 +6,8 @@
 pub mod binary_ast;
 pub mod conditions;
 pub mod protocol;
-pub mod resolve;
 pub mod session;
+pub mod ts_locator;
 
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
@@ -391,7 +391,7 @@ mod tests {
 
     /// Skips when no tsrs binary is on PATH.
     fn scratch_project() -> Option<(TsrsClient, PathBuf)> {
-        let binary = resolve::find_on_path()?;
+        let binary = ts_locator::find_on_path()?;
         let dir = std::env::temp_dir().join("oxvelte-tsrs-client-test");
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();

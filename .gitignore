@@ -22,6 +22,9 @@
 # fixtures/parser/local/.
 /fixtures/linter/upstream/
 /fixtures/linter/manifest.json
+# Version-only typescript marker written by `cargo get-eslint-fixtures` for
+# tsrs eligibility detection inside the fixtures tree.
+/fixtures/linter/node_modules/
 /fixtures/parser/upstream/
 
 # Runtime artifacts

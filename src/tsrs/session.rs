@@ -5,7 +5,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::tsrs::resolve;
+use crate::tsrs::ts_locator;
 use crate::tsrs::{TsrsClient, TsrsError};
 
 /// One appended template expression's extent in the virtual source and where
@@ -223,7 +223,7 @@ impl TsrsSession {
         settings: &serde_json::Value,
     ) -> Result<Self, TsrsError> {
         let dir = filename.parent().unwrap_or_else(|| Path::new("."));
-        let binary = resolve::find_tsrs_binary(filename).ok_or_else(|| TsrsError::Server {
+        let binary = ts_locator::find_tsrs_binary(filename).ok_or_else(|| TsrsError::Server {
             method: "resolve".to_owned(),
             message: "no tsrs binary found in the project's node_modules or on PATH".to_owned(),
         })?;
@@ -392,7 +392,7 @@ mod tests {
 
     #[test]
     fn session_checks_a_virtual_component() {
-        let Some(binary) = resolve::find_on_path() else {
+        let Some(binary) = ts_locator::find_on_path() else {
             eprintln!("skipping: no tsrs binary on PATH");
             return;
         };

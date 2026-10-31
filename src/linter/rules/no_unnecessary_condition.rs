@@ -139,11 +139,11 @@ fn tsrs_diagnostics(
         return None;
     }
     let path = Path::new(ctx.file_path.as_deref()?);
-    if !crate::tsrs::resolve::is_tsrs_eligible(path) {
+    if !crate::tsrs::ts_locator::is_tsrs_eligible(path) {
         return None;
     }
     // With no resolvable binary, fall back to the JS sidecar.
-    crate::tsrs::resolve::find_tsrs_binary(path)?;
+    crate::tsrs::ts_locator::find_tsrs_binary(path)?;
 
     let script_ranges: Vec<(usize, usize)> = scripts
         .iter()

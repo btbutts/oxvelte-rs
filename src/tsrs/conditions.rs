@@ -304,7 +304,18 @@ impl Analyzer<'_> {
     fn collect_mutable_roots(&mut self, program: &Program) -> Result<(), TsrsError> {
         // Top-level non-const variable statements.
         for statement in &program.body {
-            if let Statement::VariableDeclaration(declaration) = statement {
+            // oxc wraps exported declarations in ExportNamedDeclaration, while
+            // TS models `export let x` as a VariableStatement with modifiers —
+            // both must feed the mutable-root set.
+            let declaration = match statement {
+                Statement::VariableDeclaration(declaration) => Some(&**declaration),
+                Statement::ExportDeclaration(export) => match &export.declaration {
+                    Declaration::VariableDeclaration(declaration) => Some(declaration.as_ref()),
+                    _ => None,
+                },
+                _ => None,
+            };
+            if let Some(declaration) = declaration {
                 if declaration.kind != VariableDeclarationKind::Const {
                     for declarator in &declaration.declarations {
                         collect_binding_symbols(self.session, &declarator.id, &mut self.mutable_roots)?;
@@ -1037,7 +1048,7 @@ mod tests {
     /// chain fix. Skips when no tsrs binary is on PATH.
     #[test]
     fn analyze_finds_unnecessary_conditions() {
-        if crate::tsrs::resolve::find_on_path().is_none() {
+        if crate::tsrs::ts_locator::find_on_path().is_none() {
             eprintln!("skipping: no tsrs binary on PATH");
             return;
         }
@@ -1121,7 +1132,7 @@ mod tests {
     /// flow-sensitive.
     #[test]
     fn analyze_skips_mutable_roots_in_templates() {
-        if crate::tsrs::resolve::find_on_path().is_none() {
+        if crate::tsrs::ts_locator::find_on_path().is_none() {
             eprintln!("skipping: no tsrs binary on PATH");
             return;
         }

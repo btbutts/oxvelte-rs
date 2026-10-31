@@ -322,7 +322,7 @@ src/
     mod.rs            — TsrsClient: spawn `tsrs --api`, session lifecycle
                         (initialize, createSnapshot/updateSnapshot, close),
                         sequential request/response, FS-callback replies
-    resolve.rs        — binary resolution (project node_modules/.bin walked
+    ts_locator.rs      — binary resolution (project node_modules/.bin walked
                         up from the linted file, then PATH; never cached) and
                         project TS-version detection (nearest
                         node_modules/typescript/package.json)
@@ -360,14 +360,14 @@ Implementation phases:
    test `tests/tsrs_wire_protocol.rs` (skips when no `tsrs` is on PATH);
    framing, flags, union-part fetching, and diagnostics verified against the
    installed binary.
-2. ~~**Plumbing**~~ — done 31OCT2026: `src/tsrs/resolve.rs` (binary
+2. ~~**Plumbing**~~ — done 31OCT2026: `src/tsrs/ts_locator.rs` (binary
    resolution — project `node_modules/.bin` walked up from the linted file,
    then PATH, never cached — plus project TS-version detection from the
    nearest `node_modules/typescript/package.json` and the TS6+ eligibility
    check), `src/tsrs/protocol.rs` (serde types for the methods we call), and
    `src/tsrs/mod.rs` (`TsrsClient`: spawn, `initialize` handshake, typed
    `request`, snapshot/type/diagnostics helpers, kill-on-drop). 5 new tests
-   (4 resolve unit tests, 1 client round-trip against the real binary, all
+   (4 locator unit tests, 1 client round-trip against the real binary, all
    skipping gracefully without tsrs on PATH). Remaining plumbing: the
    `settings.tsrs` gate in `src/config.rs` (lands with the phase-3 rule
    wiring).

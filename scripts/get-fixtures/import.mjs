@@ -2,7 +2,7 @@
 // Mirrors discovery/config precedence in the pinned tests/utils/utils.ts.
 // This exports raw cases, without generating or rewriting upstream expectations.
 import { createHash } from 'node:crypto';
-import { existsSync, cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +18,10 @@ export const environment = {
   svelte: '5.49.2', eslint: '10.9.1', typescript: '6.0.3',
   '@typescript-eslint/parser': '8.70.0', 'svelte-eslint-parser': '1.8.1',
 };
+// The parity environment's svelte/typescript versions are overridable from
+// .cargo/config.toml so they can be managed without editing this file.
+if (process.env.OXVELTE_FIXTURES_SVELTE_VERSION) environment.svelte = process.env.OXVELTE_FIXTURES_SVELTE_VERSION;
+if (process.env.OXVELTE_FIXTURES_TYPESCRIPT_VERSION) environment.typescript = process.env.OXVELTE_FIXTURES_TYPESCRIPT_VERSION;
 const require = createRequire(import.meta.url);
 if (require('eslint/package.json').version !== environment.eslint) throw new Error('Installed ESLint does not match the declared parity environment');
 if (ts.version !== environment.typescript) throw new Error('Installed TypeScript does not match the declared parity environment');
@@ -251,8 +255,27 @@ async function importEslintRuleFixtures() {
     for (const entry of readdirSync(extractedRules, { withFileTypes: true })) {
       if (entry.isFile()) cpSync(path.join(extractedRules, entry.name), path.join(home, 'upstream', entry.name));
     }
+    // tsrs (TS7 semantics) rejects the ES5 emit target upstream's fixture
+    // tsconfig pins; ES6 (es2015) is the floor. Patch es5 to es6 and leave
+    // anything newer alone. Hashes are computed after this, so the manifest
+    // covers the patched content.
+    const tsconfigPath = path.join(home, 'upstream', 'tsconfig.json');
+    if (existsSync(tsconfigPath)) {
+      const tsconfig = JSON.parse(readFileSync(tsconfigPath, 'utf8'));
+      if (tsconfig.compilerOptions?.target === 'es5') {
+        tsconfig.compilerOptions.target = 'es6';
+        writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2) + '\n');
+        console.log('patched upstream/tsconfig.json: compilerOptions.target es5 -> es6');
+      }
+    }
     cpSync(path.join(extracted, 'LICENSE'), path.join(home, 'LICENSE'));
-    writeFileSync(path.join(home, 'package.json'), JSON.stringify({ private: true, dependencies: { svelte: environment.svelte } }, null, 2) + '\n');
+    writeFileSync(path.join(home, 'package.json'), JSON.stringify({ private: true, dependencies: { svelte: environment.svelte, typescript: environment.typescript } }, null, 2) + '\n');
+    // Version-only marker so tsrs eligibility detection (nearest installed
+    // typescript/package.json walked up from a component) works inside the
+    // fixtures tree without a real install.
+    const tsMarker = path.join(home, 'node_modules', 'typescript');
+    mkdirSync(tsMarker, { recursive: true });
+    writeFileSync(path.join(tsMarker, 'package.json'), JSON.stringify({ name: 'typescript', version: environment.typescript }) + '\n');
 
     // Gather the merged corpus from disk under buildManifest's virtual
     // 'tests/fixtures/rules/' keys, remembering each file's real root.

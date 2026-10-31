@@ -108,6 +108,11 @@ fn verify_files(root: &Path, manifest: &Manifest) -> Result<(), String> {
                 return Err("Symlinks are not allowed in the pinned corpus".into());
             }
             if kind.is_dir() {
+                // The typescript version marker written by the fixture
+                // importer for tsrs eligibility detection is not corpus.
+                if entry.file_name() == "node_modules" {
+                    continue;
+                }
                 inventory(root, &entry.path(), manifest)?;
             } else {
                 let name = entry

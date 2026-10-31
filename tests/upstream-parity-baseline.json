@@ -209,7 +209,7 @@
       "version_skip": "5ec66186b48e3b633b325f6d7123f64602f223451c4b7b7bd7dca0e9a59f4716"
     }
   },
-  "manifestHash": "a6ce0b5bc1754064780a682f36ad88c4fd7a0ae3658c5e5802ebd14484ce8a82",
+  "manifestHash": "5c5698cac70fda5d3d874689297de727cd81bfef52682e9c0584190458a46a3d",
   "note": "Known gaps, not rewritten upstream expectations. Regenerate only after reviewing a full --report.",
   "revision": "eslint-plugin-svelte@3.23.1",
   "schema": 1

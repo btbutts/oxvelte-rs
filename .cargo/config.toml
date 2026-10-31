@@ -35,6 +35,12 @@ OXVELTE_BUILD_SHOW_CSS_PROP_GEN_STATS = "false"
 OXVELTE_FIXTURES_ESLINT_PLUGIN_SVELTE_TAG = "3.23.1"
 OXVELTE_FIXTURES_SVELTE_TAG = "5.57.3"
 
+# The parity environment's svelte/typescript versions, written into
+# fixtures/linter/package.json and the node_modules/typescript version marker
+# by `cargo get-eslint-fixtures`. Bump here rather than editing import.mjs.
+OXVELTE_FIXTURES_SVELTE_VERSION = "5.49.2"
+OXVELTE_FIXTURES_TYPESCRIPT_VERSION = "6.0.3"
+
 # Optional JavaScript runtime override for the fixture importer launcher:
 # "bun" or "node". Unset = auto-detect (bun preferred, node fallback).
 # OXVELTE_JS_RUNTIME = "node"
