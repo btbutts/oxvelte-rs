@@ -3,6 +3,7 @@
 //! lifecycle, and the typed request helpers the conditions port uses.
 //! See `docs/research/dependency/tsrs-type-aware-checking.md`.
 
+pub mod binary_ast;
 pub mod protocol;
 pub mod resolve;
 pub mod session;
@@ -34,6 +35,9 @@ pub struct TsrsClient {
     child: Child,
     writer: MessagePackWriter<ChildStdin>,
     reader: MessagePackReader<ChildStdout>,
+    /// From `initialize`: 0 means case-insensitive paths (lowercase path
+    /// keys), non-zero means case-sensitive.
+    pub case_sensitivity: i32,
 }
 
 impl TsrsClient {
@@ -54,9 +58,30 @@ impl TsrsClient {
             child,
             writer: MessagePackWriter::new(stdin),
             reader: MessagePackReader::new(stdout),
+            case_sensitivity: 0,
         };
-        client.initialize()?;
+        client.case_sensitivity = client.initialize()?.case_sensitivity;
         Ok(client)
+    }
+
+    /// Sends one request with a raw payload and returns the raw response
+    /// payload. Some responses are raw binary rather than JSON (e.g.
+    /// `getSourceFile` when the server uses binary responses).
+    pub fn request_raw(&mut self, method: &str, payload: &[u8]) -> Result<Vec<u8>, TsrsError> {
+        self.writer
+            .write_tuple(MessageType::Request, method.as_bytes(), payload)?;
+        let tuple = self.reader.read_tuple()?;
+        match tuple.msg_type {
+            MessageType::Response => Ok(tuple.payload),
+            MessageType::Error => Err(TsrsError::Server {
+                method: method.to_owned(),
+                message: String::from_utf8_lossy(&tuple.payload).into_owned(),
+            }),
+            found => Err(TsrsError::UnexpectedMessage {
+                method: method.to_owned(),
+                found,
+            }),
+        }
     }
 
     /// Sends one request and decodes the typed response.
@@ -69,23 +94,11 @@ impl TsrsClient {
             method: method.to_owned(),
             source,
         })?;
-        self.writer
-            .write_tuple(MessageType::Request, method.as_bytes(), &payload)?;
-        let tuple = self.reader.read_tuple()?;
-        match tuple.msg_type {
-            MessageType::Response => serde_json::from_slice(&tuple.payload).map_err(|source| TsrsError::Json {
-                method: method.to_owned(),
-                source,
-            }),
-            MessageType::Error => Err(TsrsError::Server {
-                method: method.to_owned(),
-                message: String::from_utf8_lossy(&tuple.payload).into_owned(),
-            }),
-            found => Err(TsrsError::UnexpectedMessage {
-                method: method.to_owned(),
-                found,
-            }),
-        }
+        let raw = self.request_raw(method, &payload)?;
+        serde_json::from_slice(&raw).map_err(|source| TsrsError::Json {
+            method: method.to_owned(),
+            source,
+        })
     }
 
     fn initialize(&mut self) -> Result<protocol::InitializeResponse, TsrsError> {
@@ -133,6 +146,67 @@ impl TsrsClient {
         self.request(
             "getTypesOfType",
             &serde_json::json!({ "snapshot": snapshot, "project": project, "objectId": type_id }),
+        )
+    }
+
+    /// The binary-encoded AST of a file, for constructing node handles — see
+    /// `binary_ast`. The sync server answers with raw binary (not the
+    /// JSON/base64 wrapper) when binary responses are enabled.
+    pub fn get_source_file_data(&mut self, snapshot: u64, project: &str, file: &Path) -> Result<Vec<u8>, TsrsError> {
+        let params = serde_json::to_vec(&serde_json::json!({
+            "snapshot": snapshot,
+            "project": project,
+            "file": file.to_string_lossy(),
+        }))
+        .map_err(|source| TsrsError::Json {
+            method: "getSourceFile".to_owned(),
+            source,
+        })?;
+        let raw = self.request_raw("getSourceFile", &params)?;
+        if raw.first() == Some(&b'{') {
+            let resp: serde_json::Value = serde_json::from_slice(&raw).map_err(|source| TsrsError::Json {
+                method: "getSourceFile".to_owned(),
+                source,
+            })?;
+            let encoded = resp["data"].as_str().unwrap_or_default();
+            return crate::tsrs::binary_ast::decode_base64(encoded).ok_or_else(|| TsrsError::Server {
+                method: "getSourceFile".to_owned(),
+                message: "invalid base64 AST data".to_owned(),
+            });
+        }
+        Ok(raw)
+    }
+
+    /// The type of an exact node by its `index.kind.pathKey` handle.
+    /// Nullable: the server answers `null` when no type applies.
+    pub fn get_type_at_location(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        location: &str,
+    ) -> Result<Option<protocol::TypeResponse>, TsrsError> {
+        self.request(
+            "getTypeAtLocation",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "location": location,
+            }),
+        )
+    }
+
+    /// The base constraint of a type, or `None` when it has none (the
+    /// sidecar's `type()` then uses the type itself). Note the parameter is
+    /// `type` here (CheckerTypeParams), not `objectId`.
+    pub fn get_base_constraint_of_type(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        type_id: u32,
+    ) -> Result<Option<protocol::TypeResponse>, TsrsError> {
+        self.request(
+            "getBaseConstraintOfType",
+            &serde_json::json!({ "snapshot": snapshot, "project": project, "type": type_id }),
         )
     }
 

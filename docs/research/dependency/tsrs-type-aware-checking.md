@@ -268,6 +268,40 @@ through the `serde`/`serde_json` stack we already have. Adding `rmp-serde`
 or any MessagePack crate would buy us five byte constants and pull in
 serializers we would never call.
 
+### Span-addressed type queries (verified 31OCT2026)
+
+The conditions analysis needs types of *arbitrary expressions*, not just
+tokens, and the wire's position queries (`getTypeAtPosition`) resolve to the
+single touching **token** only. The working mechanism, implemented in
+`src/tsrs/binary_ast.rs` + `TsrsSession::type_at_span`:
+
+1. `getSourceFile { snapshot, project, file }` returns the file's AST in a
+   binary encoding. With the sync protocol the payload is **raw binary**
+   (the `RawBinary` path), not the JSON/base64 wrapper — our client handles
+   both.
+2. The encoding (64-byte header; nodes-section offset at header bytes
+   40..44) is a flat array of **28-byte node records** in pre-order:
+   kind/pos/end/next/parent/data/flags as LE u32s. Index 0 is a sentinel,
+   NodeList entries (kind `u32::MAX`) occupy an index. The nodes section is
+   not 4-byte aligned (variable-length string data precedes it).
+3. A node handle is `index.kind.pathKey`; `kind` is informational, `pathKey`
+   is the file's canonical path (lowercased when `initialize` reports
+   case-insensitivity). Record `pos` includes leading trivia, so matching
+   reproduces `getStart` by skipping whitespace/comments — all in UTF-16
+   units.
+4. `getTypeAtLocation { snapshot, project, location }` then answers with a
+   full `TypeResponse` (nullable), and `getBaseConstraintOfType` supplies
+   the sidecar's base-constraint fallback.
+
+Verified: `Math.random()` and `obj.a` (non-token expressions) resolve to
+`number` this way.
+
+**Parameter names are inconsistent upstream** — record them per method:
+`getTypesOfType` and `getReturnTypeOfSignature` take `objectId`;
+`getBaseConstraintOfType`, `isArrayType`, `getPropertyOfType` (+`name`),
+`getIndexInfoOfType` (+`kind`), `getSignaturesOfType` (+`kind`) take `type`;
+`getTypeOfSymbolAtLocation` takes `symbol` + `location`.
+
 ### Source layout (settled 31OCT2026)
 
 All gated behind `#[cfg(feature = "tsrs-inference")]`:
@@ -309,6 +343,9 @@ src/
                         typescript-conditions.cjs, driven through TsrsClient;
                         no_unnecessary_condition.rs dispatches here for
                         TS6+ components when settings.tsrs is on
+    binary_ast.rs     — reader for getSourceFile's binary AST encoding
+                        (landed 31OCT2026): fixed 28-byte node records, so
+                        spans map to node handles without decoding payloads
 ```
 
 The VS Code extension channel lands later as its own module on top of

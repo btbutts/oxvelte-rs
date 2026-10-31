@@ -138,7 +138,15 @@ pub struct TsrsSession {
     pub project: String,
     pub virtual_filename: PathBuf,
     pub virtual_source: String,
+    /// The virtual source as UTF-16 code units, for span arithmetic against
+    /// the encoded AST.
+    virtual_units: Vec<u16>,
     pub projections: Vec<Projection>,
+    /// The virtual file's canonical path key (lowercased when the server is
+    /// case-insensitive), used to construct node handles.
+    path_key: String,
+    /// Lazily decoded node records for the virtual file.
+    node_records: Option<Vec<crate::tsrs::binary_ast::NodeRecord>>,
     /// UTF-16 length of the component source; template expressions live at
     /// offsets beyond it.
     pub source_len_utf16: usize,
@@ -150,6 +158,48 @@ impl TsrsSession {
     /// [`project_range`]).
     pub fn project_range(&self, start: usize, end: usize) -> Option<(usize, usize)> {
         project_range(self.source_len_utf16, &self.projections, start, end)
+    }
+
+    /// The type of the expression at an exact UTF-16 span in the virtual
+    /// file — the wire equivalent of the sidecar's `checker.getTypeAtLocation`
+    /// on an arbitrary expression node. Works for non-token expressions
+    /// (calls, property accesses, arrow functions), which position-only
+    /// queries cannot address. Resolves the span to a node handle through the
+    /// binary AST, then applies `getBaseConstraintOfType` fallback semantics
+    /// (the sidecar's `type()`): base constraint when present, else the type.
+    pub fn type_at_span(
+        &mut self,
+        start: usize,
+        end: usize,
+    ) -> Result<Option<crate::tsrs::protocol::TypeResponse>, TsrsError> {
+        if self.node_records.is_none() {
+            let bytes = self
+                .client
+                .get_source_file_data(self.snapshot, &self.project, &self.virtual_filename)?;
+            self.node_records = Some(
+                crate::tsrs::binary_ast::read_nodes(&bytes).ok_or_else(|| TsrsError::Server {
+                    method: "getSourceFile".to_owned(),
+                    message: "unrecognized binary AST encoding".to_owned(),
+                })?,
+            );
+        }
+        let records = self.node_records.as_deref().unwrap_or(&[]);
+        let Some(record) =
+            crate::tsrs::binary_ast::find_by_span(records, &self.virtual_units, start as u32, end as u32)
+        else {
+            return Ok(None);
+        };
+        let handle = format!("{}.{}.{}", record.index, record.kind, self.path_key);
+        let Some(ty) = self
+            .client
+            .get_type_at_location(self.snapshot, &self.project, &handle)?
+        else {
+            return Ok(None);
+        };
+        let base = self
+            .client
+            .get_base_constraint_of_type(self.snapshot, &self.project, ty.id)?;
+        Ok(Some(base.unwrap_or(ty)))
     }
 
     /// Spawns tsrs, loads the project's configuration, and creates a
@@ -261,13 +311,26 @@ impl TsrsSession {
             })?
             .to_owned();
 
+        let path_key = {
+            let path = virtual_filename.to_string_lossy().into_owned();
+            if client.case_sensitivity == 0 {
+                path.to_lowercase()
+            } else {
+                path
+            }
+        };
+        let virtual_units = virtual_source.encode_utf16().collect();
+
         Ok(Self {
             client,
             snapshot,
             project,
             virtual_filename,
             virtual_source,
+            virtual_units,
             projections,
+            path_key,
+            node_records: None,
             source_len_utf16,
             strict_null_checks,
         })
@@ -376,6 +439,48 @@ mod tests {
             .expect("getTypesOfType");
         let names: Vec<&str> = parts.iter().filter_map(|p| p.intrinsic_name.as_deref()).collect();
         assert!(names.contains(&"string") && names.contains(&"null"), "parts: {names:?}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn type_at_span_resolves_whole_expressions() {
+        let dir = std::env::temp_dir().join("oxvelte-tsrs-span-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true}}"#).unwrap();
+
+        // `Math.random()` and `obj.a` are not single tokens: only a
+        // span-addressed query returns their types.
+        let source = concat!(
+            "<script lang=\"ts\">\n",
+            "const obj = { a: 1 };\n",
+            "const r = Math.random();\n",
+            "const v = obj.a;\n",
+            "</script>\n"
+        );
+        let script_start = source.find("const obj").unwrap();
+        let script_end = source.find("const v = obj.a;").unwrap() + "const v = obj.a;".len();
+        let filename = dir.join("Component.svelte");
+
+        let mut session = TsrsSession::create(
+            &filename,
+            source,
+            &[(script_start, script_end)],
+            &[],
+            &serde_json::json!({}),
+        )
+        .expect("session");
+
+        for (needle, expected) in [("Math.random()", "number"), ("obj.a;", "number")] {
+            let span_start = source.find(needle).unwrap();
+            let span_end = span_start + needle.trim_end_matches(';').len();
+            let ty = session
+                .type_at_span(span_start, span_end)
+                .unwrap_or_else(|e| panic!("type_at_span({needle}): {e}"))
+                .unwrap_or_else(|| panic!("no type for {needle}"));
+            assert_eq!(ty.intrinsic_name.as_deref(), Some(expected), "type of {needle}: {ty:?}");
+        }
 
         let _ = fs::remove_dir_all(&dir);
     }
