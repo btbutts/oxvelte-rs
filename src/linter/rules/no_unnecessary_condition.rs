@@ -60,8 +60,7 @@ impl Rule for NoUnnecessaryCondition {
             "scripts": scripts, "templates": templates,
             "options": ctx.config.options.as_ref().and_then(Value::as_array).and_then(|options| options.first()),
         });
-        let result = crate::compiler::typescript_conditions(&request)
-            .and_then(|value| serde_json::from_value::<Vec<Diagnostic>>(value).map_err(|error| error.to_string()));
+        let result = run_analysis(ctx, &request, &scripts, &templates);
         match result {
             Err(error) => ctx.diagnostic(format!("Unable to run TypeScript checks: {error}"), Span::new(0, 0)),
             Ok(diagnostics) => {
@@ -97,6 +96,101 @@ impl Rule for NoUnnecessaryCondition {
             }
         }
     }
+}
+
+/// Runs the condition analysis, routing to tsrs when the feature is compiled
+/// in, `settings.tsrs` is enabled, the component is Svelte 5, the project is
+/// TS6+, and a tsrs binary resolves. Everything else uses the JS sidecar.
+fn run_analysis(
+    ctx: &LintContext,
+    request: &Value,
+    scripts: &[Value],
+    templates: &[Value],
+) -> Result<Vec<Diagnostic>, String> {
+    #[cfg(feature = "tsrs-inference")]
+    if let Some(result) = tsrs_diagnostics(ctx, scripts, templates) {
+        return result;
+    }
+    #[cfg(not(feature = "tsrs-inference"))]
+    let _ = (scripts, templates);
+    crate::compiler::typescript_conditions(request)
+        .and_then(|value| serde_json::from_value::<Vec<Diagnostic>>(value).map_err(|error| error.to_string()))
+}
+
+/// Returns `None` when the component is not eligible for tsrs routing (the
+/// caller then uses the JS sidecar), otherwise the analysis result.
+#[cfg(feature = "tsrs-inference")]
+fn tsrs_diagnostics(
+    ctx: &LintContext,
+    scripts: &[Value],
+    templates: &[Value],
+) -> Option<Result<Vec<Diagnostic>, String>> {
+    use crate::tsrs::session::{TemplateExpression, TsrsSession};
+    use std::path::Path;
+
+    let enabled = ctx
+        .config
+        .settings
+        .as_ref()
+        .and_then(|settings| settings.get("tsrs"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+    if !enabled || !ctx.svelte_version.includes_major(5) {
+        return None;
+    }
+    let path = Path::new(ctx.file_path.as_deref()?);
+    if !crate::tsrs::resolve::is_tsrs_eligible(path) {
+        return None;
+    }
+    // With no resolvable binary, fall back to the JS sidecar.
+    crate::tsrs::resolve::find_tsrs_binary(path)?;
+
+    let script_ranges: Vec<(usize, usize)> = scripts
+        .iter()
+        .map(|script| {
+            (
+                script["start"].as_u64().unwrap_or(0) as usize,
+                script["end"].as_u64().unwrap_or(0) as usize,
+            )
+        })
+        .collect();
+    let template_expressions: Vec<TemplateExpression> = templates
+        .iter()
+        .map(|template| TemplateExpression {
+            start: template["start"].as_u64().unwrap_or(0) as usize,
+            end: template["end"].as_u64().unwrap_or(0) as usize,
+            condition: template["kind"] == "condition",
+        })
+        .collect();
+
+    Some((|| {
+        let settings = ctx.config.settings.as_ref().unwrap_or(&Value::Null);
+        let mut session = TsrsSession::create(path, ctx.source, &script_ranges, &template_expressions, settings)
+            .map_err(|error| error.to_string())?;
+        let options = ctx
+            .config
+            .options
+            .as_ref()
+            .and_then(Value::as_array)
+            .and_then(|options| options.first())
+            .cloned()
+            .unwrap_or(Value::Null);
+        let diagnostics =
+            crate::tsrs::conditions::analyze(&mut session, &options).map_err(|error| error.to_string())?;
+        Ok(diagnostics
+            .into_iter()
+            .map(|diagnostic| Diagnostic {
+                message: diagnostic.message,
+                start: diagnostic.start,
+                end: diagnostic.end,
+                fix: diagnostic.fix.map(|fix| Replacement {
+                    start: fix.start,
+                    end: fix.end,
+                    text: fix.text,
+                }),
+            })
+            .collect())
+    })())
 }
 
 fn add(source: &str, templates: &mut Vec<Value>, span: Span, kind: &str) {

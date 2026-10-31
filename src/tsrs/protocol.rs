@@ -55,7 +55,7 @@ pub struct CreateSnapshotResponse {
 }
 
 /// Identifies a cached symbol without its owning file's full descriptor.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CompactSymbolReference {
     pub id: u64,
@@ -68,7 +68,7 @@ pub struct CompactSymbolReference {
 /// number 0x40, string literal 0x400, union 0x8000000); the conditions port
 /// must use the TS7 values. Union/intersection parts are never inline —
 /// fetch them with `getTypesOfType`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TypeResponse {
     pub id: u32,
@@ -99,10 +99,34 @@ pub struct TypeResponse {
     pub alias_type_arguments: Vec<u32>,
 }
 
+/// A symbol's wire reference: identity plus its owner context. `id` is the
+/// stable per-session identity we use for mutable-root tracking.
+#[derive(Debug, Clone, serde::Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SymbolReference {
+    pub id: u64,
+    #[serde(default)]
+    pub kind: u32,
+    #[serde(default)]
+    pub file: Option<serde_json::Value>,
+    #[serde(default)]
+    pub snapshot: u64,
+    #[serde(default)]
+    pub project: String,
+}
+
+/// A signature answer (`getSignaturesOfType`): the id is the handle used by
+/// `getReturnTypeOfSignature`.
+#[derive(Debug, Deserialize)]
+pub struct SignatureResponse {
+    pub id: u64,
+}
+
 /// A symbol answer (`getSymbolAtPosition` and friends).
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SymbolResponse {
+    pub reference: SymbolReference,
     pub name: String,
     pub flags: u32,
     #[serde(default)]

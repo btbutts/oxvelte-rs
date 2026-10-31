@@ -160,18 +160,9 @@ impl TsrsSession {
         project_range(self.source_len_utf16, &self.projections, start, end)
     }
 
-    /// The type of the expression at an exact UTF-16 span in the virtual
-    /// file — the wire equivalent of the sidecar's `checker.getTypeAtLocation`
-    /// on an arbitrary expression node. Works for non-token expressions
-    /// (calls, property accesses, arrow functions), which position-only
-    /// queries cannot address. Resolves the span to a node handle through the
-    /// binary AST, then applies `getBaseConstraintOfType` fallback semantics
-    /// (the sidecar's `type()`): base constraint when present, else the type.
-    pub fn type_at_span(
-        &mut self,
-        start: usize,
-        end: usize,
-    ) -> Result<Option<crate::tsrs::protocol::TypeResponse>, TsrsError> {
+    /// The `index.kind.pathKey` node handle for an exact UTF-16 span, or
+    /// `None` when no node has that span. Decodes the binary AST lazily.
+    pub fn handle_at_span(&mut self, start: usize, end: usize) -> Result<Option<String>, TsrsError> {
         if self.node_records.is_none() {
             let bytes = self
                 .client
@@ -189,7 +180,24 @@ impl TsrsSession {
         else {
             return Ok(None);
         };
-        let handle = format!("{}.{}.{}", record.index, record.kind, self.path_key);
+        Ok(Some(format!("{}.{}.{}", record.index, record.kind, self.path_key)))
+    }
+
+    /// The type of the expression at an exact UTF-16 span in the virtual
+    /// file — the wire equivalent of the sidecar's `checker.getTypeAtLocation`
+    /// on an arbitrary expression node. Works for non-token expressions
+    /// (calls, property accesses, arrow functions), which position-only
+    /// queries cannot address. Applies `getBaseConstraintOfType` fallback
+    /// semantics (the sidecar's `type()`): base constraint when present,
+    /// else the type.
+    pub fn type_at_span(
+        &mut self,
+        start: usize,
+        end: usize,
+    ) -> Result<Option<crate::tsrs::protocol::TypeResponse>, TsrsError> {
+        let Some(handle) = self.handle_at_span(start, end)? else {
+            return Ok(None);
+        };
         let Some(ty) = self
             .client
             .get_type_at_location(self.snapshot, &self.project, &handle)?

@@ -4,6 +4,7 @@
 //! See `docs/research/dependency/tsrs-type-aware-checking.md`.
 
 pub mod binary_ast;
+pub mod conditions;
 pub mod protocol;
 pub mod resolve;
 pub mod session;
@@ -223,6 +224,151 @@ impl TsrsClient {
                 "snapshot": snapshot,
                 "project": project,
                 "files": [file.to_string_lossy()],
+            }),
+        )
+    }
+
+    /// Syntactic diagnostics for one file.
+    pub fn get_syntactic_diagnostics(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        file: &Path,
+    ) -> Result<Vec<protocol::DiagnosticResponse>, TsrsError> {
+        self.request(
+            "getSyntacticDiagnostics",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "files": [file.to_string_lossy()],
+            }),
+        )
+    }
+
+    /// The symbol at a node handle. Nullable.
+    pub fn get_symbol_at_location(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        location: &str,
+    ) -> Result<Option<protocol::SymbolResponse>, TsrsError> {
+        self.request(
+            "getSymbolAtLocation",
+            &serde_json::json!({ "snapshot": snapshot, "project": project, "location": location }),
+        )
+    }
+
+    /// The value symbol of a shorthand property assignment. Nullable.
+    pub fn get_shorthand_assignment_value_symbol(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        location: &str,
+    ) -> Result<Option<protocol::SymbolResponse>, TsrsError> {
+        self.request(
+            "getShorthandAssignmentValueSymbol",
+            &serde_json::json!({ "snapshot": snapshot, "project": project, "location": location }),
+        )
+    }
+
+    /// Whether the type is an array type (CheckerTypeParams: `type`).
+    pub fn is_array_type(&mut self, snapshot: u64, project: &str, type_id: u32) -> Result<bool, TsrsError> {
+        self.request(
+            "isArrayType",
+            &serde_json::json!({ "snapshot": snapshot, "project": project, "type": type_id }),
+        )
+    }
+
+    /// A named property of a type. Nullable.
+    pub fn get_property_of_type(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        type_id: u32,
+        name: &str,
+    ) -> Result<Option<protocol::SymbolResponse>, TsrsError> {
+        self.request(
+            "getPropertyOfType",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "type": type_id,
+                "name": name,
+            }),
+        )
+    }
+
+    /// The type of a symbol at a location. Nullable.
+    pub fn get_type_of_symbol_at_location(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        symbol: &protocol::SymbolReference,
+        location: &str,
+    ) -> Result<Option<protocol::TypeResponse>, TsrsError> {
+        self.request(
+            "getTypeOfSymbolAtLocation",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "symbol": symbol,
+                "location": location,
+            }),
+        )
+    }
+
+    /// Index info presence for a type (`kind`: 0 string, 1 number). Nullable.
+    pub fn get_index_info_of_type(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        type_id: u32,
+        kind: i32,
+    ) -> Result<Option<serde_json::Value>, TsrsError> {
+        self.request(
+            "getIndexInfoOfType",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "type": type_id,
+                "kind": kind,
+            }),
+        )
+    }
+
+    /// Call/construct signatures of a type (`kind`: 0 call, 1 construct).
+    pub fn get_signatures_of_type(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        type_id: u32,
+        kind: i32,
+    ) -> Result<Vec<protocol::SignatureResponse>, TsrsError> {
+        self.request(
+            "getSignaturesOfType",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "type": type_id,
+                "kind": kind,
+            }),
+        )
+    }
+
+    /// The return type of a signature (GetSignaturePropertyParams:
+    /// `objectId`). Nullable.
+    pub fn get_return_type_of_signature(
+        &mut self,
+        snapshot: u64,
+        project: &str,
+        signature_id: u64,
+    ) -> Result<Option<protocol::TypeResponse>, TsrsError> {
+        self.request(
+            "getReturnTypeOfSignature",
+            &serde_json::json!({
+                "snapshot": snapshot,
+                "project": project,
+                "objectId": signature_id,
             }),
         )
     }

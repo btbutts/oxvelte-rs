@@ -1,9 +1,9 @@
 # tsrs type-aware checking — research report
 
 Status: design settled 30OCT2026; implementation in progress on branch
-`tsrs-ts6plus` — phase 1 (spike) done 31OCT2026: `src/transport/` framing
-landed and the wire format is verified end to end by
-`tests/tsrs_wire_protocol.rs`.
+`tsrs-ts6plus` — phases 1–3 done 31OCT2026 (transport, client, session,
+conditions port, rule routing, dual-backend tests). Remaining: phase 4
+(version-matrix parity proof) and user-facing docs for `settings.tsrs`.
 
 ### Preface:
 Type-aware lint rules (today: `svelte/no-unnecessary-condition`) currently run
@@ -371,11 +371,24 @@ Implementation phases:
    skipping gracefully without tsrs on PATH). Remaining plumbing: the
    `settings.tsrs` gate in `src/config.rs` (lands with the phase-3 rule
    wiring).
-3. **Ports** — virtual-file construction + tsconfig setup (from
-   `typescript-service.cjs`) and the conditions logic (from
-   `typescript-conditions.cjs`) as a tsrs backend for
-   `no_unnecessary_condition.rs`. The Svelte-specific exclusions (mutable
-   root bindings, `$:` blocks) already live in our Rust rule and don't move.
+3. ~~**Ports**~~ — done 31OCT2026: `src/tsrs/conditions.rs` ports the
+   conditions analysis (oxc walks the virtual file's TypeScript AST; tsrs
+   answers type/symbol queries only), and `no_unnecessary_condition.rs`
+   routes to it when the feature is compiled in, `settings.tsrs` is true,
+   the component is Svelte 5, the project is TS6+, and a binary resolves —
+   everything else keeps the JS sidecar. The Svelte reactive exclusions are
+   reimplemented over the oxc AST with symbol identity from tsrs
+   (mutable-root collection including hoisted `var`, `$:`-label and template
+   regions, shorthand-property value symbols). Port findings worth keeping:
+   oxc routes chain-element members/calls through
+   `visit_member_expression`/`visit_call_expression` (not
+   `visit_expression`), and boolean literal types carry their value in
+   `value` (bool) with **no `intrinsicName`** on the wire — unlike TS5's
+   in-process API. `tests/tsrs_conditions.rs` runs an 11-case corpus through
+   BOTH backends with identical expectations and a byte-for-byte
+   diagnostics-and-spans agreement test; `fixtures/tsrs/` is a local Svelte 5
+   + TS6 project for it (the upstream type fixtures pin ES5-era options,
+   which tsrs rejects, so they cannot serve dual-backend coverage).
 4. **Parity proof** — byte-exact diagnostics vs the JS sidecar across the
    version-matrix before the feature is considered reliable.
 
