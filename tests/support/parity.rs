@@ -13,6 +13,9 @@ pub struct RunnerArgs {
     pub report: Option<std::path::PathBuf>,
     pub corpus: Option<std::path::PathBuf>,
     pub baseline: Option<std::path::PathBuf>,
+    /// Raw `--engine` value; each suite validates it against its own
+    /// `TypingEngine` support (`js-sidecar` or `tsrs`).
+    pub engine: Option<String>,
     pub no_baseline: bool,
     pub update: bool,
     pub strict: bool,
@@ -37,12 +40,16 @@ pub fn runner_arguments(args: impl IntoIterator<Item = String>) -> Result<Runner
             "--no-baseline" => result.no_baseline = true,
             "--update-baseline" => result.update = true,
             "--strict" => result.strict = true,
+            "--engine" => result.engine = Some(args.next().ok_or("--engine needs js-sidecar or tsrs")?),
             "--nocapture" => {}
             _ => return Err(format!("Unknown argument: {arg}")),
         }
     }
     if result.update && (result.rule.is_some() || result.strict) {
         return Err("Baseline updates require the entire suite without --strict".into());
+    }
+    if result.update && result.engine.is_some() {
+        return Err("Baseline updates record default-engine gaps; do not combine with --engine".into());
     }
     if result.no_baseline && (!result.strict || result.baseline.is_some() || result.update) {
         return Err("--no-baseline requires --strict and cannot be combined with a baseline path or update".into());

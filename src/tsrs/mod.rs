@@ -11,9 +11,30 @@ pub mod ts_locator;
 
 use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::transport::TransportError;
 use crate::transport::message_pack::{MessagePackReader, MessagePackWriter, MessageType};
+
+/// Routing observability for tests and CI: which typing engine actually
+/// served a run. `TSRS_SERVED` counts the files whose type analysis tsrs
+/// performed in this process, so the parity suites can prove routing
+/// happened (or, for ineligible projects, prove it did not). Neither this
+/// counter nor the trace affects lint results.
+pub static TSRS_SERVED: AtomicUsize = AtomicUsize::new(0);
+
+pub fn record_served() {
+    TSRS_SERVED.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Prints one routing decision to stderr when `OXVELTE_TSRS_TRACE=1` is set.
+/// Only tsrs-opted-in runs trace; the default JS-sidecar path stays quiet.
+pub fn trace(decision: &str) {
+    static ENABLED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ENABLED.get_or_init(|| std::env::var_os("OXVELTE_TSRS_TRACE").is_some_and(|value| value == "1")) {
+        eprintln!("[oxvelte] typing-engine: {decision}");
+    }
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum TsrsError {

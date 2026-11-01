@@ -1,9 +1,12 @@
 //! Run with cargo test --test upstream_parity -- [--rule NAME] [--report PATH].
 //! --strict rejects every eligible gap; --update-baseline explicitly records current gaps.
 //! Independent environments use --corpus PATH with --baseline PATH or --strict --no-baseline.
+#[path = "support/engine.rs"]
+mod engine;
 #[path = "support/parity.rs"]
 mod parity;
 
+use engine::TypingEngine;
 use oxc::allocator::Allocator;
 use oxvelte::{
     config::OxvelteConfig,
@@ -24,6 +27,10 @@ const REVISION: &str = concat!(
 );
 const CORPUS: &str = "fixtures/linter";
 const BASELINE: &str = "tests/upstream-parity-baseline.json";
+
+/// Rules whose diagnostics consume a type checker. `--engine tsrs` restricts
+/// itself to these — every other rule would be a byte-identical no-op run.
+const TYPE_AWARE_RULES: &[&str] = &["@typescript-eslint/no-unnecessary-condition"];
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -140,7 +147,12 @@ fn isolated_linter(rule_name: &str) -> Linter {
     lint
 }
 
-fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConfig, String> {
+fn rule_config(
+    root: &Path,
+    case: &Case,
+    typing_engine: Option<TypingEngine>,
+    issues: &mut Issues,
+) -> Result<RuleConfig, String> {
     let compiler_rule = ["valid-compile", "no-unused-svelte-ignore"].contains(&case.rule.as_str());
     let executable_path = if case.executable_config {
         let path = case
@@ -185,6 +197,9 @@ fn rule_config(root: &Path, case: &Case, issues: &mut Issues) -> Result<RuleConf
         {
             issues.insert("language_configuration".into(), language.clone());
         }
+    }
+    if let Some(engine) = typing_engine {
+        engine.apply(settings.get_or_insert_with(|| json!({})));
     }
     Ok(RuleConfig {
         options: config.get("options").cloned(),
@@ -233,7 +248,7 @@ fn lint_case(lint: &Linter, source: &str, path: &str, config: RuleConfig, issues
     }
 }
 
-fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
+fn evaluate(root: &Path, case: &Case, typing_engine: Option<TypingEngine>) -> Result<Issues, String> {
     let mut issues = Issues::new();
     if !case.ineligible.is_empty() {
         issues.insert("version_skip".into(), json!(case.ineligible));
@@ -249,7 +264,7 @@ fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
         issues.insert("unsupported_rule".into(), json!(target));
         return Ok(issues);
     }
-    let config = rule_config(root, case, &mut issues)?;
+    let config = rule_config(root, case, typing_engine, &mut issues)?;
     let source_path = checked_path(root, &case.filename)?;
     let source = fs::read_to_string(&source_path).map_err(|e| e.to_string())?;
     // Forward slashes give the same route/path behavior on Windows and Linux.
@@ -354,8 +369,27 @@ fn evaluate(root: &Path, case: &Case) -> Result<Issues, String> {
     Ok(issues)
 }
 
+/// The corpus environment's own eligibility for tsrs routing: Svelte 5 and
+/// TypeScript 6+, mirroring the gate in the rule (`settings.tsrs` on,
+/// Svelte major 5, project TypeScript 6+). Used to assert the forced tsrs
+/// engine really served (or, for older profiles, really did not).
+#[cfg(feature = "tsrs-inference")]
+fn tsrs_eligible_environment(environment: &Value) -> bool {
+    fn major(environment: &Value, name: &str) -> Option<u32> {
+        environment
+            .get(name)
+            .and_then(Value::as_str)
+            .and_then(|version| version.split('.').next()?.parse().ok())
+    }
+    major(environment, "svelte") == Some(5) && major(environment, "typescript").is_some_and(|major| major >= 6)
+}
+
 fn run() -> Result<(), String> {
     let args = parity::runner_arguments(std::env::args().skip(1))?;
+    let typing_engine = args.engine.as_deref().map(TypingEngine::parse).transpose()?;
+    if typing_engine == Some(TypingEngine::Tsrs) && !TypingEngine::Tsrs.available() {
+        return Err("--engine tsrs needs the tsrs-inference feature compiled in and a tsrs binary on PATH".into());
+    }
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
     let root = repo.join(args.corpus.as_deref().unwrap_or(Path::new(CORPUS)));
     let baseline_path = repo.join(args.baseline.as_deref().unwrap_or(Path::new(BASELINE)));
@@ -386,13 +420,26 @@ fn run() -> Result<(), String> {
         }
         baseline = serde_json::from_value(saved["cases"].clone()).map_err(|e| e.to_string())?;
     }
-    let selected: Vec<_> = manifest
+    let mut selected: Vec<_> = manifest
         .cases
         .iter()
         .filter(|case| args.rule.as_ref().is_none_or(|rule| case.rule == *rule))
         .collect();
     if selected.is_empty() {
         return Err("No cases selected; check the rule name".into());
+    }
+    if typing_engine == Some(TypingEngine::Tsrs) {
+        if let Some(rule) = &args.rule {
+            if !TYPE_AWARE_RULES.contains(&rule.as_str()) {
+                return Err(format!(
+                    "--engine tsrs runs type-aware rules only; {rule} consumes no types"
+                ));
+            }
+        }
+        selected.retain(|case| TYPE_AWARE_RULES.contains(&case.rule.as_str()));
+        if selected.is_empty() {
+            return Err("No type-aware cases selected for --engine tsrs".into());
+        }
     }
     if args.corpus.is_some() {
         if let Some(case) = selected.iter().find(|case| {
@@ -421,7 +468,7 @@ fn run() -> Result<(), String> {
     let mut summary: BTreeMap<String, [usize; 3]> = BTreeMap::new();
     let mut regressions = Vec::new();
     for case in &selected {
-        let issues = evaluate(&root, case)?;
+        let issues = evaluate(&root, case, typing_engine)?;
         let stats = summary.entry(case.rule.clone()).or_default();
         let status = if issues.is_empty() {
             stats[0] += 1;
@@ -451,8 +498,30 @@ fn run() -> Result<(), String> {
         }
         results.push(json!({"id": case.id, "rule": case.rule, "status": status, "issues": issues}));
     }
+    // A forced engine must prove it actually ran: on a tsrs-eligible corpus
+    // every linted case must have been served by tsrs (a silent fallback
+    // would pass against the same expectations and report nothing), and on
+    // an ineligible corpus the routing gate must have kept tsrs out.
+    #[cfg(feature = "tsrs-inference")]
+    if typing_engine == Some(TypingEngine::Tsrs) {
+        use std::sync::atomic::Ordering;
+        let served = oxvelte::tsrs::TSRS_SERVED.load(Ordering::Relaxed);
+        let linted = selected.iter().filter(|case| case.ineligible.is_empty()).count();
+        if tsrs_eligible_environment(&manifest.environment) {
+            if served != linted {
+                return Err(format!(
+                    "[engine=tsrs] eligible corpus, but tsrs served {served} of {linted} linted cases; the rest silently fell back to the JS sidecar"
+                ));
+            }
+        } else if served != 0 {
+            return Err(format!(
+                "[engine=tsrs] corpus is not tsrs-eligible, yet tsrs served {served} case(s); the routing gate is broken"
+            ));
+        }
+    }
+    let engine_label = typing_engine.unwrap_or(TypingEngine::JsSidecar);
     println!(
-        "Pinned eslint-plugin-svelte {REVISION}; {} cases selected",
+        "Pinned eslint-plugin-svelte {REVISION}; {} cases selected [engine={engine_label}]",
         selected.len()
     );
     println!("{:<48} {:>6} {:>6} {:>6}", "Rule", "pass", "gaps", "skip");
@@ -469,6 +538,7 @@ fn run() -> Result<(), String> {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         fs::write(path, serde_json::to_string_pretty(&json!({"revision": REVISION, "manifestHash": manifest_hash,
+            "engine": engine_label.label(),
             "environment": manifest.environment, "summary": summary, "totals": {"pass":totals[0], "gaps":totals[1], "versionSkip":totals[2]},
             "regressions": regressions, "cases": results})).unwrap() + "\n").map_err(|e| e.to_string())?;
         println!("Report: {}", path.display());
@@ -484,7 +554,7 @@ fn run() -> Result<(), String> {
         println!("Updated {}", baseline_path.display());
     } else if !regressions.is_empty() {
         return Err(format!(
-            "{} new/changed gaps:\n{}\nUse --report for expected/actual details. Baseline updates require review.",
+            "{} new/changed gaps [engine={engine_label}]:\n{}\nUse --report for expected/actual details. Baseline updates require review.",
             regressions.len(),
             regressions.iter().take(30).cloned().collect::<Vec<_>>().join("\n")
         ));

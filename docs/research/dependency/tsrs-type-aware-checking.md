@@ -1,9 +1,9 @@
 # tsrs type-aware checking — research report
 
 Status: design settled 30OCT2026; implementation in progress on branch
-`tsrs-ts6plus` — phases 1–3 done 31OCT2026 (transport, client, session,
-conditions port, rule routing, dual-backend tests). Remaining: phase 4
-(version-matrix parity proof) and user-facing docs for `settings.tsrs`.
+`tsrs-ts6plus` — phases 1–4 done 01NOV2026 (transport, client, session,
+conditions port, rule routing, dual-backend tests, version-matrix parity
+proof). Remaining: user-facing docs for `settings.tsrs`.
 
 ### Preface:
 Type-aware lint rules (today: `svelte/no-unnecessary-condition`) currently run
@@ -389,8 +389,25 @@ Implementation phases:
    diagnostics-and-spans agreement test; `fixtures/tsrs/` is a local Svelte 5
    + TS6 project for it (the upstream type fixtures pin ES5-era options,
    which tsrs rejects, so they cannot serve dual-backend coverage).
-4. **Parity proof** — byte-exact diagnostics vs the JS sidecar across the
-   version-matrix before the feature is considered reliable.
+4. ~~**Parity proof**~~ — done 01NOV2026: `tests/upstream_parity.rs` accepts
+   `--engine js-sidecar|tsrs` (default js-sidecar; `--engine tsrs` forces
+   `settings.tsrs` on and restricts selection to type-aware rules — every
+   other rule would be a byte-identical no-op). The forced engine must prove
+   it ran: a feature-gated process counter (`oxvelte::tsrs::TSRS_SERVED`) is
+   asserted against the corpus environment — on an eligible corpus (Svelte 5
+   + TS6+) every linted case must have been served by tsrs, and on an
+   ineligible one the routing gate must have kept tsrs out, so a silent
+   fallback can never pass as a tsrs run. `OXVELTE_TSRS_TRACE=1` prints each
+   routing decision (`[oxvelte] typing-engine: tsrs` / `js-sidecar (reason)`)
+   for opted-in runs. `scripts/version-matrix/run.mjs` now runs a second
+   leg per profile with `--engine tsrs` (skipping with a note when no tsrs
+   binary is on PATH) and requires the two engines' reports to agree
+   case-by-case; each matrix corpus gets a
+   `node_modules/typescript/package.json` version marker mirroring a real
+   project install (the corpus inventory already ignores `node_modules`).
+   Engine labels come from one shared `tests/support/engine.rs`
+   (`TypingEngine`), so test names, failure messages (`[engine=tsrs]`), the
+   report header and the JSON report all name the engine that produced them.
 
 ### Test strategy (settled 31OCT2026)
 

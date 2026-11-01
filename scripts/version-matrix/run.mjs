@@ -75,7 +75,15 @@ export function prepareProfile(name) {
     writeFileSync(destination, bytes);
   }
   writeFileSync(path.join(corpus, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
-  return { name, runtime, corpus, environment: versions, report: path.join(outputRoot, name, 'parity.json') };
+  // Mirror a real project's typescript install for the tsrs eligibility
+  // gate: the locator reads the project's own typescript version walking up
+  // from the linted file. The corpus inventory ignores node_modules.
+  const marker = path.join(corpus, 'node_modules', 'typescript');
+  mkdirSync(marker, { recursive: true });
+  writeFileSync(path.join(marker, 'package.json'), JSON.stringify({ name: 'typescript', version: versions.typescript }) + '\n');
+  return { name, runtime, corpus, environment: versions,
+    report: path.join(outputRoot, name, 'parity.json'),
+    tsrsReport: path.join(outputRoot, name, 'parity-tsrs.json') };
 }
 
 export function summarizeMatrix(original, reports) {
@@ -165,6 +173,31 @@ function main() {
     if (!isDeepStrictEqual(report.environment, profile.environment)) throw new Error(`Report environment differs for ${name}`);
     if (report.manifestHash !== digest(readFileSync(path.join(profile.corpus, 'manifest.json')))) throw new Error(`Report corpus differs for ${name}`);
     reports[name] = report;
+    // Phase-4 tsrs leg: same corpus, same expectations, tsrs forced on. The
+    // runner restricts itself to type-aware rules and proves routing actually
+    // happened (or, on older profiles, that the gate kept tsrs out); here we
+    // require both engines to agree case-by-case.
+    if (findOnPath('tsrs')) {
+      rmSync(profile.tsrsReport, { force: true });
+      const tsrsResult = spawnSync('cargo', ['test', '--locked', '--test', 'upstream_parity', '--', '--corpus', profile.corpus,
+        '--strict', '--no-baseline', '--report', profile.tsrsReport, '--engine', 'tsrs'], {
+        cwd: root, stdio: 'inherit', env: { ...process.env, OXVELTE_COMPILER_RUNTIME: profile.runtime },
+      });
+      if (tsrsResult.error) throw tsrsResult.error;
+      failed ||= tsrsResult.status !== 0;
+      if (!existsSync(profile.tsrsReport)) throw new Error(`No tsrs parity report generated for ${name}`);
+      const tsrsCases = JSON.parse(readFileSync(profile.tsrsReport)).cases;
+      const jsCases = new Map(report.cases.map((entry) => [entry.id, entry]));
+      for (const entry of tsrsCases) {
+        const original = jsCases.get(entry.id);
+        if (!original || !isDeepStrictEqual({ status: entry.status, issues: entry.issues }, { status: original.status, issues: original.issues })) {
+          throw new Error(`${name}: js-sidecar and tsrs diverge on ${entry.id}`);
+        }
+      }
+      console.log(`${name}: js-sidecar and tsrs agree on ${tsrsCases.length} type-aware case(s)`);
+    } else {
+      console.log(`${name}: no tsrs binary on PATH; skipping the tsrs engine leg`);
+    }
   }
   if (!prepareOnly) {
     const original = JSON.parse(readFileSync(path.join(baseCorpus, 'manifest.json')));

@@ -15,7 +15,12 @@
 #[allow(dead_code)]
 #[path = "support/parity.rs"]
 mod parity;
+// Shared support modules: not every helper is used in every binary.
+#[allow(dead_code)]
+#[path = "support/engine.rs"]
+mod engine;
 
+use engine::TypingEngine;
 use oxvelte::config::OxvelteConfig;
 use oxvelte::linter::{Linter, RuleConfig};
 use oxvelte::parser;
@@ -136,14 +141,15 @@ fn fixtures_available() -> bool {
         && fixtures_root().join("node_modules/typescript/package.json").is_file()
 }
 
-fn rule_config(use_tsrs: bool) -> RuleConfig {
+fn rule_config(engine: TypingEngine) -> RuleConfig {
     let tsconfig = fixtures_root().join("upstream/tsconfig.json");
+    let mut settings = json!({
+        "typescript": { "project": tsconfig.to_string_lossy() },
+    });
+    engine.apply(&mut settings);
     RuleConfig {
         options: None,
-        settings: Some(json!({
-            "tsrs": use_tsrs,
-            "typescript": { "project": tsconfig.to_string_lossy() },
-        })),
+        settings: Some(settings),
     }
 }
 
@@ -185,8 +191,8 @@ fn sorted(mut messages: Vec<String>) -> Vec<String> {
     messages
 }
 
-fn check_inline_cases(use_tsrs: bool) {
-    let config = rule_config(use_tsrs);
+fn check_inline_cases(engine: TypingEngine) {
+    let config = rule_config(engine);
     for case in INLINE_CASES {
         let path = fixtures_root().join(format!("{}.svelte", case.name));
         let diagnostics = lint(case.source, &path.to_string_lossy(), &config);
@@ -194,7 +200,7 @@ fn check_inline_cases(use_tsrs: bool) {
         let expected = sorted(case.expected.iter().map(|s| s.to_string()).collect());
         assert_eq!(
             messages, expected,
-            "case `{}` (tsrs: {use_tsrs}) messages diverge: {diagnostics:?}",
+            "case `{}` [engine={engine}] messages diverge: {diagnostics:?}",
             case.name
         );
     }
@@ -202,7 +208,7 @@ fn check_inline_cases(use_tsrs: bool) {
 
 /// The rule's upstream manifest cases, linted through one backend and
 /// compared against the manifest's expectations (message/line/column).
-fn upstream_diagnostics(use_tsrs: bool) -> Vec<(String, Vec<Value>, Vec<Value>)> {
+fn upstream_diagnostics(engine: TypingEngine) -> Vec<(String, Vec<Value>, Vec<Value>)> {
     let root = fixtures_root();
     let manifest: Manifest =
         serde_json::from_str(&std::fs::read_to_string(root.join("manifest.json")).unwrap()).unwrap();
@@ -212,7 +218,7 @@ fn upstream_diagnostics(use_tsrs: bool) -> Vec<(String, Vec<Value>, Vec<Value>)>
         let source = std::fs::read_to_string(&path).unwrap();
         let config = parity::rewrite_fixture_paths(&case.config, &root, &case.filename);
         let mut settings = parity::fixture_settings(&config, None, &root, RULE);
-        settings.get_or_insert_with(|| json!({}))["tsrs"] = json!(use_tsrs);
+        engine.apply(settings.get_or_insert_with(|| json!({})));
         let rule_config = RuleConfig {
             options: config.get("options").cloned(),
             settings,
@@ -241,10 +247,29 @@ fn upstream_diagnostics(use_tsrs: bool) -> Vec<(String, Vec<Value>, Vec<Value>)>
     results
 }
 
-fn check_upstream_cases(use_tsrs: bool) {
-    for (filename, expected, actual) in upstream_diagnostics(use_tsrs) {
-        assert_eq!(actual, expected, "{filename} (tsrs: {use_tsrs}) diverges");
+fn check_upstream_cases(engine: TypingEngine) {
+    for (filename, expected, actual) in upstream_diagnostics(engine) {
+        assert_eq!(actual, expected, "{filename} [engine={engine}] diverges");
     }
+}
+
+/// Asserts the tsrs legs above really were served by tsrs — a silent
+/// routing fallback would otherwise pass against the same expectations
+/// and the engine label in the test name would be a lie.
+#[cfg(feature = "tsrs-inference")]
+fn assert_tsrs_served(since: usize) {
+    use std::sync::atomic::Ordering;
+    let served = oxvelte::tsrs::TSRS_SERVED.load(Ordering::Relaxed) - since;
+    assert!(
+        served > 0,
+        "engine tsrs requested, but every case fell back to the JS sidecar"
+    );
+}
+
+#[cfg(feature = "tsrs-inference")]
+fn served_count() -> usize {
+    use std::sync::atomic::Ordering;
+    oxvelte::tsrs::TSRS_SERVED.load(Ordering::Relaxed)
 }
 
 #[test]
@@ -253,7 +278,7 @@ fn inline_cases_via_js_sidecar() {
         eprintln!("skipping: linter fixtures not fetched");
         return;
     }
-    check_inline_cases(false);
+    check_inline_cases(TypingEngine::JsSidecar);
 }
 
 #[test]
@@ -262,27 +287,31 @@ fn upstream_cases_via_js_sidecar() {
         eprintln!("skipping: linter fixtures not fetched");
         return;
     }
-    check_upstream_cases(false);
+    check_upstream_cases(TypingEngine::JsSidecar);
 }
 
 #[cfg(feature = "tsrs-inference")]
 #[test]
 fn inline_cases_via_tsrs() {
-    if std::process::Command::new("tsrs").arg("--version").output().is_err() || !fixtures_available() {
+    if !TypingEngine::Tsrs.available() || !fixtures_available() {
         eprintln!("skipping: no tsrs binary on PATH or fixtures not fetched");
         return;
     }
-    check_inline_cases(true);
+    let since = served_count();
+    check_inline_cases(TypingEngine::Tsrs);
+    assert_tsrs_served(since);
 }
 
 #[cfg(feature = "tsrs-inference")]
 #[test]
 fn upstream_cases_via_tsrs() {
-    if std::process::Command::new("tsrs").arg("--version").output().is_err() || !fixtures_available() {
+    if !TypingEngine::Tsrs.available() || !fixtures_available() {
         eprintln!("skipping: no tsrs binary on PATH or fixtures not fetched");
         return;
     }
-    check_upstream_cases(true);
+    let since = served_count();
+    check_upstream_cases(TypingEngine::Tsrs);
+    assert_tsrs_served(since);
 }
 
 /// The strongest guarantee: both backends must agree byte-for-byte on every
@@ -290,22 +319,22 @@ fn upstream_cases_via_tsrs() {
 #[cfg(feature = "tsrs-inference")]
 #[test]
 fn backends_agree_on_diagnostics_and_spans() {
-    if std::process::Command::new("tsrs").arg("--version").output().is_err() || !fixtures_available() {
+    if !TypingEngine::Tsrs.available() || !fixtures_available() {
         eprintln!("skipping: no tsrs binary on PATH or fixtures not fetched");
         return;
     }
     for case in INLINE_CASES {
         let path = fixtures_root().join(format!("{}.svelte", case.name));
         let path = path.to_string_lossy().into_owned();
-        let js = lint(case.source, &path, &rule_config(false));
-        let tsrs = lint(case.source, &path, &rule_config(true));
-        assert_eq!(js, tsrs, "case `{}`: JS sidecar and tsrs diverge", case.name);
+        let js = lint(case.source, &path, &rule_config(TypingEngine::JsSidecar));
+        let tsrs = lint(case.source, &path, &rule_config(TypingEngine::Tsrs));
+        assert_eq!(js, tsrs, "case `{}`: js-sidecar and tsrs diverge", case.name);
     }
-    for (filename, js, tsrs_backend) in upstream_diagnostics(false)
+    for (filename, js, tsrs_backend) in upstream_diagnostics(TypingEngine::JsSidecar)
         .into_iter()
-        .zip(upstream_diagnostics(true))
+        .zip(upstream_diagnostics(TypingEngine::Tsrs))
         .map(|((filename, _, js), (_, _, tsrs))| (filename, js, tsrs))
     {
-        assert_eq!(js, tsrs_backend, "{filename}: JS sidecar and tsrs diverge");
+        assert_eq!(js, tsrs_backend, "{filename}: js-sidecar and tsrs diverge");
     }
 }

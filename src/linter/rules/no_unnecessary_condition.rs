@@ -135,15 +135,28 @@ fn tsrs_diagnostics(
         .and_then(|settings| settings.get("tsrs"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
-    if !enabled || !ctx.svelte_version.includes_major(5) {
+    if !enabled {
         return None;
     }
-    let path = Path::new(ctx.file_path.as_deref()?);
+    if !ctx.svelte_version.includes_major(5) {
+        crate::tsrs::trace("js-sidecar (settings.tsrs is on, but the component is not Svelte 5)");
+        return None;
+    }
+    let Some(path) = ctx.file_path.as_deref().map(Path::new) else {
+        crate::tsrs::trace("js-sidecar (the component has no file path)");
+        return None;
+    };
     if !crate::tsrs::ts_locator::is_tsrs_eligible(path) {
+        crate::tsrs::trace("js-sidecar (the project's TypeScript is older than 6)");
         return None;
     }
     // With no resolvable binary, fall back to the JS sidecar.
-    crate::tsrs::ts_locator::find_tsrs_binary(path)?;
+    if crate::tsrs::ts_locator::find_tsrs_binary(path).is_none() {
+        crate::tsrs::trace("js-sidecar (no tsrs binary resolved)");
+        return None;
+    }
+    crate::tsrs::record_served();
+    crate::tsrs::trace("tsrs");
 
     let script_ranges: Vec<(usize, usize)> = scripts
         .iter()
