@@ -112,7 +112,7 @@ fn run_analysis(
         return result;
     }
     #[cfg(not(feature = "tsrs-inference"))]
-    let _ = (scripts, templates);
+    let _ = (ctx, scripts, templates);
     crate::compiler::typescript_conditions(request)
         .and_then(|value| serde_json::from_value::<Vec<Diagnostic>>(value).map_err(|error| error.to_string()))
 }

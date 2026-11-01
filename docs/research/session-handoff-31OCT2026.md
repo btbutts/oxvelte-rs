@@ -16,7 +16,7 @@ The session was interrupted mid-task. The last command
    errors or logic bugs. First action in a new session:
    `cargo test --test tsrs_conditions` (see shell notes below) and fix
    whatever surfaces.
-2. `fixtures/tsrs/` **may still exist** — delete it if so (it was fully
+2. `fixtures/tsrs/` **DOES NOT exist anymore** — delete it if so (it was fully
    superseded by the fixtures/linter approach; the rewritten test no longer
    references it).
 3. Everything before that point (all of phases 1–3 and their commits) was
