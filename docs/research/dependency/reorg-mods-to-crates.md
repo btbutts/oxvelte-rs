@@ -127,11 +127,13 @@ allocation per component is from grep over `use` statements; exact per-crate
   ```toml
   [workspace]
   members = [".", "crates/oxvelte_*"]
+  resolver = "2"
   ```
-  Sub-crates never declare their own `[workspace]` table. Because the
-  workspace root is the repo root, every member build (even a crate built
-  individually) inherits the root `.cargo/config.toml` — env pins, fixture
-  tags, and aliases keep working unchanged.
+  `resolver = "2"` is explicit (sanity-check finding 7). Sub-crates never
+  declare their own `[workspace]` table. Because the workspace root is the
+  repo root, every member build (even a crate built individually) inherits
+  the root `.cargo/config.toml` — env pins, fixture tags, and aliases keep
+  working unchanged.
 - Package names and directory names use **underscores**, matching the
   oxc/tsrs precedent (`crates/oxc_parser` → package `oxc_parser`,
   `tsrs_compiler`, …): `oxvelte_transport`, `oxvelte_parser`,
@@ -176,6 +178,11 @@ allocation per component is from grep over `use` statements; exact per-crate
   membership is already bidirectional — but we declare it explicitly so the
   linkage survives future `members` edits. It changes no path resolution:
   `CARGO_MANIFEST_DIR` still points at each sub-crate's own directory.)
+- **The root package inherits its version too** (`version.workspace =
+  true`): the single literal lives in `[workspace.package]` and
+  `scripts/release.sh` is updated to read/write that section specifically
+  (sanity-check finding 6). `scripts/stage-npm.mjs` needs no change — its
+  quote-requiring regex finds the workspace literal either way.
 - Internal crates are `publish = false`; path dependencies carry no
   `version` field. (Verified: nothing in the repo runs
   `cargo publish`/`cargo package`; distribution is GitHub-release binaries,
@@ -421,6 +428,73 @@ in the phase list.
    `fancy` feature): zero `miette` use sites in `src/` or `tests/`. Out of
    scope for this reorg — flag to the maintainer; drop separately if
    unwanted.
+6. **Release tooling reads the root `Cargo.toml` version line directly.**
+   `scripts/release.sh:12` reads `grep '^version' Cargo.toml | head -1`
+   (first line starting with `version` — an inherited
+   `version.workspace = true` line would break the read) and `:37` rewrites
+   `^version = "…"` on every matching line. `scripts/stage-npm.mjs:55`
+   uses `/^version\s*=\s*"([^"]+)"/m` (requires a quoted value, so
+   inheritance lines never match). Resolution: the version literal moves
+   **only** to `[workspace.package]` (single source of truth; root and
+   sub-crates all inherit), and `release.sh` gets a section-scoped read
+   and write. Both use **perl only** (decided: no sed, no awk in
+   `release.sh`) — perl behaves byte-identically on GNU and BSD with no
+   `-i` flag divergence, reads more clearly than a sed address range, and
+   ships with both macOS and Ubuntu. `release.sh` gains two helpers:
+   ```sh
+   get_version() {
+       perl -ne '
+         if (/^\[/) { $found = 0; }
+         if (/^\[workspace\.package\]$/) { $found = 1; }
+         if ($found && /^version\s*=\s*"([^"]+)"/) { print $1; exit; }
+       ' Cargo.toml
+   }
+
+   set_version() {
+       perl -i -pe '
+         if (/^\[/) { $found = 0; }
+         if (/^\[workspace\.package\]$/) { $found = 1; }
+         if ($found && !$done && s/^version = "\Q'"${CURRENT}"'\E"/version = "'"${NEW}"'"/) { $done = 1; }
+       ' Cargo.toml
+   }
+   ```
+   and the write is followed by a verification gate (re-read and compare;
+   abort loudly on mismatch):
+   ```sh
+   CURRENT=$(get_version)
+   # …validate NEW, then:
+   set_version
+   if [ "$(get_version)" != "${NEW}" ]; then
+       echo "release.sh: Cargo.toml version check failed after update (expected ${NEW}, got $(get_version))" >&2
+       exit 1
+   fi
+   ```
+   Requirements verified by test on a simulated future manifest (macOS
+   perl): the read finds `version` at any key position within the
+   `[workspace.package]` section (tested as the 4th key); the write
+   changes exactly that one line and nothing else; the `/^\[/
+   { $found = 0 }` section reset is **mandatory** in both helpers —
+   without it a missing/moved version key causes a silent read of, or
+   write into, a later section; `\Q…\E` quotes the old version so regex
+   metacharacters can never widen the match; `perl -i` (no suffix) leaves
+   no `.bak` file to clean up; a wrong `CURRENT` produces a no-op write
+   (diff-clean); and against today's pre-workspace manifest both helpers
+   fail safe (empty read, untouched file). `stage-npm.mjs` is unchanged:
+   its regex finds the `[workspace.package]` literal (confirmed: reads
+   `0.5.0` after a simulated bump).
+7. **Set `resolver = "2"` explicitly in `[workspace]`.** Adding a
+   `[workspace]` table without a resolver key makes Cargo fall back to
+   resolver 1 semantics (with a warning), which unify features across
+   build- and dev-dependency edges — the wrong default for an edition-2021
+   project, and directly hostile to this plan's feature-gating goals
+   (a dev-only feature could leak into a release build of a dependency).
+   Resolver 2 matches the current single-package behavior most closely.
+8. **`build.rs:165`'s user-agent is `concat!("oxvelte/",
+   env!("CARGO_PKG_VERSION"), " build.rs")`.** After the move,
+   `CARGO_PKG_VERSION` is `oxvelte_linter`'s version — which, because
+   sub-crates use `version.workspace = true`, stays `0.4.0` and the
+   user-agent string is unchanged. (This is also why the sub-crates
+   inherit the workspace version rather than using `0.0.0`.)
 
 Non-issues, checked and cleared: no `#[path = …]` attributes in `src/`;
 `tests/support/*.rs` `#[path]` includes are relative to the test files and
@@ -429,9 +503,13 @@ lib; fixture paths in `lib.rs`/tests are CWD-relative (`fixtures/…`) and
 `cargo test` runs from the workspace root, so they are unaffected;
 `linter/mod.rs` has zero direct `tsrs` references (the only tsrs consumer
 in the linter is `rules/no_unnecessary_condition.rs`, already cfg-gated);
-`oxc = "=0.156.0"` / `oxc_diagnostics = "=0.156.0"` exact pins must be
-replicated verbatim in each crate manifest that needs them (Cargo unifies
-them into a single build).
+a full `env!`/`CARGO_PKG_*` sweep of `src/` found no compile-time path
+anchors besides the finding-1 embeds and the `OUT_DIR` read, so
+`OXVELTE_REPO_ROOT` is the only new anchor needed; Rust never reads
+`OXVELTE_COMPILER_RUNTIME` (only the spawned JS sidecar does, at runtime),
+so the move cannot disturb runtime resolution; the `oxc`/`oxc_diagnostics`
+exact pins live once in `[workspace.dependencies]` and every crate
+inherits the identical pin (Cargo unifies them into a single build).
 
 ## Phases
 
@@ -443,13 +521,18 @@ Rust suite — `cargo test --lib`, `--test upstream_parity`,
 `--test jobsys_regressions`.
 
 1. **Workspace-ify.** Root `Cargo.toml` gains `[workspace] members =
-   [".", "crates/oxvelte_*"]`, `[workspace.package]`, and
+   [".", "crates/oxvelte_*"], resolver = "2"`, `[workspace.package]`, and
    `[workspace.dependencies]` (all shared dependency versions move here;
    the root package's own `[dependencies]` inherit with
    `{ workspace = true }`; the `oxc`/`oxc_diagnostics` pins keep their
-   exact `=0.156.0` form). No code moves; verifies the build/test/CI
-   harness tolerates workspace mode and that inheritance resolves
-   identically to the literal versions. Commit the regenerated `Cargo.lock`
+   exact `=0.156.0` form; the version literal moves to
+   `[workspace.package]` per finding 6, with `release.sh` gaining the
+   `get_version()`/`set_version()` perl helpers and post-write
+   verification gate there). No code moves; verifies the build/test/CI
+   harness tolerates workspace mode, that inheritance resolves identically
+   to the literal versions, and that the release tooling still reads and
+   bumps the version (run the finding-6 helpers by hand, plus the
+   `stage-npm.mjs` regex). Commit the regenerated `Cargo.lock`
    with every phase that touches a manifest (release builds use
    `--locked`).
 2. **`oxvelte_transport`.** `git mv src/transport
