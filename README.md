@@ -5,7 +5,7 @@
 # oxvelte
 
 > [!NOTE]
-> **This is a fork of [tolgaouz/oxvelte](https://github.com/tolgaouz/oxvelte).** oxvelte was created by [@tolgaouz](https://github.com/tolgaouz), and all credit for the original design and implementation goes to him. The original repository looks to be no longer actively developed, so this fork ([billpeet/oxvelte](https://github.com/billpeet/oxvelte)) continues the work. It is not affiliated with or endorsed by the original author.
+> **This is a fork of [tolgaouz/oxvelte](https://github.com/tolgaouz/oxvelte).** oxvelte was created by [@tolgaouz](https://github.com/tolgaouz), and all credit for the original design and implementation goes to him. Further credit is due to [billpeet/oxvelte](https://github.com/billpeet/oxvelte) who worked to add additional fixtures, upstream parity testing, among others. The original repository looks to be no longer actively developed, so this fork ([btbutts/oxvelte-rs](https://github.com/btbutts/oxvelte-rs)) continues the work. It is not affiliated with or endorsed by either @billpeet or @tolgaouz.
 
 A Svelte linter with native Rust rules and optional bun/Node.js compiler and type checks. All 1,316 eligible fixtures in the pinned [eslint-plugin-svelte](https://github.com/sveltejs/eslint-plugin-svelte) suite match. See the [parity report](docs/research/upstream-parity-seventh-wave.md) for scope and runtime requirements.
 
@@ -30,24 +30,17 @@ oxlint can lint the JavaScript/TypeScript inside `.svelte` `<script>` blocks, bu
 
 ### Quick setup
 
+#### - NPM packages are comming soon
+#### - MacOS and Linux Users:
 ```bash
-# Install both
-npm install -D oxlint @billpeet/oxvelte
-
-# Add to package.json
+# Install with homebrew
+brew tap btbutts/homebrew-oxvelte
+brew install oxvelte oxlint
 ```
 
-```json
-{
-  "scripts": {
-    "lint": "oxlint && oxvelte lint src/"
-  }
-}
-```
+That's it. Both tools work out of the box with zero config and sensible defaults. There is no requirement to install oxlint, but it is certainly reccomended! 😎
 
-That's it. Both tools work out of the box with zero config and sensible defaults.
-
-Compiler diagnostics and unused `svelte-ignore` checks use a JavaScript runtime — **bun when available, otherwise Node.js** — and the project's installed Svelte compiler. `svelte/valid-compile` is opt-in; the recommended unused-ignore rule starts the compiler when it needs to check warning codes. TypeScript, Babel and stylesheet transformations use the project's corresponding packages. The compiler process is reused, and compiler results are shared between rules within each lint run. Runtime selection can be pinned via `settings["js-runtime"]` (see Configuration) or the `OXVELTE_NODE` environment variable. See [compiler setup and parity testing](docs/upstream-parity.md) for the pinned test runtime.
+Compiler diagnostics and unused `svelte-ignore` checks use a JavaScript runtime — **bun when available, otherwise Node.js** — and the project's installed Svelte compiler. `svelte/valid-compile` is opt-in; the recommended unused-ignore rule starts the compiler when it needs to check warning codes. TypeScript, Babel and stylesheet transformations use the project's corresponding packages. The compiler process is reused, and compiler results are shared between rules within each lint run. JS runtime selection can be pinned via `settings["js-runtime"]` in your `oxvelte.config.json` (see Configuration) or the `OXVELTE_NODE` environment variable. See [compiler setup and parity testing](docs/upstream-parity.md) for the pinned test runtime.
 
 The opt-in `@typescript-eslint/no-unnecessary-condition` rule uses the project's TypeScript checker to report redundant conditions and optional chains while respecting Svelte reactive variables. It runs when the config sets it to `warn` or `error`, or with `--all-rules`; `settings.typescript.project` can select one tsconfig path relative to the component. On Svelte 5 projects running TypeScript 6 or newer, the checker can optionally be [tsrs](https://github.com/oxc-project/tsrs) — the Rust port of the TypeScript 7 checker — instead of the JavaScript sidecar; see `settings.tsrs` under Configuration. See the [seventh-wave report](docs/research/upstream-parity-seventh-wave.md) for template scope limits and current test coverage.
 
@@ -67,34 +60,6 @@ The opt-in `@typescript-eslint/no-unused-vars` rule reports unused imports, vari
 It reports at the same position and with the same message as typescript-eslint. It stays quiet when it cannot prove a name is unused: template usage is matched by name without regard to shadowing, and a function that only calls itself counts as used. It does not yet check names declared in the template (`{#each}` indexes, snippet parameters, parameters of inline arrow functions) or type parameters in the `generics` attribute. On two production apps it matched 593 of typescript-eslint's 624 findings in `.svelte` files exactly and reported nothing else.
 
 A rule outside the recommended set runs when the config sets it to `warn` or `error`. `--all-rules` is no longer needed to opt in to one rule.
-
-### Agent-assisted migration
-
-This repo also includes a `migrate-to-oxvelte` skill for the [skills](https://github.com/vercel-labs/skills) CLI. It guides agents through migrating from ESLint to the default `oxlint + oxvelte` stack, including custom-rule migration where possible.
-
-Install the skill from this repository:
-
-```bash
-npx skills add billpeet/oxvelte --skill migrate-to-oxvelte
-```
-
-For Codex:
-
-```bash
-npx skills add billpeet/oxvelte --skill migrate-to-oxvelte -a codex -g
-```
-
-To inspect available skills before installing:
-
-```bash
-npx skills add billpeet/oxvelte --list
-```
-
-Once the public skills registry indexes it, it can also be discovered with:
-
-```bash
-npx skills find oxvelte
-```
 
 ### Replacing eslint-plugin-svelte + ESLint
 
@@ -182,26 +147,16 @@ oxvelte lint --json src/
 
 ## Install
 
-### From npm
-
-```bash
-npm install -D @billpeet/oxvelte    # or: pnpm add -D / yarn add -D / bun add -d
-```
-
-This installs a prebuilt native binary for your platform and puts the `oxvelte` command in `node_modules/.bin`, so it works in `package.json` scripts and through `npx oxvelte`. No Rust toolchain is needed.
-
-Prebuilt binaries cover macOS (arm64, x64), Linux (x64 and arm64, glibc and musl) and Windows (x64, arm64). They are built with the `custom-rules` feature enabled.
-
 ### From GitHub
 
 ```bash
-cargo install --git https://github.com/billpeet/oxvelte.git
+cargo install --git https://github.com/btbutts/oxvelte-rs.git
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/billpeet/oxvelte.git
+git clone https://github.com/btbutts/oxvelte-rs.git
 cd oxvelte
 cargo build --release
 ```
@@ -346,4 +301,6 @@ README.md               you are here
 
 ## License
 
-[MIT](LICENSE). Original work copyright © [@tolgaouz](https://github.com/tolgaouz).
+[MIT](LICENSE). Contributor copyright © [@btbutts](https://github.com/btbutts)<br>
+[MIT](LICENSE). Contributor copyright © [@billpeet](https://github.com/billpeet) <br>
+[MIT](LICENSE). Original work copyright © [@tolgaouz](https://github.com/tolgaouz)
