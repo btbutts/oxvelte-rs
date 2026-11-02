@@ -1,13 +1,19 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; **phase 1 (workspace-ify) complete 02NOV2026** —
-`[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in the root
-`Cargo.toml`, all root deps inheriting, `resolver = "2"`, version literal
-moved to `[workspace.package]`, `release.sh` on the perl
+Status: proposed 02NOV2026; **phases 1–2 complete 02NOV2026** —
+phase 1: `[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in
+the root `Cargo.toml`, all root deps inheriting, `resolver = "2"`, version
+literal moved to `[workspace.package]`, `release.sh` on the perl
 `get_version()`/`set_version()` helpers with the post-write verification
-gate. Full suite green; `Cargo.lock` unchanged. Phases 2–8 not yet
-implemented. This doc is the authoritative plan for the reorganization;
-update it if the crate boundaries change during implementation.
+gate. Phase 2: `crates/oxvelte_transport` created (`transport/` moved as
+`lib.rs` + `message_pack.rs`, plus the new `span.rs` holding
+`byte_utf16`/`utf16_byte` and their test, moved verbatim from
+`compiler.rs`); the `members` glob `crates/oxvelte_*` is now active; root
+`lib.rs` re-exports `oxvelte_transport as transport` under
+`tsrs-inference` for API parity. Full suite green both phases.
+Phases 3–8 not yet implemented. This doc is the authoritative plan for
+the reorganization; update it if the crate boundaries change during
+implementation.
 
 ### Preface
 

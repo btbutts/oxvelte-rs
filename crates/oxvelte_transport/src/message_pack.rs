@@ -9,7 +9,7 @@
 
 use std::io::{BufReader, BufWriter, Read, Write};
 
-use crate::transport::{DEFAULT_MAX_FRAME_BYTES, TransportError, read_exact_bounded};
+use crate::{DEFAULT_MAX_FRAME_BYTES, TransportError, read_exact_bounded};
 
 /// `protocol_msgpack.go` `MessageType`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

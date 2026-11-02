@@ -1,0 +1,12 @@
+[package]
+name = "oxvelte_transport"
+description = "Wire framing and span-unit conversion for oxvelte's external process transports"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+workspace = "../.."
+
+[dependencies]

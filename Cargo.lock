@@ -2069,6 +2069,7 @@ dependencies = [
  "oxc",
  "oxc_diagnostics",
  "oxvelte",
+ "oxvelte_transport",
  "precomputed-hash",
  "rayon",
  "regex",
@@ -2082,6 +2083,10 @@ dependencies = [
  "ureq",
  "zip",
 ]
+
+[[package]]
+name = "oxvelte_transport"
+version = "0.4.0"
 
 [[package]]
 name = "parking"

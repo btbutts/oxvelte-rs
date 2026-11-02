@@ -10,10 +10,8 @@ keywords = ["svelte", "linter", "lint", "eslint", "oxc"]
 categories = ["development-tools", "command-line-utilities"]
 build = "build.rs"
 
-# crates/oxvelte_* joins members when the first internal crate lands
-# (Cargo rejects a glob with zero matches).
 [workspace]
-members = ["."]
+members = [".", "crates/oxvelte_*"]
 resolver = "2"
 
 # The version literal lives here and only here: every workspace member
@@ -69,6 +67,7 @@ tsrs-inference = []
 [dependencies]
 oxc.workspace = true
 oxc_diagnostics.workspace = true
+oxvelte_transport = { path = "crates/oxvelte_transport" }
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true

@@ -14,8 +14,8 @@ use oxc::ast_visit::{Visit, walk};
 use oxc::parser::Parser;
 use oxc::span::{GetSpan, SourceType, Span};
 use oxc::syntax::scope::ScopeFlags;
+use oxvelte_transport::span::byte_utf16;
 
-use crate::compiler::byte_utf16;
 use crate::tsrs::TsrsError;
 use crate::tsrs::protocol::TypeResponse;
 use crate::tsrs::session::TsrsSession;

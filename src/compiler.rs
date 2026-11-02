@@ -1,6 +1,7 @@
 //! Shared bridge to the project's Svelte compiler. The process starts only when
 //! a compiler-backed rule runs and is reused across components.
 use oxc::span::Span;
+use oxvelte_transport::span::{byte_utf16, utf16_byte};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use serde_json::Value;
 use std::io::{BufRead, BufReader, Write};
@@ -275,19 +276,6 @@ fn convert_warnings(source: &str, warnings: Vec<WireWarning>) -> Vec<Warning> {
         })
         .collect()
 }
-pub(crate) fn byte_utf16(source: &str, byte: u32) -> usize {
-    source.get(..byte as usize).unwrap_or(source).encode_utf16().count()
-}
-pub(crate) fn utf16_byte(source: &str, index: usize) -> u32 {
-    let mut units = 0;
-    for (byte, ch) in source.char_indices() {
-        if units >= index {
-            return byte as u32;
-        }
-        units += ch.len_utf16();
-    }
-    source.len() as u32
-}
 /// Compile using Svelte resolved relative to the component, or the explicit
 /// OXVELTE_COMPILER_RUNTIME directory used by reproducible parity runs.
 pub fn compile(source: &str, filename: Option<&str>, settings: Option<&Value>) -> Result<CompileResult, String> {
@@ -411,12 +399,6 @@ mod tests {
         );
         drop(runtime);
         std::fs::remove_dir_all(directory).unwrap();
-    }
-    #[test]
-    fn utf16_positions_map_to_utf8_boundaries() {
-        assert_eq!(utf16_byte("a🦀é", 1), 1);
-        assert_eq!(utf16_byte("a🦀é", 3), 5);
-        assert_eq!(utf16_byte("a🦀é", 4), 7);
     }
     #[test]
     fn js_runtime_config_parsing() {

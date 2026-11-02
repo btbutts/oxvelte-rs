@@ -10,7 +10,7 @@ pub mod watch;
 pub mod custom_rules;
 
 #[cfg(feature = "tsrs-inference")]
-pub mod transport;
+pub use oxvelte_transport as transport;
 #[cfg(feature = "tsrs-inference")]
 pub mod tsrs;
 

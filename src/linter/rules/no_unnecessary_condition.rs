@@ -1,8 +1,8 @@
 //! Opt-in TypeScript unnecessary-condition checks with Svelte reactive exclusions.
 use crate::ast::TemplateNode;
-use crate::compiler::{byte_utf16, utf16_byte};
 use crate::linter::{Fix, LintContext, Rule};
 use oxc::span::Span;
+use oxvelte_transport::span::{byte_utf16, utf16_byte};
 use serde::Deserialize;
 use serde_json::{Value, json};
 

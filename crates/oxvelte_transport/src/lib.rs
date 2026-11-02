@@ -3,6 +3,7 @@
 //! `docs/research/dependency/tsrs-type-aware-checking.md` ("Wire protocol").
 
 pub mod message_pack;
+pub mod span;
 
 use std::fmt;
 use std::io::{self, Read};
