@@ -67,6 +67,7 @@ tsrs-inference = []
 [dependencies]
 oxc.workspace = true
 oxc_diagnostics.workspace = true
+oxvelte_parser = { path = "crates/oxvelte_parser" }
 oxvelte_transport = { path = "crates/oxvelte_transport" }
 serde.workspace = true
 serde_json.workspace = true

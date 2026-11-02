@@ -4,7 +4,7 @@
 //! `<style>` blocks) into a tree of [`TemplateNode`]s.
 
 use crate::ast::*;
-use crate::parser::scanner;
+use crate::scanner;
 use oxc::allocator::Allocator;
 use oxc::span::Span;
 use oxc_diagnostics::OxcDiagnostic;
@@ -2619,7 +2619,7 @@ impl<'a> TemplateParser<'a> {
     }
 
     fn validate_expression_syntax(&mut self, expression: &str, span: Span) {
-        let parsed = crate::parser::expression::parse_template_expression(expression, self.allocator);
+        let parsed = crate::expression::parse_template_expression(expression, self.allocator);
         self.extend_expression_syntax_errors(parsed.diagnostics.into_vec(), span, 6);
     }
 
@@ -2653,8 +2653,7 @@ impl<'a> TemplateParser<'a> {
                 Attribute::NormalAttribute { name, .. } if name.trim_start().starts_with("...") => {
                     // Whitespace after `{` can send a spread through the
                     // shorthand reader. A spread is valid inside an array.
-                    let parsed =
-                        crate::parser::expression::parse_template_expression(&format!("[{name}]"), self.allocator);
+                    let parsed = crate::expression::parse_template_expression(&format!("[{name}]"), self.allocator);
                     self.extend_expression_syntax_errors(parsed.diagnostics.into_vec(), expression_span, 7);
                     continue;
                 }
@@ -3883,8 +3882,8 @@ impl<'a> TemplateParser<'a> {
             return;
         };
 
-        let parsed = crate::parser::expression::parse_template_expression(expression.trim(), self.allocator);
-        let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+        let parsed = crate::expression::parse_template_expression(expression.trim(), self.allocator);
+        let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
             self.report_error(custom_element_invalid_message());
             return;
         };
@@ -5104,11 +5103,11 @@ fn debug_tag_has_invalid_arguments(raw_identifiers: &str, allocator: &Allocator)
         return false;
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
     if !parsed.diagnostics.is_empty() {
         return false;
     }
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return false;
     };
 
@@ -5130,11 +5129,11 @@ fn render_tag_expression_diagnostics(raw_expression: &str, allocator: &Allocator
         return Vec::new();
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
     if !parsed.diagnostics.is_empty() {
         return Vec::new();
     }
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return Vec::new();
     };
 
@@ -5299,7 +5298,7 @@ fn duplicate_attribute_key(attribute: &Attribute) -> Option<String> {
 /// `Expression<'a>` without re-parsing.
 ///
 /// Comment-sensitive rules still call
-/// `crate::parser::expression::parse_template_expression` on the raw text —
+/// `crate::expression::parse_template_expression` on the raw text —
 /// that wrapper surfaces `ParserReturn.program.comments`, which
 /// `parse_expression` alone doesn't expose.
 fn parse_expr_into<'a>(allocator: &'a Allocator, text: &str) -> Option<&'a oxc::ast::ast::Expression<'a>> {
@@ -5313,11 +5312,11 @@ fn parse_expr_into<'a>(allocator: &'a Allocator, text: &str) -> Option<&'a oxc::
     // (e.g. JSON-LD `{"@context": "..."}` parses as `StringLiteral("@context")`
     // with the rest discarded, producing false positives in rules that
     // treat the result as the full expression).
-    let result = crate::parser::expression::parse_template_expression(trimmed, allocator);
+    let result = crate::expression::parse_template_expression(trimmed, allocator);
     if !result.diagnostics.is_empty() {
         return None;
     }
-    let expr = crate::parser::expression::unwrap_template_expression(&result)?;
+    let expr = crate::expression::unwrap_template_expression(&result)?;
     // Clone into the allocator so the reference's lifetime is `'a` rather
     // than tied to the local `ParserReturn`.
     Some(allocator.alloc(expr.clone_in(allocator)))
@@ -6149,8 +6148,8 @@ fn custom_element_expression_enables(raw_expression: &str) -> bool {
     }
 
     let allocator = Allocator::default();
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, &allocator);
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let parsed = crate::expression::parse_template_expression(trimmed, &allocator);
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return false;
     };
 
@@ -6363,8 +6362,8 @@ fn expression_uses_slots_identifier(raw_expression: &str, allocator: &Allocator)
         return false;
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return false;
     };
 
@@ -6482,8 +6481,8 @@ fn expression_text_has_invalid_arguments_usage(raw_expression: &str, allocator: 
         return false;
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return false;
     };
 
@@ -6566,8 +6565,8 @@ fn attribute_value_is_unparenthesized_sequence_expression(value: &AttributeValue
         return false;
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return false;
     };
 
@@ -6588,8 +6587,8 @@ fn bind_expression_diagnostics(raw_expression: &str, binding_name: &str, allocat
         return Vec::new();
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return Vec::new();
     };
 
@@ -6664,8 +6663,8 @@ fn expression_text_has_await_outside_functions(raw_expression: &str, allocator: 
         return false;
     }
 
-    let parsed = crate::parser::expression::parse_template_expression(trimmed, allocator);
-    let Some(expression) = crate::parser::expression::unwrap_template_expression(&parsed) else {
+    let parsed = crate::expression::parse_template_expression(trimmed, allocator);
+    let Some(expression) = crate::expression::unwrap_template_expression(&parsed) else {
         return false;
     };
 
@@ -9694,7 +9693,7 @@ mod tests {
 
 #[cfg(test)]
 mod modern_const_tag_tests {
-    use crate::{ast::TemplateNode, parser};
+    use crate::{self as parser, ast::TemplateNode};
     use oxc::allocator::Allocator;
 
     #[test]

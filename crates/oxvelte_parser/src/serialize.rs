@@ -2484,7 +2484,7 @@ fn to_modern_json_inner(ast: &SvelteAst, source: &str) -> Value {
     let css_val = if let Some(style) = &ast.css {
         let content_start = style.content_span.start;
         let content_end = style.content_span.end;
-        let parsed = crate::parser::css::parse_css(&style.content, content_start);
+        let parsed = crate::css::parse_css(&style.content, content_start);
         let children = convert_css_to_modern(&parsed.children);
         json!({
             "type": "StyleSheet",
@@ -3296,7 +3296,7 @@ fn serialize_css_legacy(style: &Style, _source: &str) -> Value {
     let content_end = style.content_span.end;
 
     // Parse CSS children and strip internal fields
-    let parsed = crate::parser::css::parse_css(&style.content, content_start);
+    let parsed = crate::css::parse_css(&style.content, content_start);
     let mut children = parsed.children;
     strip_internal_fields(&mut children);
 
@@ -5088,7 +5088,7 @@ mod tests {
     fn ts_as_expression_serializes_as_ts_node() {
         let source = "<script lang=\"ts\">let x: unknown = \"\";</script>{x as string}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let modern = to_modern_json(&result.ast, source);
         let expr = &modern["fragment"]["nodes"][0]["expression"];
         assert_eq!(expr["type"], "TSAsExpression", "{expr:?}");
@@ -5103,7 +5103,7 @@ mod tests {
         // silently dropped; it takes the invalid-expression fallback instead.
         let source = "{foo bar}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let legacy = to_legacy_json(&result.ast, source);
         let expr = &legacy["html"]["children"][0]["expression"];
         assert_eq!(expr["type"], "Identifier", "{expr:?}");
@@ -5114,7 +5114,7 @@ mod tests {
     fn top_level_script_braced_attribute_value_stays_static_text() {
         let source = "<script lang={ts}>\n</script>";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
 
         let value = &actual["instance"]["attributes"][0]["value"][0];
@@ -5127,7 +5127,7 @@ mod tests {
     fn each_context_and_key_offsets_come_from_header_spans() {
         let source = r#"{#each labels.includes(" as ") as label (label.id)}{/each}"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
         let each = &actual["fragment"]["nodes"][0];
 
@@ -5141,7 +5141,7 @@ mod tests {
     fn modern_each_block_serializes_fallback_fragment() {
         let source = "{#each items as item}<p>{item}</p>{:else}<p>empty</p>{/each}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
         let fallback = &actual["fragment"]["nodes"][0]["fallback"];
 
@@ -5154,7 +5154,7 @@ mod tests {
     fn head_title_uses_dedicated_modern_and_legacy_types() {
         let source = "<svelte:head>{#if show}<title>Hello</title>{/if}</svelte:head>";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
 
         let modern = to_modern_json(&result.ast, source);
         let modern_title = &modern["fragment"]["nodes"][0]["fragment"]["nodes"][0]["consequent"]["nodes"][0];
@@ -5169,7 +5169,7 @@ mod tests {
     fn await_shorthand_binding_offset_ignores_keyword_inside_expression() {
         let source = r#"{#await message.includes(" then ") then message}{/await}"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
         let await_block = &actual["fragment"]["nodes"][0];
 
@@ -5181,7 +5181,7 @@ mod tests {
     fn legacy_await_catch_before_then_spans_follow_svelte_adapter() {
         let source = "{#await p}<p>pending</p>{:catch e}<p>err</p>{:then v}<p>ok</p>{/await}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_legacy_json(&result.ast, source);
         let await_block = &actual["html"]["children"][0];
 
@@ -5195,7 +5195,7 @@ mod tests {
     fn legacy_await_empty_then_before_catch_uses_previous_clause_end() {
         let source = "{#await p}<p>pending</p>{:then v}{:catch e}<p>err</p>{/await}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_legacy_json(&result.ast, source);
         let await_block = &actual["html"]["children"][0];
 
@@ -5208,7 +5208,7 @@ mod tests {
     fn concat_attribute_value_offsets_skip_spaces_after_equal() {
         let source = r#"<div class = "x{foo}y"></div>"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
         let value = &actual["fragment"]["nodes"][0]["attributes"][0]["value"];
 
@@ -5228,7 +5228,7 @@ const marker = "<!--not html-->";
 let value;
 </script>"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
 
         assert!(actual["instance"]["content"]["leadingComments"].is_null());
@@ -5244,7 +5244,7 @@ export const value = 1;
 let value = 2;
 </script>"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
 
         assert_eq!(
@@ -5261,7 +5261,7 @@ let value = 2;
 let value;
 </script>"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
 
         assert!(actual["instance"]["content"]["leadingComments"].is_null());
@@ -5271,7 +5271,7 @@ let value;
     fn debug_tag_serializes_identifier_locations() {
         let source = "{@debug value, other}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let actual = to_modern_json(&result.ast, source);
         let identifiers = &actual["fragment"]["nodes"][0]["identifiers"];
 
@@ -5287,7 +5287,7 @@ let value;
     fn const_tag_serializes_estree_declaration() {
         let source = "{@const foo = bar}";
         let alloc = oxc::allocator::Allocator::default();
-        let result = crate::parser::parse(source, &alloc);
+        let result = crate::parse(source, &alloc);
         let modern = to_modern_json(&result.ast, source);
         let legacy = to_legacy_json(&result.ast, source);
 

@@ -2,9 +2,11 @@
 //! regions, then parses the template with a custom parser and hands script
 //! content to `oxc::parser`.
 
+pub mod ast;
 pub mod css;
 pub mod expression;
-pub(crate) mod scanner;
+#[doc(hidden)]
+pub mod scanner;
 pub mod selector;
 pub mod serialize;
 pub mod template;
@@ -113,11 +115,11 @@ fn populate_attribute_expression_asts<'a>(
         if trimmed.is_empty() {
             return None;
         }
-        let result = crate::parser::expression::parse_template_expression(trimmed, allocator);
+        let result = crate::expression::parse_template_expression(trimmed, allocator);
         if !result.diagnostics.is_empty() {
             return None;
         }
-        let expr = crate::parser::expression::unwrap_template_expression(&result)?;
+        let expr = crate::expression::unwrap_template_expression(&result)?;
         Some(allocator.alloc(expr.clone_in(allocator)))
     }
 

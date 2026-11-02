@@ -7,13 +7,13 @@
 use oxc::span::Span;
 
 #[derive(Debug, Clone)]
-pub(crate) struct SvelteToken<'a> {
-    pub(crate) kind: TokenKind<'a>,
+pub struct SvelteToken<'a> {
+    pub kind: TokenKind<'a>,
     pub(crate) span: Span,
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum TokenKind<'a> {
+pub enum TokenKind<'a> {
     Text(&'a str),
     HtmlComment(&'a str),
     StartTag {
@@ -48,13 +48,13 @@ pub(crate) enum TokenKind<'a> {
     },
 }
 
-pub(crate) struct SvelteScanner<'a> {
+pub struct SvelteScanner<'a> {
     source: &'a str,
     pos: usize,
 }
 
 impl<'a> SvelteScanner<'a> {
-    pub(crate) fn new(source: &'a str) -> Self {
+    pub fn new(source: &'a str) -> Self {
         Self { source, pos: 0 }
     }
 

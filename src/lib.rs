@@ -1,9 +1,10 @@
-pub mod ast;
+pub use oxvelte_parser as parser;
+pub use oxvelte_parser::ast;
+
 pub mod compiler;
 mod compiler_ignore;
 pub mod config;
 pub mod linter;
-pub mod parser;
 pub mod watch;
 
 #[cfg(feature = "custom-rules")]

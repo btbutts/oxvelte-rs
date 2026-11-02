@@ -1,6 +1,6 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; **phases 1–2 complete 02NOV2026** —
+Status: proposed 02NOV2026; **phases 1–3 complete 02NOV2026** —
 phase 1: `[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in
 the root `Cargo.toml`, all root deps inheriting, `resolver = "2"`, version
 literal moved to `[workspace.package]`, `release.sh` on the perl
@@ -8,12 +8,17 @@ literal moved to `[workspace.package]`, `release.sh` on the perl
 gate. Phase 2: `crates/oxvelte_transport` created (`transport/` moved as
 `lib.rs` + `message_pack.rs`, plus the new `span.rs` holding
 `byte_utf16`/`utf16_byte` and their test, moved verbatim from
-`compiler.rs`); the `members` glob `crates/oxvelte_*` is now active; root
-`lib.rs` re-exports `oxvelte_transport as transport` under
-`tsrs-inference` for API parity. Full suite green both phases.
-Phases 3–8 not yet implemented. This doc is the authoritative plan for
-the reorganization; update it if the crate boundaries change during
-implementation.
+`compiler.rs`). Phase 3: `crates/oxvelte_parser` created (`parser/` +
+`ast.rs` as `pub mod ast`; `scanner` widened to `#[doc(hidden)] pub` for
+`compiler_ignore`; internal `crate::parser::` paths became `crate::`;
+`rustc_hash`/`precomputed_hash` deps added — used via full paths, so the
+`use`-grep had missed them). The facade re-exports
+(`pub use oxvelte_parser as parser; pub use oxvelte_parser::ast;`) meant
+zero consumer rewrites in this phase; the 68 linter files switch to real
+crate paths in phase 6. Full suite green every phase (461 root + 199
+parser + 1 transport lib tests = the same 661). Phases 4–8 not yet
+implemented. This doc is the authoritative plan for the reorganization;
+update it if the crate boundaries change during implementation.
 
 ### Preface
 

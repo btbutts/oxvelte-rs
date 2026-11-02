@@ -1,0 +1,20 @@
+[package]
+name = "oxvelte_parser"
+description = "Svelte file parser (template, expression, CSS, selector, scanner, serializer) for oxvelte"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+workspace = "../.."
+
+[dependencies]
+oxc.workspace = true
+oxc_diagnostics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+selectors.workspace = true
+cssparser.workspace = true
+precomputed-hash.workspace = true
+rustc-hash.workspace = true

@@ -2069,6 +2069,7 @@ dependencies = [
  "oxc",
  "oxc_diagnostics",
  "oxvelte",
+ "oxvelte_parser",
  "oxvelte_transport",
  "precomputed-hash",
  "rayon",
@@ -2082,6 +2083,20 @@ dependencies = [
  "thiserror",
  "ureq",
  "zip",
+]
+
+[[package]]
+name = "oxvelte_parser"
+version = "0.4.0"
+dependencies = [
+ "cssparser",
+ "oxc",
+ "oxc_diagnostics",
+ "precomputed-hash",
+ "rustc-hash",
+ "selectors",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
