@@ -1,9 +1,10 @@
 # tsrs type-aware checking — research report
 
-Status: design settled 30OCT2026; implementation in progress on branch
+Status: design settled 30OCT2026; implementation complete on branch
 `tsrs-ts6plus` — phases 1–4 done 01NOV2026 (transport, client, session,
 conditions port, rule routing, dual-backend tests, version-matrix parity
-proof). Remaining: user-facing docs for `settings.tsrs`.
+proof), plus user-facing docs (`README.md` `settings.tsrs` section) and
+`release.yml` now compiling with `--features custom-rules,tsrs-inference`.
 
 ### Preface:
 Type-aware lint rules (today: `svelte/no-unnecessary-condition`) currently run

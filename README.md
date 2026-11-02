@@ -49,7 +49,7 @@ That's it. Both tools work out of the box with zero config and sensible defaults
 
 Compiler diagnostics and unused `svelte-ignore` checks use a JavaScript runtime — **bun when available, otherwise Node.js** — and the project's installed Svelte compiler. `svelte/valid-compile` is opt-in; the recommended unused-ignore rule starts the compiler when it needs to check warning codes. TypeScript, Babel and stylesheet transformations use the project's corresponding packages. The compiler process is reused, and compiler results are shared between rules within each lint run. Runtime selection can be pinned via `settings["js-runtime"]` (see Configuration) or the `OXVELTE_NODE` environment variable. See [compiler setup and parity testing](docs/upstream-parity.md) for the pinned test runtime.
 
-The opt-in `@typescript-eslint/no-unnecessary-condition` rule uses the project's TypeScript checker to report redundant conditions and optional chains while respecting Svelte reactive variables. It runs when the config sets it to `warn` or `error`, or with `--all-rules`; `settings.typescript.project` can select one tsconfig path relative to the component. See the [seventh-wave report](docs/research/upstream-parity-seventh-wave.md) for template scope limits and current test coverage.
+The opt-in `@typescript-eslint/no-unnecessary-condition` rule uses the project's TypeScript checker to report redundant conditions and optional chains while respecting Svelte reactive variables. It runs when the config sets it to `warn` or `error`, or with `--all-rules`; `settings.typescript.project` can select one tsconfig path relative to the component. On Svelte 5 projects running TypeScript 6 or newer, the checker can optionally be [tsrs](https://github.com/oxc-project/tsrs) — the Rust port of the TypeScript 7 checker — instead of the JavaScript sidecar; see `settings.tsrs` under Configuration. See the [seventh-wave report](docs/research/upstream-parity-seventh-wave.md) for template scope limits and current test coverage.
 
 The opt-in `@typescript-eslint/no-unused-vars` rule reports unused imports, variables, functions, parameters and caught errors in a component's `<script>` blocks. Script-only linters such as oxlint skip this check in `.svelte` files, because they cannot see whether the template uses a name. This rule counts template usage, `$store` subscriptions, `$bindable()` props and names shared between the module and instance scripts. Switch it on in `oxvelte.config.json`, with the same options typescript-eslint takes:
 
@@ -264,6 +264,18 @@ Create `oxvelte.config.json` in your project root:
 ```
 
 The `OXVELTE_NODE` environment variable overrides both when set (a name or absolute path). If neither `bun` nor `node` is found, oxvelte tells you to install one or set an override.
+
+**Type-aware engine (optional).** The `@typescript-eslint/no-unnecessary-condition` rule needs a TypeScript checker and uses the JavaScript runtime above with your project's own `typescript` package. On Svelte 5 projects running TypeScript 6 or newer, you can route type checking through [tsrs](https://github.com/oxc-project/tsrs) — the Rust port of the TypeScript 7 checker — with no JavaScript sidecar involved:
+
+```json
+{
+  "settings": {
+    "tsrs": true
+  }
+}
+```
+
+`settings.tsrs` defaults to `false`; setting it changes nothing else about how oxvelte runs. tsrs is a separate binary that oxvelte never downloads or compiles: it resolves `node_modules/.bin/tsrs` walking up from the linted file first, then `tsrs` from your PATH, so install it however you prefer (the Homebrew tap installs it automatically as a dependency of the `oxvelte` formula). Release binaries are built with tsrs support compiled in; source builds need `--features tsrs-inference`, and without it the setting is ignored. When `settings.tsrs` is on but the component is not Svelte 5, the project's TypeScript is older than 6, or no binary resolves, the rule keeps using the JavaScript sidecar — set `OXVELTE_TSRS_TRACE=1` to print which engine served each file and why.
 
 Without a config file, oxvelte runs the **recommended** ruleset (same as eslint-plugin-svelte's `flat/recommended`).
 

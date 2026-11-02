@@ -14,7 +14,8 @@
 //!       "kit": {
 //!         "files": { "routes": "src/routes" }
 //!       }
-//!     }
+//!     },
+//!     "tsrs": true
 //!   }
 //! }
 //! ```

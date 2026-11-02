@@ -104,11 +104,11 @@ jobs:
         if: matrix.zig
         run: |
           pip install cargo-zigbuild
-          cargo zigbuild --release --locked --features custom-rules --target ${{ matrix.zig }}
+          cargo zigbuild --release --locked --features custom-rules,tsrs-inference --target ${{ matrix.zig }}
 
       - name: Build
         if: ${{ !matrix.zig }}
-        run: cargo build --release --locked --features custom-rules --target ${{ matrix.target }}
+        run: cargo build --release --locked --features custom-rules,tsrs-inference --target ${{ matrix.target }}
 
       - name: Check the binary runs
         if: matrix.run
