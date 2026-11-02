@@ -9,7 +9,31 @@ set -euo pipefail
 #   ./scripts/release.sh major    # 0.1.0 -> 1.0.0
 #   ./scripts/release.sh 0.2.0    # explicit version
 
-CURRENT=$(grep '^version' Cargo.toml | head -1 | sed 's/.*"\(.*\)"/\1/')
+# The version literal lives only in [workspace.package] (every workspace
+# member inherits it), so reads and writes are scoped to that section.
+get_version() {
+    perl -ne '
+      if (/^\[/) { $found = 0; }
+      if (/^\[workspace\.package\]$/) { $found = 1; }
+      if ($found && /^version\s*=\s*"([^"]+)"/) { print $1; exit; }
+    ' Cargo.toml
+}
+
+# Rewrite the [workspace.package] version key wherever it sits in the
+# section; a no-op unless the old value matches exactly.
+set_version() {
+    perl -i -pe '
+      if (/^\[/) { $found = 0; }
+      if (/^\[workspace\.package\]$/) { $found = 1; }
+      if ($found && !$done && s/^version = "\Q'"${CURRENT}"'\E"/version = "'"${NEW}"'"/) { $done = 1; }
+    ' Cargo.toml
+}
+
+CURRENT=$(get_version)
+if [ -z "${CURRENT}" ]; then
+    echo "release.sh: could not read the version from [workspace.package] in Cargo.toml" >&2
+    exit 1
+fi
 echo "Current version: ${CURRENT}"
 
 IFS='.' read -r major minor patch <<< "$CURRENT"
@@ -33,9 +57,13 @@ echo ""
 "$(dirname "$0")/dev-setup.sh" --skip-cargo-tests
 echo ""
 
-# Update Cargo.toml
-sed -i.bak "s/^version = \"${CURRENT}\"/version = \"${NEW}\"/" Cargo.toml
-rm -f Cargo.toml.bak
+# Update Cargo.toml, then re-read it: if the write did not land exactly
+# where intended, stop before anything is built, committed, or tagged.
+set_version
+if [ "$(get_version)" != "${NEW}" ]; then
+    echo "release.sh: Cargo.toml version check failed after update (expected ${NEW}, got $(get_version))" >&2
+    exit 1
+fi
 
 # The npm packages take their version from Cargo.toml when the release
 # workflow stages them (scripts/stage-npm.mjs), so there is nothing else to bump.

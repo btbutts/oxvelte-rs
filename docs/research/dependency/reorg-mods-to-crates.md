@@ -1,8 +1,13 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; not yet implemented. This doc is the authoritative
-plan for the reorganization; update it if the crate boundaries change during
-implementation.
+Status: proposed 02NOV2026; **phase 1 (workspace-ify) complete 02NOV2026** —
+`[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in the root
+`Cargo.toml`, all root deps inheriting, `resolver = "2"`, version literal
+moved to `[workspace.package]`, `release.sh` on the perl
+`get_version()`/`set_version()` helpers with the post-write verification
+gate. Full suite green; `Cargo.lock` unchanged. Phases 2–8 not yet
+implemented. This doc is the authoritative plan for the reorganization;
+update it if the crate boundaries change during implementation.
 
 ### Preface
 
@@ -133,7 +138,10 @@ allocation per component is from grep over `use` statements; exact per-crate
   declare their own `[workspace]` table. Because the workspace root is the
   repo root, every member build (even a crate built individually) inherits
   the root `.cargo/config.toml` — env pins, fixture tags, and aliases keep
-  working unchanged.
+  working unchanged. (Implementation note, learned in phase 1: Cargo
+  **rejects a member glob with zero matches**, so `members` starts as
+  `["."]` and the `crates/oxvelte_*` glob is added in phase 2 alongside
+  the first crate.)
 - Package names and directory names use **underscores**, matching the
   oxc/tsrs precedent (`crates/oxc_parser` → package `oxc_parser`,
   `tsrs_compiler`, …): `oxvelte_transport`, `oxvelte_parser`,
@@ -521,7 +529,8 @@ Rust suite — `cargo test --lib`, `--test upstream_parity`,
 `--test jobsys_regressions`.
 
 1. **Workspace-ify.** Root `Cargo.toml` gains `[workspace] members =
-   [".", "crates/oxvelte_*"], resolver = "2"`, `[workspace.package]`, and
+   ["."], resolver = "2"` (the `crates/oxvelte_*` glob is added in phase
+   2 — Cargo rejects an empty glob), `[workspace.package]`, and
    `[workspace.dependencies]` (all shared dependency versions move here;
    the root package's own `[dependencies]` inherit with
    `{ workspace = true }`; the `oxc`/`oxc_diagnostics` pins keep their

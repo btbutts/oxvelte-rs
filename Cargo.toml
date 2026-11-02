@@ -1,14 +1,50 @@
 [package]
 name = "oxvelte"
-version = "0.4.0"
-edition = "2021"
-license = "MIT"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
 description = "A fast Svelte linter written in Rust — drop-in replacement for eslint-plugin-svelte, 4-25x faster"
-repository = "https://github.com/billpeet/oxvelte"
-homepage = "https://github.com/billpeet/oxvelte"
 keywords = ["svelte", "linter", "lint", "eslint", "oxc"]
 categories = ["development-tools", "command-line-utilities"]
 build = "build.rs"
+
+# crates/oxvelte_* joins members when the first internal crate lands
+# (Cargo rejects a glob with zero matches).
+[workspace]
+members = ["."]
+resolver = "2"
+
+# The version literal lives here and only here: every workspace member
+# (including the root package) inherits it, and scripts/release.sh reads
+# and rewrites it scoped to this section.
+[workspace.package]
+version = "0.4.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/billpeet/oxvelte"
+homepage = "https://github.com/billpeet/oxvelte"
+
+# Single point of truth for dependency versions. Members inherit with
+# `dep = { workspace = true }`; the oxc pins must keep their exact
+# `=0.156.0` form — parser/linter parity depends on it.
+[workspace.dependencies]
+oxc = { version = "=0.156.0", features = ["full", "serialize"] }
+oxc_diagnostics = "=0.156.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+clap = { version = "4.6.7", features = ["derive"] }
+thiserror = "2"
+rustc-hash = "2"
+rayon = "1"
+atty = "0.2"
+regex = "1"
+boa_engine = "0.22.0"
+selectors = "0.41.0"
+precomputed-hash = "0.1.1"
+cssparser = "0.38.0"
+notify = "8.2.1"
 
 [lib]
 name = "oxvelte"
@@ -31,22 +67,22 @@ custom-rules = ["dep:boa_engine"]
 tsrs-inference = []
 
 [dependencies]
-oxc = { version = "=0.156.0", features = ["full", "serialize"] }
-oxc_diagnostics = "=0.156.0"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-clap = { version = "4.6.7", features = ["derive"] }
+oxc.workspace = true
+oxc_diagnostics.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+clap.workspace = true
 miette = { version = "7", features = ["fancy"] }
-thiserror = "2"
-rustc-hash = "2"
-rayon = "1"
-atty = "0.2"
-regex = "1"
-boa_engine = { version = "0.22.0", optional = true }
-selectors = "0.41.0"
-precomputed-hash = "0.1.1"
-cssparser = "0.38.0"
-notify = "8.2.1"
+thiserror.workspace = true
+rustc-hash.workspace = true
+rayon.workspace = true
+atty.workspace = true
+regex.workspace = true
+boa_engine = { workspace = true, optional = true }
+selectors.workspace = true
+precomputed-hash.workspace = true
+cssparser.workspace = true
+notify.workspace = true
 
 [dev-dependencies]
 oxvelte = { path = ".", features = ["tsrs-inference", "custom-rules"] }
