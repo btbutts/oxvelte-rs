@@ -229,15 +229,12 @@ fn is_symbol_reassigned<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{LintDiagnostic, Linter, RuleConfig},
-        parser,
-    };
+    use crate::{LintDiagnostic, Linter, RuleConfig};
     use oxc::allocator::Allocator;
 
     fn lint(source: &str, options: serde_json::Value) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint_with_config(

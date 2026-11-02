@@ -36,14 +36,14 @@ impl Rule for NoAtDebugTags {
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
     fn debug_removal_preserves_surrounding_unicode_and_text() {
         let source = "😀 before {#if yes}{@debug value} after{/if}";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(parsed.errors.is_empty());
         let diagnostics = Linter::all().lint(&parsed.ast, source);
         let diagnostic = diagnostics

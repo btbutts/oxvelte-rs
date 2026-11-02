@@ -114,7 +114,7 @@ fn covered(source: &str, previous: &[String]) -> Option<Span> {
 #[cfg(test)]
 mod tests {
     use super::covered;
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
     #[test]
     fn duplicate_checks_use_js_tokens_and_cover_nested_logical_operands() {
@@ -132,7 +132,7 @@ mod tests {
     fn nested_else_reports_once_at_the_expression() {
         let source = "<!-- 😀 -->{#if ready}a{:else}text{#if ready /* note */}b{/if}{/if}";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()

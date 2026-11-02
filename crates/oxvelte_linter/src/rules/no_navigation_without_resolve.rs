@@ -651,11 +651,10 @@ fn is_safe_instance_expr<'a>(
 mod tests {
     use crate::{LintDiagnostic, Linter};
     use oxc::allocator::Allocator;
-    use oxvelte_parser as parser;
 
     fn lint(source: &str) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint(&parsed.ast, source)

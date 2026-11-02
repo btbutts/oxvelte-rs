@@ -1,13 +1,11 @@
 //! Wire-protocol smoke test for `tsrs --api`: drives the tuple framing
 //! against a scratch project with a real tsrs binary and asserts the
 //! response shapes the conditions port relies on. Skips silently when no
-//! `tsrs` binary is on PATH. Requires `--features tsrs-inference`.
-
-#![cfg(feature = "tsrs-inference")]
+//! `tsrs` binary is on PATH.
 
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
-use oxvelte::transport::message_pack::{MessagePackReader, MessagePackWriter, MessageType};
+use oxvelte_transport::message_pack::{MessagePackReader, MessagePackWriter, MessageType};
 
 const SOURCE: &str = r#"const definitely: number = 42;
 const maybe: string | null = definitely > 0 ? "x" : null;

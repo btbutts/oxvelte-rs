@@ -1,5 +1,3 @@
-use oxvelte::{linter, parser};
-
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -86,7 +84,7 @@ struct FileDiagnostic {
     message: String,
     rule_name: &'static str,
     severity: DiagnosticSeverity,
-    suggestions: Vec<linter::Suggestion>,
+    suggestions: Vec<oxvelte_linter::Suggestion>,
 }
 
 struct FileResult {
@@ -112,7 +110,7 @@ impl DiagnosticSeverity {
 fn load_lint_config(
     search_dir: &std::path::Path,
     config_path: Option<&PathBuf>,
-) -> Result<(oxvelte::config::OxvelteConfig, PathBuf), String> {
+) -> Result<(oxvelte_linter::config::OxvelteConfig, PathBuf), String> {
     if let Some(path) = config_path {
         let path = if path.is_absolute() {
             path.clone()
@@ -123,7 +121,7 @@ fn load_lint_config(
         };
         let content =
             std::fs::read_to_string(&path).map_err(|e| format!("Error reading config {}: {e}", path.display()))?;
-        let config = oxvelte::config::OxvelteConfig::parse(&content)
+        let config = oxvelte_linter::config::OxvelteConfig::parse(&content)
             .map_err(|e| format!("Error parsing config {}: {e}", path.display()))?;
         let config_dir = path
             .parent()
@@ -135,7 +133,7 @@ fn load_lint_config(
     // Auto-discovery: the directory the config was found in is the base for
     // relative paths inside it (e.g. customRules globs), and an unreadable or
     // invalid discovered config is a hard error, same as --config.
-    oxvelte::config::OxvelteConfig::load_with_dir(search_dir)
+    oxvelte_linter::config::OxvelteConfig::load_with_dir(search_dir)
 }
 
 /// Maximum autofix passes over a single file, matching ESLint's cap — fixes
@@ -146,7 +144,7 @@ const MAX_FIX_PASSES: usize = 10;
 /// order, and any fix that is malformed, out of bounds, not on a UTF-8
 /// boundary, or overlaps an already-applied fix is skipped — whatever caused
 /// it is reported again after the fix pass.
-fn apply_fixes(source: &str, fixes: &[&linter::Fix]) -> String {
+fn apply_fixes(source: &str, fixes: &[&oxvelte_linter::Fix]) -> String {
     let mut ordered = fixes.to_vec();
     ordered.sort_by_key(|fix| (fix.span.start, fix.span.end));
     let mut out = String::with_capacity(source.len());
@@ -201,9 +199,9 @@ fn cmd_lint(
 
     #[allow(unused_mut)]
     let mut lint = if all_rules {
-        linter::Linter::all()
+        oxvelte_linter::Linter::all()
     } else {
-        linter::Linter::recommended()
+        oxvelte_linter::Linter::recommended()
     };
 
     // Add rules the config switches on, then load custom JS rules (when the
@@ -244,17 +242,17 @@ fn cmd_lint(
             };
             let path_str = path.to_string_lossy();
             let is_svelte = path.extension().is_some_and(|e| e == "svelte");
-            let svelte_module_kind = linter::svelte_module_ts_kind(&path_str);
+            let svelte_module_kind = oxvelte_linter::svelte_module_ts_kind(&path_str);
             let file_path_owned = path_str.to_string();
             // None means an internal panic — the file is skipped entirely.
-            let run_lint = |source: &str| -> Option<Vec<linter::LintDiagnostic>> {
+            let run_lint = |source: &str| -> Option<Vec<oxvelte_linter::LintDiagnostic>> {
                 if is_svelte {
                     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                         let alloc = oxc::allocator::Allocator::default();
-                        let result = parser::parse_for_lint(source, &alloc);
+                        let result = oxvelte_parser::parse_for_lint(source, &alloc);
                         // Surface template parse errors as error-severity
                         // diagnostics — a malformed file must never lint clean.
-                        let mut diags: Vec<linter::LintDiagnostic> = result
+                        let mut diags: Vec<oxvelte_linter::LintDiagnostic> = result
                             .errors
                             .iter()
                             .map(|error| {
@@ -263,7 +261,7 @@ fn cmd_lint(
                                     .first()
                                     .map(|label| oxc::span::Span::new(label.offset(), label.offset() + label.len()))
                                     .unwrap_or_else(|| oxc::span::Span::new(0, 0));
-                                linter::LintDiagnostic {
+                                oxvelte_linter::LintDiagnostic {
                                     rule_name: "oxvelte/parse-error",
                                     message: error.to_string(),
                                     span,
@@ -317,7 +315,7 @@ fn cmd_lint(
                 let original = source.clone();
                 let mut changed = false;
                 for _ in 0..MAX_FIX_PASSES {
-                    let fixes: Vec<&linter::Fix> = diags.iter().filter_map(|d| d.fix.as_ref()).collect();
+                    let fixes: Vec<&oxvelte_linter::Fix> = diags.iter().filter_map(|d| d.fix.as_ref()).collect();
                     if fixes.is_empty() {
                         break;
                     }
@@ -423,7 +421,7 @@ fn cmd_lint(
     }
 }
 
-fn diagnostic_severity(config: &oxvelte::config::OxvelteConfig, rule_name: &str) -> DiagnosticSeverity {
+fn diagnostic_severity(config: &oxvelte_linter::config::OxvelteConfig, rule_name: &str) -> DiagnosticSeverity {
     // Template parse errors are always errors (like ESLint's fatal parse
     // failures); they are not configurable.
     if rule_name == "oxvelte/parse-error" {
@@ -531,7 +529,7 @@ fn print_summary(
 }
 
 fn cmd_parse(file: &PathBuf, pretty: bool, format: &str) -> ExitCode {
-    use oxvelte::parser::serialize::{to_legacy_json, to_modern_json};
+    use oxvelte_parser::serialize::{to_legacy_json, to_modern_json};
 
     let source = match std::fs::read_to_string(file) {
         Ok(s) => s,
@@ -541,7 +539,7 @@ fn cmd_parse(file: &PathBuf, pretty: bool, format: &str) -> ExitCode {
         }
     };
     let alloc = oxc::allocator::Allocator::default();
-    let result = parser::parse(&source, &alloc);
+    let result = oxvelte_parser::parse(&source, &alloc);
     for err in &result.errors {
         eprintln!("Parse error: {:?}", err);
     }
@@ -569,8 +567,8 @@ fn cmd_parse(file: &PathBuf, pretty: bool, format: &str) -> ExitCode {
 }
 
 fn cmd_rules() -> ExitCode {
-    let rules = linter::rules::all_rules();
-    let recommended = linter::rules::recommended_rules();
+    let rules = oxvelte_linter::rules::all_rules();
+    let recommended = oxvelte_linter::rules::recommended_rules();
     let rec_names: std::collections::HashSet<String> = recommended.iter().map(|r| r.name().to_string()).collect();
 
     println!("{:<50} {:>5}  {:>5}", "Rule", "Rec", "Fix");
@@ -608,7 +606,7 @@ fn cmd_convert_config(file: &PathBuf, write: bool) -> ExitCode {
         content.clone()
     };
 
-    let config = match oxvelte::config::OxvelteConfig::from_eslint(&json_str) {
+    let config = match oxvelte_linter::config::OxvelteConfig::from_eslint(&json_str) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error parsing config: {}", e);
@@ -904,9 +902,9 @@ mod tests {
             "severity":"error", "message":"message", "line":1, "column":2,
             "endLine":1, "endColumn":3});
         assert_eq!(diagnostic_json("test.svelte", &diagnostic), original);
-        diagnostic.suggestions.push(linter::Suggestion {
+        diagnostic.suggestions.push(oxvelte_linter::Suggestion {
             description: "replace".into(),
-            fix: linter::Fix {
+            fix: oxvelte_linter::Fix {
                 span: oxc::span::Span::new(1, 2),
                 replacement: "text".into(),
             },
@@ -917,8 +915,8 @@ mod tests {
         assert_eq!(diagnostic_json("test.svelte", &diagnostic), expected);
     }
 
-    fn fix(start: u32, end: u32, replacement: &str) -> linter::Fix {
-        linter::Fix {
+    fn fix(start: u32, end: u32, replacement: &str) -> oxvelte_linter::Fix {
+        oxvelte_linter::Fix {
             span: oxc::span::Span::new(start, end),
             replacement: replacement.into(),
         }
@@ -932,7 +930,7 @@ mod tests {
             fix(15, 17, ""),  // strip trailing spaces
             fix(0, 0, "// "), // insertion at the start
         ];
-        let refs: Vec<&linter::Fix> = fixes.iter().collect();
+        let refs: Vec<&oxvelte_linter::Fix> = fixes.iter().collect();
         assert_eq!(apply_fixes(source, &refs), "// let a = 1;\nfoo\n");
     }
 
@@ -940,7 +938,7 @@ mod tests {
     fn apply_fixes_skips_overlapping_and_keeps_first() {
         let source = "abcdef";
         let fixes = [fix(1, 4, "X"), fix(2, 3, "Y"), fix(4, 6, "Z")];
-        let refs: Vec<&linter::Fix> = fixes.iter().collect();
+        let refs: Vec<&oxvelte_linter::Fix> = fixes.iter().collect();
         // The inner Y fix overlaps the already-applied X fix and is skipped;
         // Z starts exactly at X's end and still applies.
         assert_eq!(apply_fixes(source, &refs), "aXZ");
@@ -950,7 +948,7 @@ mod tests {
     fn apply_fixes_skips_out_of_bounds_and_inverted_spans() {
         let source = "abc";
         let fixes = [fix(2, 99, "X"), fix(2, 1, "Y"), fix(1, 2, "Z")];
-        let refs: Vec<&linter::Fix> = fixes.iter().collect();
+        let refs: Vec<&oxvelte_linter::Fix> = fixes.iter().collect();
         assert_eq!(apply_fixes(source, &refs), "aZc");
     }
 
@@ -958,7 +956,7 @@ mod tests {
     fn apply_fixes_skips_spans_off_utf8_boundaries() {
         let source = "aéb"; // é is two bytes: offsets 1..3
         let fixes = [fix(1, 2, "X"), fix(3, 4, "Z")];
-        let refs: Vec<&linter::Fix> = fixes.iter().collect();
+        let refs: Vec<&oxvelte_linter::Fix> = fixes.iter().collect();
         // 1..2 splits the é, so only the boundary-safe fix applies.
         assert_eq!(apply_fixes(source, &refs), "aéZ");
     }

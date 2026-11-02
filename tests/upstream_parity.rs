@@ -8,11 +8,8 @@ mod parity;
 
 use engine::TypingEngine;
 use oxc::allocator::Allocator;
-use oxvelte::{
-    config::OxvelteConfig,
-    linter::{LintDiagnostic, Linter, RuleConfig},
-    parser,
-};
+use oxvelte_linter::config::OxvelteConfig;
+use oxvelte_linter::{LintDiagnostic, Linter, RuleConfig};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
@@ -214,7 +211,7 @@ fn script_errors(source: &str, is_ts: bool) -> Vec<String> {
 fn lint_case(lint: &Linter, source: &str, path: &str, config: RuleConfig, issues: &mut Issues) -> Vec<LintDiagnostic> {
     if path.ends_with(".svelte") {
         let alloc = Allocator::default();
-        let result = parser::parse_for_lint(source, &alloc);
+        let result = oxvelte_parser::parse_for_lint(source, &alloc);
         let mut errors: Vec<_> = result.errors.iter().map(|error| error.to_string()).collect();
         // The configured Babel parser validates syntax in the compiler bridge.
         let external_parser = config
@@ -240,7 +237,7 @@ fn lint_case(lint: &Linter, source: &str, path: &str, config: RuleConfig, issues
         if !errors.is_empty() {
             issues.insert("parse_errors".into(), json!(errors));
         }
-        if let Some(is_ts) = oxvelte::linter::svelte_module_ts_kind(path) {
+        if let Some(is_ts) = oxvelte_linter::svelte_module_ts_kind(path) {
             lint.lint_svelte_script_with_config_and_path(source, is_ts, config, path)
         } else {
             lint.lint_script_with_config_and_path(source, config, path)
@@ -373,7 +370,6 @@ fn evaluate(root: &Path, case: &Case, typing_engine: Option<TypingEngine>) -> Re
 /// TypeScript 6+, mirroring the gate in the rule (`settings.tsrs` on,
 /// Svelte major 5, project TypeScript 6+). Used to assert the forced tsrs
 /// engine really served (or, for older profiles, really did not).
-#[cfg(feature = "tsrs-inference")]
 fn tsrs_eligible_environment(environment: &Value) -> bool {
     fn major(environment: &Value, name: &str) -> Option<u32> {
         environment
@@ -453,7 +449,7 @@ fn run() -> Result<(), String> {
             let filename = checked_path(&root, &case.filename)?
                 .to_string_lossy()
                 .replace('\\', "/");
-            let runtime = oxvelte::compiler::compile("", Some(&filename), None)
+            let runtime = oxvelte_compiler::compile("", Some(&filename), None)
                 .map_err(|error| format!("Cannot verify matrix Svelte runtime: {error}"))?;
             if runtime.compiler_version != expected {
                 return Err(format!(
@@ -502,10 +498,9 @@ fn run() -> Result<(), String> {
     // every linted case must have been served by tsrs (a silent fallback
     // would pass against the same expectations and report nothing), and on
     // an ineligible corpus the routing gate must have kept tsrs out.
-    #[cfg(feature = "tsrs-inference")]
     if typing_engine == Some(TypingEngine::Tsrs) {
         use std::sync::atomic::Ordering;
-        let served = oxvelte::tsrs::TSRS_SERVED.load(Ordering::Relaxed);
+        let served = oxvelte_tsrs::TSRS_SERVED.load(Ordering::Relaxed);
         let linted = selected.iter().filter(|case| case.ineligible.is_empty()).count();
         if tsrs_eligible_environment(&manifest.environment) {
             if served != linted {

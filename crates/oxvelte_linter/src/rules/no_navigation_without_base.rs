@@ -359,10 +359,7 @@ fn import_reference(
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{Linter, RuleConfig},
-        parser,
-    };
+    use crate::{Linter, RuleConfig};
     use oxc::allocator::Allocator;
 
     #[test]
@@ -380,7 +377,7 @@ mod tests {
 
     fn findings(source: &str, options: serde_json::Value) -> Vec<String> {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint_with_config(

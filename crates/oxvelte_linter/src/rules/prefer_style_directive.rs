@@ -305,13 +305,13 @@ fn js_string(value: &str, quote: char) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
     #[test]
     fn css_quotes_and_inline_js_escapes_produce_parseable_directives() {
         let source = r#"<div style='font-family: "Arial";' />"#;
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let d = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()
@@ -319,7 +319,7 @@ mod tests {
             .unwrap();
         assert_eq!(d.fix.unwrap().replacement, "style:font-family=\"&quot;Arial&quot;\"");
         let source = r#"<div style={ok ? 'content: "a\'b"' : ''} />"#;
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let d = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()
@@ -333,13 +333,13 @@ mod tests {
             fix.replacement,
             &source[fix.span.end as usize..]
         );
-        assert!(parser::parse_for_lint(&output, &allocator).errors.is_empty());
+        assert!(oxvelte_parser::parse_for_lint(&output, &allocator).errors.is_empty());
     }
     #[test]
     fn style_ranges_preserve_css_functions_unicode_and_unsupported_values() {
         let source = "<!-- 😀 --><div style=\"background: url('x;y'); color: red!important; width: {size}px\" style:width={width} />";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()
@@ -360,7 +360,7 @@ mod tests {
     fn unicode_css_and_braces_in_interpolations_keep_source_boundaries() {
         let source = "<!-- 😀 --><div style=\"content: 'é'; color: {color /* } */}; width: 2px\" />";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()

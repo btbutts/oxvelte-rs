@@ -130,13 +130,10 @@ impl Rule for Indent {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        linter::{Linter, RuleConfig},
-        parser,
-    };
+    use crate::{Linter, RuleConfig};
     fn lint(source: &str, options: serde_json::Value) -> Vec<crate::LintDiagnostic> {
         let a = Allocator::default();
-        let p = parser::parse_for_lint(source, &a);
+        let p = oxvelte_parser::parse_for_lint(source, &a);
         Linter::all()
             .lint_with_config_and_path(
                 &p.ast,

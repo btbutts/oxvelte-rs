@@ -128,14 +128,11 @@ fn static_text(expr: &Expression<'_>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{Fix, LintDiagnostic, Linter},
-        parser,
-    };
+    use crate::{Fix, LintDiagnostic, Linter};
     use oxc::allocator::Allocator;
     fn lint(source: &str) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint(&parsed.ast, source)

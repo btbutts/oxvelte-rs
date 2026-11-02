@@ -9693,14 +9693,14 @@ mod tests {
 
 #[cfg(test)]
 mod modern_const_tag_tests {
-    use crate::{self as parser, ast::TemplateNode};
+    use crate::ast::TemplateNode;
     use oxc::allocator::Allocator;
 
     #[test]
     fn modern_const_declarations_preserve_source_spans_and_multiple_bindings() {
         let source = "<!-- 😀 -->{#if ready}{ const /* keep */ first = 1, second = { text: '}' } }{const{ value } = object}{constellation}{/if}";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = crate::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let TemplateNode::IfBlock(block) = &parsed.ast.html.nodes[1] else {
             panic!("if block")
@@ -9729,7 +9729,7 @@ mod modern_const_tag_tests {
             ("{const value = 1; call()}", "Expected a const declaration"),
         ] {
             let alloc = Allocator::default();
-            for parsed in [parser::parse(source, &alloc), parser::parse_for_lint(source, &alloc)] {
+            for parsed in [crate::parse(source, &alloc), crate::parse_for_lint(source, &alloc)] {
                 assert!(
                     parsed.errors.iter().any(|error| error.message.contains(expected)),
                     "{source}: {:?}",
@@ -9754,12 +9754,12 @@ mod modern_const_tag_tests {
             "<svelte:options runes={true} /><div>{ const value = $derived(count) }{value}</div>",
         ] {
             let alloc = Allocator::default();
-            let parsed = parser::parse(source, &alloc);
+            let parsed = crate::parse(source, &alloc);
             assert!(parsed.errors.is_empty(), "{source}: {:?}", parsed.errors);
         }
         for source in ["{@const value = count}", "<div>{@const value = count}</div>"] {
             let alloc = Allocator::default();
-            let parsed = parser::parse(source, &alloc);
+            let parsed = crate::parse(source, &alloc);
             assert!(
                 parsed
                     .errors
@@ -9773,7 +9773,7 @@ mod modern_const_tag_tests {
     fn control_tags_retain_original_spans_when_brace_and_sigil_are_separated() {
         let source = "<!-- 😀 -->{\r\n #if ok}<p />{\n :else\n if other}<b />{\n :else}<i />{\n /if}";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = crate::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let TemplateNode::IfBlock(block) = &parsed.ast.html.nodes[1] else {
             panic!("{:?}", parsed.ast.html.nodes);
@@ -9820,7 +9820,7 @@ mod modern_const_tag_tests {
             ("{\n @render child()}", "render"),
         ] {
             let alloc = Allocator::default();
-            let parsed = parser::parse_for_lint(source, &alloc);
+            let parsed = crate::parse_for_lint(source, &alloc);
             assert!(parsed.errors.is_empty(), "{source}: {:?}", parsed.errors);
             let node = &parsed.ast.html.nodes[0];
             let kind = match node {
@@ -9841,7 +9841,7 @@ mod modern_const_tag_tests {
     fn multiline_spread_attributes_exclude_ellipsis_from_expression_spans() {
         let source = "<div\n{\r\n ...props\n}\n/>";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = crate::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let TemplateNode::Element(element) = &parsed.ast.html.nodes[0] else {
             panic!();
@@ -9865,7 +9865,7 @@ mod modern_const_tag_tests {
             "<div\nvalue={ /[a/b]+/u.test(value) }\n/>",
         ] {
             let alloc = Allocator::default();
-            let parsed = parser::parse_for_lint(source, &alloc);
+            let parsed = crate::parse_for_lint(source, &alloc);
             assert!(parsed.errors.is_empty(), "{source}: {:?}", parsed.errors);
             assert_eq!(
                 parsed.ast.html.nodes.len(),

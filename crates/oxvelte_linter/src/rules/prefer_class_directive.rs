@@ -278,16 +278,13 @@ fn negate(source: &str, expr: &Expression<'_>) -> String {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{Linter, RuleConfig},
-        parser,
-    };
+    use crate::{Linter, RuleConfig};
     use oxc::allocator::Allocator;
     #[test]
     fn ranges_and_negation_preserve_entities_and_operator_comments() {
         let source = "<!-- 😀 --><button class=\"&amp; {a /* === */ === b ? '' : 'active'} tail\" />";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()
@@ -303,7 +300,7 @@ mod tests {
             "class=\"&amp; tail\" class:active={a /* === */ !== b}"
         );
         let source = "<button class=\"{flag ? ' ' : 'suffix'}{ready ? 'active' : ''}\" />";
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(
             Linter::all()
                 .lint(&parsed.ast, source)
@@ -315,7 +312,7 @@ mod tests {
     fn class_edits_preserve_unicode_comments_and_unknown_neighbors() {
         let source = "<!-- 😀 --><button class=\"fixed {ready /* comment */ ? 'active' : ''} tail\" />";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics = Linter::all().lint(&parsed.ast, source);
         let diagnostics: Vec<_> = diagnostics
             .into_iter()
@@ -332,7 +329,7 @@ mod tests {
             "class=\"fixed tail\" class:active={ready}"
         );
         let source = "<button class=\"{unknown}{ready ? 'active' : ''}\" />";
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(
             Linter::all()
                 .lint_with_config(&parsed.ast, source, RuleConfig::default())

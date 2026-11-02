@@ -187,15 +187,12 @@ impl Rule for DerivedHasSameInputsOutputs {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{LintDiagnostic, Linter},
-        parser,
-    };
+    use crate::{LintDiagnostic, Linter};
     use oxc::allocator::Allocator;
 
     fn lint(source: &str) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint(&parsed.ast, source)

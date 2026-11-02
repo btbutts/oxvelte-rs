@@ -25,9 +25,9 @@
 //! };
 //! ```
 
-use crate::linter::{Fix, LintContext, Rule};
 use boa_engine::{Context, Source};
 use oxc::span::Span;
+use oxvelte_linter::{Fix, LintContext, Rule};
 use std::path::{Path, PathBuf};
 
 /// A lint rule implemented in JavaScript, executed via boa_engine.

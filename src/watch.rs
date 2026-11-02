@@ -15,8 +15,8 @@
 //! tested rather than CLI-exercised — see
 //! `docs/research/test/no-conflicting-module-names.md`.
 
-use crate::linter::rules::no_conflicting_module_names::MODULE_EXTENSIONS;
 use notify::{Event, RecursiveMode, Watcher};
+use oxvelte_linter::rules::no_conflicting_module_names::MODULE_EXTENSIONS;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::mpsc::{RecvTimeoutError, channel};

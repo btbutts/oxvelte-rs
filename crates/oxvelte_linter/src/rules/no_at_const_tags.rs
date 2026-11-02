@@ -76,16 +76,13 @@ impl Rule for NoAtConstTags {
 #[cfg(test)]
 mod tests {
     use super::NoAtConstTags;
-    use crate::{
-        ast::TemplateNode,
-        linter::{LintContext, Rule, svelte_version_info_from_package_json},
-        parser,
-    };
+    use crate::{LintContext, Rule, svelte_version_info_from_package_json};
     use oxc::allocator::Allocator;
+    use oxvelte_parser::ast::TemplateNode;
 
     fn migrate(source: &str, version: &str, runes: bool, explicit_false: bool) -> Vec<crate::LintDiagnostic> {
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let mut ctx = LintContext::new(&parsed.ast, source);
         ctx.is_runes = runes;
@@ -109,7 +106,7 @@ mod tests {
             "<!-- 😀 --><svelte:options runes={true} />{#if yes}{ \tconst /* name */ result = /* before */ $derived(({ text: '😀}', value: count })) /* after */ }{/if}"
         );
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(&output, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(&output, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let block = parsed
             .ast

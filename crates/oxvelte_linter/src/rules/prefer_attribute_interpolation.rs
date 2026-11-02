@@ -68,14 +68,14 @@ fn useful_escape(raw: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
     fn flags_only_single_template_values_without_comments_or_useful_escapes() {
         let source = "<!-- 😀 --><div a={`prefix${value}`} b=\"{`text${value}`}\" c=\"prefix {`text${value}`}\" d={`text${/* keep */ value}`} e={`line\\n${value}`} f={`text{${value}`} style:color={`rgb(${value})`} typed={(`text${value}` as string)} />";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)

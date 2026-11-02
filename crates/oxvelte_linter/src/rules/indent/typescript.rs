@@ -772,16 +772,13 @@ fn decorators(layout: &mut Layout, parent: Option<AstKind<'_>>, span: Span, base
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{LintContext, Rule, RuleConfig},
-        parser,
-    };
+    use crate::{LintContext, Rule, RuleConfig};
     use oxc::allocator::Allocator;
     use serde_json::json;
 
     fn fixed(source: &str) -> String {
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let config = RuleConfig {
             options: Some(json!([{"indent":2,"indentScript":true}])),

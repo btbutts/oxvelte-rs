@@ -941,13 +941,13 @@ fn simple_target_member_path<'a>(
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
     #[test]
     fn reactive_mutations_use_operation_spans_and_respect_local_symbols() {
         let source = "<!-- 😀 --><script data-note=\">\">let value=1; $: reactive={value}; function change(){ delete reactive.value; (reactive?.value).nested=2; ({value:reactive}=other); } function shadow(reactive){delete reactive.value; reactive.value=3;}</script><input bind:value={reactive.value} />";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()
@@ -976,7 +976,7 @@ mod tests {
     fn template_callback_bindings_shadow_reactive_declarations() {
         let source = "<script>let source=0; $: reactive=source;</script><button onclick={(reactive)=>reactive++}/><button onclick={()=>{reactive=1; reactive=2;}}/>";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
             .into_iter()

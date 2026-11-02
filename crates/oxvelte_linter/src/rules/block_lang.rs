@@ -276,7 +276,7 @@ impl Rule for BlockLang {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{linter::RuleConfig, parser};
+    use crate::RuleConfig;
     use oxc::allocator::Allocator;
 
     #[test]
@@ -295,7 +295,7 @@ mod tests {
             ),
         ] {
             let allocator = Allocator::default();
-            let parsed = parser::parse(source, &allocator);
+            let parsed = oxvelte_parser::parse(source, &allocator);
             let mut ctx = LintContext::with_config(
                 &parsed.ast,
                 source,
@@ -318,7 +318,7 @@ mod tests {
     fn missing_blocks_report_second_column() {
         let source = "<p>Hello</p>";
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         let mut ctx = LintContext::with_config(
             &parsed.ast,
             source,
@@ -349,7 +349,7 @@ mod tests {
     fn suggestions_replace_only_the_attribute_and_preserve_alternative_order() {
         let source = "<script data-note=\"lang='fake'\"\n lang = 'js' context='module'>let x = 1;</script>";
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         let script = parsed.ast.module.as_ref().unwrap();
         let suggestions = replacement_suggestions(
             "script",
@@ -379,7 +379,7 @@ mod tests {
     fn missing_and_existing_blocks_have_distinct_insertions() {
         let source = "<style media='screen'></style>";
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         let style = parsed.ast.css.as_ref().unwrap();
         let allowed = [None, Some(String::new()), Some("scss".into())];
         let existing = replacement_suggestions("style", style.span, style.attrs_span, &allowed, source);
@@ -408,7 +408,7 @@ mod tests {
     fn missing_block_reports_and_suggestions_use_valid_utf8_boundaries() {
         for source in ["", "é", "😀"] {
             let allocator = Allocator::default();
-            let parsed = parser::parse(source, &allocator);
+            let parsed = oxvelte_parser::parse(source, &allocator);
             let mut ctx = LintContext::with_config(
                 &parsed.ast,
                 source,

@@ -680,11 +680,10 @@ fn scan_identifiers(text: &str, names: &mut Names) {
 mod tests {
     use crate::{Linter, RuleConfig};
     use oxc::allocator::Allocator;
-    use oxvelte_parser as parser;
 
     fn lint_with(source: &str, options: Option<serde_json::Value>) -> Vec<String> {
         let allocator = Allocator::default();
-        let result = parser::parse(source, &allocator);
+        let result = oxvelte_parser::parse(source, &allocator);
         assert!(result.errors.is_empty(), "{:?}", result.errors);
         Linter::all()
             .lint_with_config(
@@ -795,7 +794,7 @@ mod tests {
         );
         // `total` is reported at its last assignment in the same function.
         let allocator = Allocator::default();
-        let result = parser::parse(source, &allocator);
+        let result = oxvelte_parser::parse(source, &allocator);
         let diags = Linter::all().lint(&result.ast, source);
         let total = diags.iter().find(|d| d.message.starts_with("'total'")).unwrap();
         assert_eq!(total.span.start as usize, source.find("total = 5").unwrap());

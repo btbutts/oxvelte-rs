@@ -55,3 +55,10 @@ OXVELTE_FIXTURES_TYPESCRIPT_VERSION = "6.0.3"
 [alias]
 get-eslint-fixtures = "run --bin launcher -- --get-eslint-fixtures"
 get-svelte-fixtures = "run --bin launcher -- --get-svelte-fixtures"
+
+# Switch to LLD Linker from link.exe to improve
+# compilation performance on windows machines only
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"
+[target.aarch64-pc-windows-msvc]
+linker = "rust-lld.exe"

@@ -163,7 +163,7 @@ fn canonical_js_expression(source: &str) -> String {
 
 #[cfg(test)]
 mod directive_identity_tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
@@ -186,7 +186,7 @@ mod directive_identity_tests {
 
     fn duplicates(source: &str) -> usize {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint(&parsed.ast, source)

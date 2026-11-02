@@ -208,15 +208,12 @@ fn parse_order_config(options: &Option<serde_json::Value>) -> Vec<OrderRule> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        linter::{LintDiagnostic, Linter, RuleConfig},
-        parser,
-    };
+    use crate::{LintDiagnostic, Linter, RuleConfig};
     use oxc::allocator::Allocator;
 
     fn lint(source: &str, options: serde_json::Value) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint_with_config(

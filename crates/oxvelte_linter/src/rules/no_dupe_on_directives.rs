@@ -76,7 +76,7 @@ fn line_number(source: &str, offset: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::line_number;
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
@@ -91,7 +91,7 @@ mod tests {
     fn duplicate_handlers_report_other_line_and_keep_source_order() {
         let source = "<button\n on:click|once={handler}\n on:focus={other}\n on:click={handler}\n on:focus|self={other}\n on:click|capture={handler} />";
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let diagnostics = Linter::all().lint(&parsed.ast, source);
         let diagnostics: Vec<_> = diagnostics

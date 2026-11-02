@@ -111,14 +111,14 @@ fn static_string<'a>(expression: &'a Expression<'a>, ctx: &LintContext<'a>, span
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
     fn offers_independent_suggestions_preserving_binding_trivia() {
         let source = "<!-- 😀 --><script>const checkType = 'checkbox'; const radioType = 'radio'; const aliasType = radioType;</script><input TYPE={'CHECK' + 'BOX'} bind:value = \"{value}\" /><input type={`radio`} bind:value /><input type={dynamic} bind:value /><input type={('checkbox' as string)} bind:value /><input type={checkType} bind:value /><input type={aliasType} bind:value />{#each types as checkType}<input type={checkType} bind:value />{/each}";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)

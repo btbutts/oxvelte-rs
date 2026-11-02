@@ -21,9 +21,8 @@ mod parity;
 mod engine;
 
 use engine::TypingEngine;
-use oxvelte::config::OxvelteConfig;
-use oxvelte::linter::{Linter, RuleConfig};
-use oxvelte::parser;
+use oxvelte_linter::config::OxvelteConfig;
+use oxvelte_linter::{Linter, RuleConfig};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -166,7 +165,7 @@ fn lint(source: &str, path: &str, config: &RuleConfig) -> Vec<(String, u32, u32)
         }
     });
     let allocator = oxc::allocator::Allocator::default();
-    let parsed = parser::parse_for_lint(source, &allocator);
+    let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
     Linter::all()
         .lint_with_project_config_and_path(&parsed.ast, source, &config_for(config), path)
         .into_iter()
@@ -256,20 +255,18 @@ fn check_upstream_cases(engine: TypingEngine) {
 /// Asserts the tsrs legs above really were served by tsrs — a silent
 /// routing fallback would otherwise pass against the same expectations
 /// and the engine label in the test name would be a lie.
-#[cfg(feature = "tsrs-inference")]
 fn assert_tsrs_served(since: usize) {
     use std::sync::atomic::Ordering;
-    let served = oxvelte::tsrs::TSRS_SERVED.load(Ordering::Relaxed) - since;
+    let served = oxvelte_tsrs::TSRS_SERVED.load(Ordering::Relaxed) - since;
     assert!(
         served > 0,
         "engine tsrs requested, but every case fell back to the JS sidecar"
     );
 }
 
-#[cfg(feature = "tsrs-inference")]
 fn served_count() -> usize {
     use std::sync::atomic::Ordering;
-    oxvelte::tsrs::TSRS_SERVED.load(Ordering::Relaxed)
+    oxvelte_tsrs::TSRS_SERVED.load(Ordering::Relaxed)
 }
 
 #[test]
@@ -290,7 +287,6 @@ fn upstream_cases_via_js_sidecar() {
     check_upstream_cases(TypingEngine::JsSidecar);
 }
 
-#[cfg(feature = "tsrs-inference")]
 #[test]
 fn inline_cases_via_tsrs() {
     if !TypingEngine::Tsrs.available() || !fixtures_available() {
@@ -302,7 +298,6 @@ fn inline_cases_via_tsrs() {
     assert_tsrs_served(since);
 }
 
-#[cfg(feature = "tsrs-inference")]
 #[test]
 fn upstream_cases_via_tsrs() {
     if !TypingEngine::Tsrs.available() || !fixtures_available() {
@@ -316,7 +311,6 @@ fn upstream_cases_via_tsrs() {
 
 /// The strongest guarantee: both backends must agree byte-for-byte on every
 /// case, including spans — not just on the expected message list.
-#[cfg(feature = "tsrs-inference")]
 #[test]
 fn backends_agree_on_diagnostics_and_spans() {
     if !TypingEngine::Tsrs.available() || !fixtures_available() {

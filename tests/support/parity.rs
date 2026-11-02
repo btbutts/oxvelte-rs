@@ -1,4 +1,4 @@
-use oxvelte::linter::{Fix, LintDiagnostic};
+use oxvelte_linter::{Fix, LintDiagnostic};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;

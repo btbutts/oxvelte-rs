@@ -694,7 +694,6 @@ fn matches_pattern(name: &str, pattern: &str) -> bool {
 mod tests {
     use crate::{LintDiagnostic, Linter};
     use oxc::allocator::Allocator;
-    use oxvelte_parser as parser;
 
     #[test]
     fn destructured_named_types_respect_nested_options() {
@@ -705,7 +704,7 @@ mod tests {
             console.log(details.used);
         </script>"#;
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         for (options, expected) in [
             (
                 serde_json::json!([{"ignorePropertyPatterns": ["/^_/"], "ignoreTypePatterns": ["Details"]}]),
@@ -746,7 +745,7 @@ mod tests {
 
     fn lint(source: &str) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let result = parser::parse(source, &allocator);
+        let result = oxvelte_parser::parse(source, &allocator);
         assert!(result.errors.is_empty(), "{:?}", result.errors);
         Linter::all()
             .lint(&result.ast, source)

@@ -107,7 +107,7 @@ fn import_reference(
 }
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
@@ -117,7 +117,7 @@ mod tests {
                 "<!-- 😀 -->\n<script {attributes}>\nimport {{ goto }} from '$app/navigation';\ngoto('/route');\n</script>"
             );
             let allocator = Allocator::default();
-            let parsed = parser::parse(&source, &allocator);
+            let parsed = oxvelte_parser::parse(&source, &allocator);
             assert!(parsed.errors.is_empty());
             let diagnostics = Linter::all().lint(&parsed.ast, &source);
             let finding = diagnostics
@@ -146,7 +146,7 @@ function shadowBase(base) { navigate(base + '/invalid'); }
 navigate(`${'/prefix'}${base}`);
 </script>"#;
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty());
         let diagnostics = Linter::all().lint(&parsed.ast, source);
         let findings: Vec<_> = diagnostics

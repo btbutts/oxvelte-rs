@@ -1,24 +1,12 @@
-pub use oxvelte_compiler as compiler;
-pub use oxvelte_linter as linter;
-pub use oxvelte_linter::config;
-pub use oxvelte_parser as parser;
-pub use oxvelte_parser::ast;
-
 pub mod watch;
 
 #[cfg(feature = "custom-rules")]
 pub mod custom_rules;
 
-#[cfg(feature = "tsrs-inference")]
-pub use oxvelte_transport as transport;
-#[cfg(feature = "tsrs-inference")]
-pub use oxvelte_tsrs as tsrs;
-
 #[cfg(test)]
 mod linter_fixture_tests {
-    use crate::config::OxvelteConfig;
-    use crate::linter::{LintDiagnostic, Linter, RuleConfig};
-    use crate::parser;
+    use oxvelte_linter::config::OxvelteConfig;
+    use oxvelte_linter::{LintDiagnostic, Linter, RuleConfig};
 
     /// One expected diagnostic from a fixture's `-errors.yaml` (upstream
     /// ESLint convention: 1-based line, 1-based UTF-16 column), surfaced
@@ -158,9 +146,9 @@ mod linter_fixture_tests {
     fn lint_fixture_file(lint: &Linter, source: &str, config: RuleConfig, file_path: &str) -> Vec<LintDiagnostic> {
         if file_path.ends_with(".svelte") {
             let alloc = oxc::allocator::Allocator::default();
-            let result = parser::parse(source, &alloc);
+            let result = oxvelte_parser::parse(source, &alloc);
             lint.lint_with_config_and_path(&result.ast, source, config, file_path)
-        } else if let Some(is_ts) = crate::linter::svelte_module_ts_kind(file_path) {
+        } else if let Some(is_ts) = oxvelte_linter::svelte_module_ts_kind(file_path) {
             lint.lint_svelte_script_with_config_and_path(source, is_ts, config, file_path)
         } else {
             lint.lint_script_with_config_and_path(source, config, file_path)
@@ -322,10 +310,10 @@ mod linter_fixture_tests {
         let Some(range) = case.requirements.get("svelte").and_then(|v| v.as_str()) else {
             return true;
         };
-        let version = crate::compiler::compile("", Some(&format!("fixtures/linter/{}", case.filename)), None)
+        let version = oxvelte_compiler::compile("", Some(&format!("fixtures/linter/{}", case.filename)), None)
             .expect("Compiler fixtures require Node and an installed Svelte compiler")
             .svelte_major;
-        crate::linter::npm_range_may_include_major(range, version as u8)
+        oxvelte_linter::npm_range_may_include_major(range, version as u8)
     }
 
     #[test]
@@ -365,7 +353,7 @@ mod linter_fixture_tests {
     fn linter_project_config_passes_rule_options() {
         let source = r#"<button type="button">Save</button>"#;
         let alloc = oxc::allocator::Allocator::default();
-        let result = parser::parse(source, &alloc);
+        let result = oxvelte_parser::parse(source, &alloc);
         let config = OxvelteConfig::parse(
             r#"{
                 "rules": {
@@ -1006,8 +994,8 @@ mod linter_fixture_tests {
 
 #[cfg(test)]
 mod parser_fixture_tests {
-    use crate::parser;
-    use crate::parser::serialize::to_legacy_json;
+
+    use oxvelte_parser::serialize::to_legacy_json;
 
     /// Recursively compare two JSON values, ignoring key ordering.
     /// Returns a list of differences found.
@@ -1076,7 +1064,7 @@ mod parser_fixture_tests {
             serde_json::from_str(&expected_str).unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", output_path, e));
 
         let alloc = oxc::allocator::Allocator::default();
-        let result = parser::parse(&input, &alloc);
+        let result = oxvelte_parser::parse(&input, &alloc);
         let mut actual = to_legacy_json(&result.ast, &input);
 
         // Fixtures committed before svelte 5.56.9 have no css `comments`
@@ -1215,8 +1203,8 @@ mod parser_fixture_tests {
 
 #[cfg(test)]
 mod modern_fixture_tests {
-    use crate::parser;
-    use crate::parser::serialize::to_modern_json;
+
+    use oxvelte_parser::serialize::to_modern_json;
 
     fn json_diff(expected: &serde_json::Value, actual: &serde_json::Value, path: &str) -> Vec<String> {
         use serde_json::Value;
@@ -1270,7 +1258,7 @@ mod modern_fixture_tests {
             serde_json::from_str(&expected_str).unwrap_or_else(|e| panic!("Invalid JSON in {}: {}", output_path, e));
 
         let alloc = oxc::allocator::Allocator::default();
-        let result = parser::parse(&input, &alloc);
+        let result = oxvelte_parser::parse(&input, &alloc);
         let mut actual = to_modern_json(&result.ast, &input);
 
         // Mirror upstream's parser-modern harness: fixtures committed before

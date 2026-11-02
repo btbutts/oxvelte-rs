@@ -91,11 +91,10 @@ mod tests {
     use super::*;
     use crate::LintContext;
     use oxc::allocator::Allocator;
-    use oxvelte_parser as parser;
 
     fn diagnostics_for(source: &str) -> Vec<String> {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         let mut ctx = LintContext::new(&parsed.ast, source);
         ValidStyleParse.run(&mut ctx);
         ctx.into_diagnostics()
@@ -130,7 +129,7 @@ mod tests {
     fn reports_css_error_with_real_filename_and_style_relative_location() {
         let source = "<!-- é -->\n<style data-label='>'>.x { color red; }</style>";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         let mut ctx = LintContext::new(&parsed.ast, source);
         ctx.file_path = Some("src/Panel.svelte".into());
         ValidStyleParse.run(&mut ctx);

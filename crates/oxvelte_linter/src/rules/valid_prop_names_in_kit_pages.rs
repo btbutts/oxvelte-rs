@@ -133,11 +133,10 @@ fn report(ctx: &mut LintContext<'_>, content_offset: u32, span: Span) {
 mod tests {
     use crate::{LintDiagnostic, Linter, RuleConfig};
     use oxc::allocator::Allocator;
-    use oxvelte_parser as parser;
 
     fn lint(source: &str, path: &str) -> Vec<LintDiagnostic> {
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint_with_config_and_path(&parsed.ast, source, RuleConfig::default(), path)

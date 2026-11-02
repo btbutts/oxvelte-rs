@@ -3,7 +3,7 @@
 mod parity;
 
 use oxc::span::Span;
-use oxvelte::linter::{Fix, LintContext, LintDiagnostic, Linter, Rule, Suggestion};
+use oxvelte_linter::{Fix, LintContext, LintDiagnostic, Linter, Rule, Suggestion};
 use serde_json::json;
 
 fn runner_args(arguments: &[&str]) -> Result<parity::RunnerArgs, String> {
@@ -389,14 +389,14 @@ fn suggestion_only_diagnostics_follow_ignore_filtering_without_becoming_fixes() 
     let disabled = json!({"rules": linter.rules().iter()
         .map(|rule| (rule.name().to_string(), json!("off")))
         .collect::<serde_json::Map<_, _>>()});
-    linter.remove_disabled_rules(&oxvelte::config::OxvelteConfig::parse(&disabled.to_string()).unwrap());
+    linter.remove_disabled_rules(&oxvelte_linter::config::OxvelteConfig::parse(&disabled.to_string()).unwrap());
     let linter = linter.with_custom_rules(vec![Box::new(SuggestingRule)]);
     for (source, expected) in [
         ("<p>x</p>", 1),
         ("<!-- eslint-disable-next-line svelte/test-suggestions -->\n<p>x</p>", 0),
     ] {
         let allocator = oxc::allocator::Allocator::default();
-        let result = oxvelte::parser::parse(source, &allocator);
+        let result = oxvelte_parser::parse(source, &allocator);
         let diags = linter.lint(&result.ast, source);
         assert_eq!(diags.len(), expected);
         if let Some(diag) = diags.first() {

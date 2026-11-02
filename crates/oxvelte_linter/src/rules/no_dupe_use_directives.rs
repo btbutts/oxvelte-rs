@@ -76,7 +76,7 @@ fn line_number(source: &str, offset: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::line_number;
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
@@ -91,7 +91,7 @@ mod tests {
     fn duplicate_actions_report_other_line_and_keep_source_order() {
         let source = "<div\n use:actions.foo={param}\n use:bar\n use:actions.foo={param}\n use:bar\n use:actions.foo={param} />\n<div use:bar />";
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let diagnostics = Linter::all().lint(&parsed.ast, source);
         let diagnostics: Vec<_> = diagnostics

@@ -1,7 +1,19 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; **phases 1–7 complete 02NOV2026** (build
-metrics in `reorg-build-metrics-2026-11-02.md`; KIMI.md layout updated) —
+Status: **all phases complete 02NOV2026** (build metrics in
+`reorg-build-metrics-2026-11-02.md`; KIMI.md layout updated). Phase 8
+implementation notes: the facade is gone from root `lib.rs` (no
+`pub use … as …` anywhere; zero `as parser`/`as linter` aliases
+workspace-wide); the 126 grouped rule-test imports and all `tests/`
+paths use the real crate names; the `#[cfg(feature = "tsrs-inference")]`
+gates in `tests/` were **removed** because `oxvelte_tsrs` is now an
+unconditional dev-dependency (its suites skip at runtime without a tsrs
+binary, as before); and the self-dependency survives only in minimal
+form — `oxvelte = { path = ".", features = ["custom-rules"] }` — because
+`src/custom_rules.rs`'s unit test needs the root's own `custom-rules`
+feature and a crate cannot enable its own features from dev-dependencies
+any other way (exactly the fallback this phase's verification point
+called for). Test totals unchanged: 661 lib + all integration suites.
 phase 1: `[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in
 the root `Cargo.toml`, all root deps inheriting, `resolver = "2"`, version
 literal moved to `[workspace.package]`, `release.sh` on the perl

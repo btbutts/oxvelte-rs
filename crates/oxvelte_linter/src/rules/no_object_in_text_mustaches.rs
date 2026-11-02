@@ -64,7 +64,7 @@ fn detect_expression_kind(expr: &oxc::ast::ast::Expression<'_>) -> Option<&'stat
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
@@ -72,7 +72,7 @@ mod tests {
         let source =
             "<!-- 😀 --><div text=\"prefix {[1]} {({a: 1})}\" prop={{a: 1}} />{[1].length}{({a: 1} as unknown)}";
         let allocator = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &allocator);
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)

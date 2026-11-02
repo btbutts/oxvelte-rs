@@ -1039,15 +1039,12 @@ fn import_export(l: &mut Layout<'_>, span: Span, source: Option<Span>, specs: Ve
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{Linter, RuleConfig},
-        parser,
-    };
+    use crate::{Linter, RuleConfig};
     use oxc::allocator::Allocator;
 
     fn fixed(source: &str, options: serde_json::Value) -> String {
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let mut fixes: Vec<_> = Linter::all()
             .lint_with_config_and_path(

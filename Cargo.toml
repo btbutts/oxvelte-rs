@@ -61,7 +61,7 @@ path = "scripts/launcher.rs"
 [features]
 default = []
 custom-rules = ["dep:boa_engine"]
-tsrs-inference = ["dep:oxvelte_tsrs", "oxvelte_linter/tsrs-inference"]
+tsrs-inference = ["oxvelte_linter/tsrs-inference"]
 
 [dependencies]
 oxc.workspace = true
@@ -69,8 +69,6 @@ oxc_diagnostics.workspace = true
 oxvelte_compiler = { path = "crates/oxvelte_compiler" }
 oxvelte_linter = { path = "crates/oxvelte_linter" }
 oxvelte_parser = { path = "crates/oxvelte_parser" }
-oxvelte_transport = { path = "crates/oxvelte_transport" }
-oxvelte_tsrs = { path = "crates/oxvelte_tsrs", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true
@@ -86,8 +84,20 @@ precomputed-hash.workspace = true
 cssparser.workspace = true
 notify.workspace = true
 
+# Test targets depend on the component crates directly; the tsrs-inference
+# feature on oxvelte_linter unifies on for the whole dev/test build graph,
+# which is what the old self-dependency trick achieved through the facade.
+# The minimal self-dependency remains for one thing only: turning the root
+# package's own custom-rules feature on so src/custom_rules.rs's unit test
+# compiles under plain `cargo test` (a crate cannot enable its own features
+# from dev-dependencies any other way).
 [dev-dependencies]
-oxvelte = { path = ".", features = ["tsrs-inference", "custom-rules"] }
+oxvelte = { path = ".", features = ["custom-rules"] }
+oxvelte_compiler = { path = "crates/oxvelte_compiler" }
+oxvelte_linter = { path = "crates/oxvelte_linter", features = ["tsrs-inference"] }
+oxvelte_parser = { path = "crates/oxvelte_parser" }
+oxvelte_transport = { path = "crates/oxvelte_transport" }
+oxvelte_tsrs = { path = "crates/oxvelte_tsrs" }
 insta = { version = "1.49.0", features = ["json"] }
 sha2 = "0.11.1"
 
@@ -107,7 +117,7 @@ debug-assertions = false
 [profile.dev]
 opt-level = 3
 lto = "thin"
-codegen-units = 32
+codegen-units = 384
 debug = true
 incremental = true
 debug-assertions = true

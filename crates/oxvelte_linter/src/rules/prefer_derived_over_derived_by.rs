@@ -184,14 +184,14 @@ fn single_return<'a, 'b>(statements: &'b [Statement<'a>]) -> Option<&'b Expressi
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
     fn fixes_script_and_template_calls_at_original_unicode_offsets() {
         let source = "<!-- 😀 --><script data-note=\">\">const value = $derived.by(() => source /* keep */ + 1);</script><p>{$derived.by(function() { return value + 1; })}</p>";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)
@@ -214,7 +214,7 @@ mod tests {
     fn retains_callbacks_with_effects_or_function_semantics() {
         let source = "<script lang=\"ts\">let value = $derived.by(() => { log(); return count; }); let second = $derived.by(async () => count); let third = $derived.by(function*() { return count; }); let fourth = $derived.by((count) => count); let fifth = $derived['by'](() => count); let sixth = $derived.by((() => count) as () => number); let seventh = $derived.by(() => {'use strict'; return count;}); let eighth = $derived.by(function() {'use strict'; return count;}); let ninth = $derived.by(function(this: {value: number}) {return this.value;});</script>";
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty());
         assert!(
             Linter::all()
@@ -223,7 +223,7 @@ mod tests {
                 .all(|d| d.rule_name != "svelte/prefer-derived-over-derived-by")
         );
         let source = "<svelte:options runes={false} /><script>let value = $derived.by(() => count);</script>";
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(
             Linter::all()
                 .lint(&parsed.ast, source)

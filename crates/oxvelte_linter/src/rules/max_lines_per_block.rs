@@ -208,15 +208,12 @@ fn count_template_lines(content: &str, skip_blank: bool, skip_comments: bool) ->
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        linter::{LintDiagnostic, Linter, RuleConfig},
-        parser,
-    };
+    use crate::{LintDiagnostic, Linter, RuleConfig};
     use oxc::allocator::Allocator;
 
     fn lint(source: &str, options: serde_json::Value) -> Vec<LintDiagnostic> {
         let alloc = Allocator::default();
-        let parsed = parser::parse_for_lint(source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(source, &alloc);
         assert!(parsed.errors.is_empty(), "{:?}", parsed.errors);
         Linter::all()
             .lint_with_config(

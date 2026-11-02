@@ -159,14 +159,14 @@ fn fn_arg_block_body<'a>(arg: &'a Argument<'a>) -> Option<&'a [Statement<'a>]> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{linter::Linter, parser};
+    use crate::Linter;
     use oxc::allocator::Allocator;
 
     #[test]
     fn rewrite_keeps_comments_and_uses_the_resolved_binding() {
         let source = "<!-- 😀 --><script data-note=\">\">let value = $state(0); /* keep */ $effect(() => { value = count + 1; }); function inner() { let value = 0; $effect(() => { value = 2; }); }</script>";
         let allocator = Allocator::default();
-        let parsed = parser::parse(source, &allocator);
+        let parsed = oxvelte_parser::parse(source, &allocator);
         assert!(parsed.errors.is_empty());
         let diagnostics: Vec<_> = Linter::all()
             .lint(&parsed.ast, source)

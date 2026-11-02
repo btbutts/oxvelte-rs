@@ -28,15 +28,38 @@ which `oxvelte_*` crates recompile:
 - **`custom-rules` flip (first time):** `oxvelte_parser`,
   `oxvelte_compiler`, and `oxvelte_linter` also recompile;
   `oxvelte_transport` (pure-std, no external deps) never does.
-  Mechanism undiagnosed after eliminating the obvious suspects —
-  `serde`, `serde_json`, and `oxc` feature sets are verified identical
-  with and without `custom-rules` (`cargo tree -e features`), so it is
-  not ordinary feature unification on a shared dependency. boa_engine's
-  presence in the graph appears to change Cargo's unit metadata for
-  crates in the root's dependency closure. Not a reorg regression:
-  pre-reorg, *any* flip recompiled the entire 50K-line crate. Worth a
-  future look; `oxvelte_transport`'s immunity suggests the lever is
-  dependency-closure overlap with boa's tree.
+  **Mechanism diagnosed 02NOV2026:** `boa_engine` changes the feature
+  sets of several shared transitive dependencies when it enters the
+  graph. Confirmed at the fingerprint level
+  (`target/debug/.fingerprint/*/lib-*.json`):
+  - `serde` gains **`rc`** (boa requires it) — serde rebuilds, and so
+    does its whole downstream closure (`serde_json`, `oxc`, `cssparser`,
+    `selectors`, then our three crates).
+  - `syn` gains `fold`/`visit-mut` and `quote`/`proc-macro2` gain
+    `default` — but **only in the host (build-dependency) context**.
+    serde_derive, clap_derive, oxc_ast_macros, miette-derive,
+    thiserror-impl, and boa_macros are proc-macro crates, so the
+    proc-macro ecosystem resolves features in the host context, which
+    resolver 2 unifies separately from the normal context.
+  - Smaller flips further down (`libc/extra_traits`, `hashbrown`,
+    `bitflags/serde`, …).
+- **Decision (02NOV2026): accept the first-flip rebuilds; no feature
+  pins.** A `serde/rc` pin was tried and does work for the serde chain,
+  but it does not stop the host-context proc-macro cascade, so it was
+  reverted — no reason to carry an always-on feature that only half
+  mitigates. Pinning boa's full transitive footprint is not viable
+  either: pins from the root do not reliably reach the host resolution
+  context, and the footprint can change on any boa upgrade.
+  `cargo tree -e features` had masked all of this because the
+  dev-dependency self-reference keeps the dev-context features enabled
+  in both views; the fingerprint JSONs are the ground truth.
+- **Why it is acceptable:** the cascade runs once per feature
+  configuration; both configurations then stay cached and repeat flips
+  cost nothing (measured: 0.24s no-op). Pre-reorg, every flip rebuilt
+  the entire 50K-line crate every time. If the residual first-flip
+  cost ever becomes annoying, the structural fix is to make
+  `custom-rules` a default feature (dev, test, and release all build
+  one configuration anyway; release.yml already ships it on).
 - **Repeat flips are free:** once both configurations have been built,
   toggling features rebuilds nothing (0.24s no-op). Cargo caches each
   feature-combination's artifacts concurrently. The pre-reorg pain
@@ -90,6 +113,5 @@ it is a recompile-avoidance change.
 - **Windows timings** — the motivating case. Repeat the clean-build
   series and the feature-flip test on a Windows machine and append
   results here.
-- **`custom-rules` flip recompile mechanism** — see above.
 - **Release-build timing** (`--release`, LTO fat): not measured here;
   expect ~equal (LTO dominates and is unchanged).

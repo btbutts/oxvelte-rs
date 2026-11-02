@@ -1,5 +1,6 @@
 use oxc::allocator::Allocator;
-use oxvelte::{config::OxvelteConfig, linter::Linter, parser};
+use oxvelte_linter::Linter;
+use oxvelte_linter::config::OxvelteConfig;
 use serde_json::{Value, json};
 
 fn check(name: &str) {
@@ -26,7 +27,7 @@ fn check(name: &str) {
     let diagnostics = if path.ends_with(".svelte.ts") {
         lint.lint_svelte_script_with_project_config_and_path(&source, true, &config, path)
     } else {
-        let parsed = parser::parse_for_lint(&source, &alloc);
+        let parsed = oxvelte_parser::parse_for_lint(&source, &alloc);
         assert!(parsed.errors.is_empty(), "{}: {:?}", name, parsed.errors);
         lint.lint_with_project_config_and_path(&parsed.ast, &source, &config, path)
     };

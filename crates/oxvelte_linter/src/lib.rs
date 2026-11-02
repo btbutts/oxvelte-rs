@@ -4,16 +4,6 @@ mod compiler_ignore;
 pub mod config;
 pub mod rules;
 
-// Test-only aliases so rule test modules written against the pre-split
-// layout (`use crate::{linter::Linter, parser};`) keep working; invisible
-// outside cfg(test) and never part of the public API.
-#[cfg(test)]
-use crate as linter;
-#[cfg(test)]
-use oxvelte_parser as parser;
-#[cfg(test)]
-use oxvelte_parser::ast;
-
 use oxc::span::Span;
 use oxvelte_parser::ast::*;
 use std::path::Path;
