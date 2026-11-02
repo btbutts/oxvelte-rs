@@ -154,10 +154,22 @@ impl Runtime {
     fn start(settings: Option<&Value>) -> Result<Self, String> {
         let script = format!(
             "const embeddedSourceMapCodec = (() => {{ const module = {{exports: {{}}}}; const exports = module.exports; {} ; return module.exports; }})();\nconst typescriptService = (() => {{ const module = {{exports: {{}}}}; {} ; return module.exports; }})();\nconst typescriptConditions = (() => {{ const module = {{exports: {{}}}}; {} ; return module.exports; }})();\n{}",
-            include_str!("../scripts/compiler-runtime/vendor/sourcemap-codec.cjs"),
-            include_str!("../scripts/compiler-runtime/typescript-service.cjs"),
-            include_str!("../scripts/compiler-runtime/typescript-conditions.cjs"),
-            include_str!("../scripts/compiler-runtime/bridge.cjs"),
+            include_str!(concat!(
+                env!("OXVELTE_REPO_ROOT"),
+                "/scripts/compiler-runtime/vendor/sourcemap-codec.cjs"
+            )),
+            include_str!(concat!(
+                env!("OXVELTE_REPO_ROOT"),
+                "/scripts/compiler-runtime/typescript-service.cjs"
+            )),
+            include_str!(concat!(
+                env!("OXVELTE_REPO_ROOT"),
+                "/scripts/compiler-runtime/typescript-conditions.cjs"
+            )),
+            include_str!(concat!(
+                env!("OXVELTE_REPO_ROOT"),
+                "/scripts/compiler-runtime/bridge.cjs"
+            )),
         );
         let program = resolve_js_runtime(settings)?;
         let mut child = Command::new(&program)
@@ -298,7 +310,7 @@ pub fn apply_warning_callbacks(
 }
 /// Run opt-in type-aware checks through the shared Node process. TypeScript
 /// programs are refreshed per request so unsaved source and imports stay current.
-pub(crate) fn typescript_conditions(request: &Value) -> Result<Value, String> {
+pub fn typescript_conditions(request: &Value) -> Result<Value, String> {
     let serialized = serde_json::to_string(request).map_err(|error| error.to_string())?;
     with_runtime(request.get("settings"), |runtime| runtime.exchange(&serialized))
 }

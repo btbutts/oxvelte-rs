@@ -1,7 +1,7 @@
+pub use oxvelte_compiler as compiler;
 pub use oxvelte_parser as parser;
 pub use oxvelte_parser::ast;
 
-pub mod compiler;
 mod compiler_ignore;
 pub mod config;
 pub mod linter;

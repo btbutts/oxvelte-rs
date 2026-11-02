@@ -67,6 +67,7 @@ tsrs-inference = []
 [dependencies]
 oxc.workspace = true
 oxc_diagnostics.workspace = true
+oxvelte_compiler = { path = "crates/oxvelte_compiler" }
 oxvelte_parser = { path = "crates/oxvelte_parser" }
 oxvelte_transport = { path = "crates/oxvelte_transport" }
 serde.workspace = true
@@ -115,4 +116,4 @@ flate2 = "1.1.10"
 serde_json = "1"
 tar = "0.4.46"
 ureq = "3.5.0"
-zip = { version = "9.2.0", default-features = false, features = ["deflate"] }
+zip = { version = "^9", default-features = false, features = ["deflate"] }

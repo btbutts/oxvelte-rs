@@ -10,6 +10,13 @@
 [env]
 OXVELTE_COMPILER_RUNTIME = { value = "scripts/compiler-runtime", relative = true }
 
+# Absolute path of the repository root at build time, used by compile-time
+# file embeds (include_str!) in workspace crates so they never need ../..
+# chains. Deliberately separate from OXVELTE_COMPILER_RUNTIME, which is
+# overridable per version-matrix profile and must not change what gets
+# embedded into the binary.
+OXVELTE_REPO_ROOT = { value = ".", relative = true }
+
 # Pinned upstream snapshots for build.rs's CSS property list generation
 # (see docs/research/css/property-awareness-lib.md). Bump a hash to pull a
 # newer snapshot of that source, then delete

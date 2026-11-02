@@ -1,6 +1,6 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; **phases 1–3 complete 02NOV2026** —
+Status: proposed 02NOV2026; **phases 1–4 complete 02NOV2026** —
 phase 1: `[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in
 the root `Cargo.toml`, all root deps inheriting, `resolver = "2"`, version
 literal moved to `[workspace.package]`, `release.sh` on the perl
@@ -15,10 +15,16 @@ gate. Phase 2: `crates/oxvelte_transport` created (`transport/` moved as
 `use`-grep had missed them). The facade re-exports
 (`pub use oxvelte_parser as parser; pub use oxvelte_parser::ast;`) meant
 zero consumer rewrites in this phase; the 68 linter files switch to real
-crate paths in phase 6. Full suite green every phase (461 root + 199
-parser + 1 transport lib tests = the same 661). Phases 4–8 not yet
-implemented. This doc is the authoritative plan for the reorganization;
-update it if the crate boundaries change during implementation.
+crate paths in phase 6. Phase 4: `crates/oxvelte_compiler` created
+(`compiler.rs` → `lib.rs`; `typescript_conditions` widened to `pub`;
+`OXVELTE_REPO_ROOT = { value = ".", relative = true }` added to
+`.cargo/config.toml` and all four `include_str!` sidecar embeds
+re-anchored on it — verified working by the `valid_compile` suite
+running the embedded bridge end-to-end). Full suite green every phase
+(459 root + 2 compiler + 199 parser + 1 transport lib tests = the same
+661). Phases 5–8 not yet implemented. This doc is the authoritative
+plan for the reorganization; update it if the crate boundaries change
+during implementation.
 
 ### Preface
 
