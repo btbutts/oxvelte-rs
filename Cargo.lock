@@ -2047,7 +2047,6 @@ dependencies = [
  "boa_engine",
  "clap",
  "cssparser",
- "flate2",
  "insta",
  "miette",
  "notify",
@@ -2055,6 +2054,7 @@ dependencies = [
  "oxc_diagnostics",
  "oxvelte",
  "oxvelte_compiler",
+ "oxvelte_linter",
  "oxvelte_parser",
  "oxvelte_transport",
  "oxvelte_tsrs",
@@ -2066,10 +2066,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
- "tar",
  "thiserror",
- "ureq",
- "zip",
 ]
 
 [[package]]
@@ -2080,6 +2077,28 @@ dependencies = [
  "oxvelte_transport",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "oxvelte_linter"
+version = "0.4.0"
+dependencies = [
+ "cssparser",
+ "flate2",
+ "oxc",
+ "oxvelte_compiler",
+ "oxvelte_parser",
+ "oxvelte_transport",
+ "oxvelte_tsrs",
+ "precomputed-hash",
+ "regex",
+ "rustc-hash",
+ "selectors",
+ "serde",
+ "serde_json",
+ "tar",
+ "ureq",
+ "zip",
 ]
 
 [[package]]

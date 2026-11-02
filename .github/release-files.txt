@@ -6,18 +6,19 @@
 # paths compiles with `cargo build --release --locked`, so this list can stay
 # minimal — but anything a build needs MUST be named here.
 #
-# src/compiler.rs embeds the Node.js compiler-runtime scripts below with
-# include_str!, so they are part of the build, not development tooling.
+# crates/oxvelte_compiler/src/lib.rs embeds the Node.js compiler-runtime
+# scripts below with include_str!, so they are part of the build, not
+# development tooling.
 Cargo.toml
 Cargo.lock
 README.md
 LICENSE
 THIRD_PARTY_NOTICES
 rust-toolchain.toml
-build.rs
 .cargo/config.toml
 docs/
 src/
+crates/
 scripts/compiler-runtime/bridge.cjs
 scripts/compiler-runtime/typescript-conditions.cjs
 scripts/compiler-runtime/typescript-service.cjs

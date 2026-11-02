@@ -1,6 +1,6 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; **phases 1–5 complete 02NOV2026** —
+Status: proposed 02NOV2026; **phases 1–6 complete 02NOV2026** —
 phase 1: `[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in
 the root `Cargo.toml`, all root deps inheriting, `resolver = "2"`, version
 literal moved to `[workspace.package]`, `release.sh` on the perl
@@ -30,9 +30,18 @@ the crate genuinely does not exist without the feature (note:
 `cargo check --workspace` still checks it, since `--workspace` means all
 members; the gating claim covers builds of the `oxvelte` package).
 Full suite green every phase (447 root + 2 compiler + 199 parser + 1
-transport + 12 tsrs lib tests = the same 661). Phases 6–8 not yet
-implemented. This doc is the authoritative plan for the reorganization;
-update it if the crate boundaries change during implementation.
+transport + 12 tsrs lib tests = the same 661). Phase 6:
+`crates/oxvelte_linter` created (`linter/` + `compiler_ignore.rs` +
+`config.rs` — moved in, not kept at root; see amended decision 6 — +
+`build.rs` + `resources/`); `.gitignore` and `.github/release-files.txt`
+updated; root `tsrs-inference` now forwards to
+`oxvelte_linter/tsrs-inference`; the facade is complete
+(`linter`, `config`, `compiler`, `parser`, `ast`, `transport`, `tsrs`
+all re-exported). Full suite green every phase (275 root + 2 compiler +
+172 linter + 199 parser + 1 transport + 12 tsrs lib tests = the same
+661). Phases 7–8 not yet implemented. This doc is the authoritative
+plan for the reorganization; update it if the crate boundaries change
+during implementation.
 
 ### Preface
 
@@ -248,9 +257,17 @@ allocation per component is from grep over `use` statements; exact per-crate
    parser+linter); `compiler.rs` alone becomes `oxvelte_compiler`. The four
    `include_str!("../scripts/compiler-runtime/*.cjs")` embeds in
    `compiler.rs:155-160` must be re-anchored — see the sanity-check section.
-6. **`config.rs`, `watch.rs`, `custom_rules.rs`, `main.rs` stay in the root
-   package.** `config.rs` imports `linter::RuleConfig`; root depends on
-   linter, so no cycle.
+6. **`watch.rs`, `custom_rules.rs`, `main.rs` stay in the root package;
+   `config.rs` moves INTO `oxvelte_linter`** (amended 02NOV2026 during
+   phase 6). The original decision kept `config.rs` in the root because
+   it imports `linter::RuleConfig` — but phase 6 surfaced the reverse
+   edge this analysis had under-weighted: `linter/mod.rs` and two rule
+   files reference `config::OxvelteConfig` 12 times, including in the
+   `Linter` public API (`add_enabled_rules`, the `LintContext::Project`
+   variant). linter→root and root→linter is a true dependency cycle, so
+   `config.rs` became `oxvelte_linter::config` and the facade re-exports
+   it (`pub use oxvelte_linter::config;`), keeping `oxvelte::config`
+   working for `main.rs`, the fixture tests, and `tests/`.
 7. **`build.rs` and `resources/` move to `oxvelte_linter`.** The generated
    `known_css_properties.json` is consumed by
    `rules/no_unknown_style_directive_property.rs` via
@@ -587,12 +604,21 @@ Rust suite — `cargo test --lib`, `--test upstream_parity`,
    crate; verify `--features tsrs-inference` builds and the
    `tsrs_conditions`/`tsrs_wire_protocol` suites are unchanged.
 6. **`oxvelte_linter`.** Move `src/linter/` + `src/compiler_ignore.rs` +
-   `build.rs` + `resources/`; move the `.gitignore` cache pattern and
-   update `.github/release-files.txt` (sanity-check findings 2–3); move the
+   `src/config.rs` (see amended decision 6) + `build.rs` + `resources/`;
+   move the `.gitignore` cache pattern and update
+   `.github/release-files.txt` (sanity-check findings 2–3); move the
    feature gates onto this crate and add root forwarding; rewrite the
    `crate::` imports in the 89 rule files. Root `lib.rs` becomes the
    facade. Run the offline-cache check manually (cache present, no
-   network fetch) before landing.
+   network fetch) before landing. Implementation notes (02NOV2026): the
+   126 grouped `use crate::{…}` imports in rule **test modules**
+   (`crate::{linter::Linter, parser}` style, written against the
+   pre-split layout) are bridged by three cfg(test)-gated aliases at the
+   linter crate root (`use crate as linter; use oxvelte_parser as
+   parser; use oxvelte_parser::ast;`) — invisible in the public API,
+   removed in phase 8's cleanup; `npm_range_may_include_major` widened
+   to `pub` for the root fixture tests; `cssparser`/`precomputed-hash`
+   deps added (full-path usage, invisible to the `use`-grep).
 7. **Measure and document.** `cargo build --timings` before/after on a
    clean target — including on a Windows machine, the motivating case —
    plus `du -sh target` across feature combinations (with/without

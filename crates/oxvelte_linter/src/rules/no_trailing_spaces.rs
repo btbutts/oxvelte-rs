@@ -1,0 +1,208 @@
+//! `svelte/no-trailing-spaces` — disallow trailing whitespace at the end of lines.
+//! 🔧 Fixable (Extension Rule)
+
+use crate::{Fix, LintContext, Rule};
+use oxc::span::Span;
+use std::collections::HashSet;
+
+pub struct NoTrailingSpaces;
+
+impl Rule for NoTrailingSpaces {
+    fn name(&self) -> &'static str {
+        "svelte/no-trailing-spaces"
+    }
+
+    fn is_fixable(&self) -> bool {
+        true
+    }
+
+    fn run<'a>(&self, ctx: &mut LintContext<'a>) {
+        let opts = ctx
+            .config
+            .options
+            .as_ref()
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first());
+
+        let skip_blank_lines = opts
+            .and_then(|o| o.get("skipBlankLines"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let ignore_comments = opts
+            .and_then(|o| o.get("ignoreComments"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+
+        let source = ctx.source;
+
+        let mut ignored_lines: HashSet<usize> = HashSet::new();
+
+        collect_ignored_lines(source, ignore_comments, &mut ignored_lines);
+
+        let mut line_start = 0usize;
+        for (line_idx, raw_line) in source.split_inclusive('\n').enumerate() {
+            let line_num = line_idx + 1; // 1-indexed
+            // split_inclusive keeps the terminator in the raw slice, so byte
+            // offsets stay exact on CRLF files; strip the terminator to get
+            // the logical line content.
+            let line = raw_line.trim_end_matches(['\r', '\n']);
+            let line_end = line_start + line.len();
+
+            if skip_blank_lines && line.trim().is_empty() {
+                line_start += raw_line.len();
+                continue;
+            }
+
+            if !ignored_lines.contains(&line_num) {
+                let trimmed = line.trim_end();
+                if trimmed.len() < line.len() {
+                    let span = Span::new((line_start + trimmed.len()) as u32, line_end as u32);
+                    ctx.diagnostic_with_fix(
+                        "Trailing spaces not allowed.",
+                        span,
+                        Fix {
+                            span,
+                            replacement: String::new(),
+                        },
+                    );
+                }
+            }
+
+            line_start += raw_line.len();
+        }
+    }
+}
+
+fn collect_ignored_lines(source: &str, ignore_comments: bool, ignored: &mut HashSet<usize>) {
+    let line_starts = build_line_starts(source);
+    let bytes = source.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        if bytes[i] == b'\'' || bytes[i] == b'"' {
+            let q = bytes[i];
+            i += 1;
+            while i < len && bytes[i] != q {
+                if bytes[i] == b'\\' {
+                    i += 1;
+                }
+                i += 1;
+            }
+            i += 1;
+            continue;
+        }
+        if i + 3 < len && bytes[i] == b'<' && bytes[i + 1] == b'!' && bytes[i + 2] == b'-' && bytes[i + 3] == b'-' {
+            let start_pos = i;
+            i += 4;
+            while i + 2 < len && !(bytes[i] == b'-' && bytes[i + 1] == b'-' && bytes[i + 2] == b'>') {
+                i += 1;
+            }
+            let end_pos = if i + 2 < len { i + 3 } else { len };
+            i = end_pos;
+            if ignore_comments {
+                let sl = line_number_at(&line_starts, start_pos);
+                let el = line_number_at(&line_starts, end_pos.saturating_sub(1));
+                for ln in sl..el {
+                    ignored.insert(ln);
+                }
+            }
+            continue;
+        }
+        if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'/' {
+            let start_pos = i;
+            while i < len && bytes[i] != b'\n' {
+                i += 1;
+            }
+            if ignore_comments {
+                ignored.insert(line_number_at(&line_starts, start_pos));
+            }
+            continue;
+        }
+        if i + 1 < len && bytes[i] == b'/' && bytes[i + 1] == b'*' {
+            let start_pos = i;
+            i += 2;
+            while i + 1 < len && !(bytes[i] == b'*' && bytes[i + 1] == b'/') {
+                i += 1;
+            }
+            i += 2;
+            if ignore_comments {
+                let sl = line_number_at(&line_starts, start_pos);
+                let el = line_number_at(&line_starts, i.saturating_sub(1));
+                for ln in sl..el {
+                    ignored.insert(ln);
+                }
+            }
+            continue;
+        }
+        if bytes[i] == b'`' {
+            let open_pos = i;
+            i += 1;
+            let mut depth = 0usize;
+            while i < len {
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == b'$' && i + 1 < len && bytes[i + 1] == b'{' {
+                    depth += 1;
+                    i += 2;
+                    continue;
+                }
+                if depth > 0 && bytes[i] == b'}' {
+                    depth -= 1;
+                    i += 1;
+                    continue;
+                }
+                if depth == 0 && bytes[i] == b'`' {
+                    break;
+                }
+                i += 1;
+            }
+            let close_pos = i;
+            i += 1;
+            let ol = line_number_at(&line_starts, open_pos);
+            let cl = line_number_at(&line_starts, close_pos);
+            if cl > ol {
+                for ln in ol..cl {
+                    ignored.insert(ln);
+                }
+            }
+            continue;
+        }
+        i += 1;
+    }
+}
+
+fn build_line_starts(source: &str) -> Vec<usize> {
+    std::iter::once(0)
+        .chain(source.match_indices('\n').map(|(i, _)| i + 1))
+        .collect()
+}
+
+fn line_number_at(line_starts: &[usize], offset: usize) -> usize {
+    match line_starts.binary_search(&offset) {
+        Ok(idx) => idx + 1,
+        Err(idx) => idx, // idx is the insertion point; line is idx (1-indexed = idx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn crlf_spans_stay_on_the_trailing_space() {
+        // On CRLF files every span after line 1 used to drift one byte per
+        // preceding line. Line 2's trailing spaces are at bytes 21..23.
+        let source = "<p>a</p>   \r\n<p>b</p>  \r\n";
+        let allocator = oxc::allocator::Allocator::default();
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
+        let diagnostics = crate::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let spans: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.rule_name == "svelte/no-trailing-spaces")
+            .map(|d| (d.span.start, d.span.end))
+            .collect();
+        assert_eq!(spans, vec![(8, 11), (21, 23)], "diagnostics: {diagnostics:?}");
+    }
+}

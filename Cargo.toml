@@ -8,7 +8,6 @@ homepage.workspace = true
 description = "A fast Svelte linter written in Rust — drop-in replacement for eslint-plugin-svelte, 4-25x faster"
 keywords = ["svelte", "linter", "lint", "eslint", "oxc"]
 categories = ["development-tools", "command-line-utilities"]
-build = "build.rs"
 
 [workspace]
 members = [".", "crates/oxvelte_*"]
@@ -62,12 +61,13 @@ path = "scripts/launcher.rs"
 [features]
 default = []
 custom-rules = ["dep:boa_engine"]
-tsrs-inference = ["dep:oxvelte_tsrs"]
+tsrs-inference = ["dep:oxvelte_tsrs", "oxvelte_linter/tsrs-inference"]
 
 [dependencies]
 oxc.workspace = true
 oxc_diagnostics.workspace = true
 oxvelte_compiler = { path = "crates/oxvelte_compiler" }
+oxvelte_linter = { path = "crates/oxvelte_linter" }
 oxvelte_parser = { path = "crates/oxvelte_parser" }
 oxvelte_transport = { path = "crates/oxvelte_transport" }
 oxvelte_tsrs = { path = "crates/oxvelte_tsrs", optional = true }
@@ -111,10 +111,3 @@ codegen-units = 32
 debug = true
 incremental = true
 debug-assertions = true
-
-[build-dependencies]
-flate2 = "1.1.10"
-serde_json = "1"
-tar = "0.4.46"
-ureq = "3.5.0"
-zip = { version = "^9", default-features = false, features = ["deflate"] }

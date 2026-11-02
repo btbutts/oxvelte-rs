@@ -1,0 +1,277 @@
+//! `svelte/no-dom-manipulating` — disallow DOM manipulating.
+//! ⭐ Recommended
+
+use crate::{LintContext, Rule, walk_template_nodes};
+use oxc::ast::AstKind;
+use oxc::ast::ast::{AssignmentTarget, Expression};
+use oxc::semantic::SymbolId;
+use oxc::span::{GetSpan, Span};
+use oxvelte_parser::ast::{Attribute, AttributeValue, AttributeValuePart, DirectiveKind, TemplateNode};
+use rustc_hash::FxHashSet;
+
+const DOM_METHODS: &[&str] = &[
+    "appendChild",
+    "removeChild",
+    "insertBefore",
+    "replaceChild",
+    "normalize",
+    "after",
+    "append",
+    "before",
+    "insertAdjacentElement",
+    "insertAdjacentHTML",
+    "insertAdjacentText",
+    "prepend",
+    "remove",
+    "replaceChildren",
+    "replaceWith",
+];
+
+const DOM_PROPS: &[&str] = &["textContent", "innerHTML", "outerHTML", "innerText", "outerText"];
+
+pub struct NoDomManipulating;
+
+impl Rule for NoDomManipulating {
+    fn name(&self) -> &'static str {
+        "svelte/no-dom-manipulating"
+    }
+
+    fn is_recommended(&self) -> bool {
+        true
+    }
+
+    fn run<'a>(&self, ctx: &mut LintContext<'a>) {
+        // 1. Collect variable NAMES bound via `bind:this={var}` on native elements.
+        let mut bound_names = FxHashSet::default();
+        walk_template_nodes(&ctx.ast.html, &mut |node| {
+            let TemplateNode::Element(el) = node else {
+                return;
+            };
+            let is_native = match el.kind() {
+                oxvelte_parser::ast::ElementKind::Html => true,
+                oxvelte_parser::ast::ElementKind::Component => false,
+                oxvelte_parser::ast::ElementKind::SvelteSpecial(s) => {
+                    matches!(s, oxvelte_parser::ast::SvelteSpecial::Element)
+                }
+            };
+            if !is_native {
+                return;
+            }
+            for attr in &el.attributes {
+                let Attribute::Directive {
+                    kind: DirectiveKind::Binding,
+                    name,
+                    value,
+                    ..
+                } = attr
+                else {
+                    continue;
+                };
+                if name != "this" {
+                    continue;
+                }
+                // The value for `bind:this={var}` should reference a single identifier.
+                match value {
+                    AttributeValue::Expression(expr) => {
+                        let n = expr.trim();
+                        if !n.is_empty() && n.chars().all(is_ident_char) {
+                            bound_names.insert(n.to_string());
+                        }
+                    }
+                    AttributeValue::Concat(parts)
+                        // `bind:this="{var}"` — one Expression part.
+                        if parts.len() == 1 => {
+                            if let AttributeValuePart::Expression(expr) = &parts[0] {
+                                let n = expr.trim();
+                                if !n.is_empty() && n.chars().all(is_ident_char) {
+                                    bound_names.insert(n.to_string());
+                                }
+                            }
+                        }
+                    _ => {}
+                }
+            }
+        });
+        if bound_names.is_empty() {
+            return;
+        }
+
+        let Some(semantic) = ctx.instance_semantic else {
+            return;
+        };
+        let content_offset = ctx
+            .ast
+            .instance
+            .as_ref()
+            .map_or(ctx.instance_content_offset, |script| script.content_span.start);
+        let scoping = semantic.scoping();
+
+        // 2. Resolve each bound name to a symbol in the instance root scope.
+        //    Only variables declared with `let`/`var` at top level qualify — this
+        //    matches the vendor's `let foo` filter and avoids imports of
+        //    components (which are not bound to DOM even if named the same).
+        let mut bound_symbols = FxHashSet::<SymbolId>::default();
+        for name in &bound_names {
+            if let Some(sid) = scoping.find_binding(scoping.root_scope_id(), name.as_str().into()) {
+                let flags = scoping.symbol_flags(sid);
+                // Accept `let`/`var`/parameter-like bindings; skip `const`
+                // (which is fine since bind:this requires assignable binding).
+                if flags.intersects(
+                    oxc::semantic::SymbolFlags::BlockScopedVariable
+                        | oxc::semantic::SymbolFlags::FunctionScopedVariable,
+                ) && !flags.intersects(oxc::semantic::SymbolFlags::ConstVariable)
+                {
+                    bound_symbols.insert(sid);
+                }
+            }
+        }
+        if bound_symbols.is_empty() {
+            return;
+        }
+
+        let nodes = semantic.nodes();
+        let msg = "Don't manipulate the DOM directly. The Svelte runtime can get confused if there is a difference between the actual DOM and the DOM expected by the Svelte runtime.";
+
+        // 3. DOM method calls: `foo.remove()`, `foo?.remove()`, `(foo?.remove)()`.
+        for node in nodes.iter() {
+            let AstKind::CallExpression(ce) = node.kind() else {
+                continue;
+            };
+            // Unwrap the callee: parens, chain expression.
+            let callee = strip_wrappers(&ce.callee);
+            let Some((base_sym, method, end_span)) = base_symbol_and_tail(callee, scoping, semantic) else {
+                continue;
+            };
+            if !bound_symbols.contains(&base_sym) {
+                continue;
+            }
+            if !DOM_METHODS.contains(&method) {
+                continue;
+            }
+            let s = content_offset + callee.span().start;
+            let e = content_offset + end_span.end;
+            ctx.diagnostic(msg, Span::new(s, e));
+        }
+
+        // 4. DOM property assignments: `foo.textContent = 'x'`, `foo.innerHTML += 'x'`.
+        for node in nodes.iter() {
+            let AstKind::AssignmentExpression(ae) = node.kind() else {
+                continue;
+            };
+            let Some((base_sym, prop, end_span)) = assignment_target_tail(&ae.left, scoping, semantic) else {
+                continue;
+            };
+            if !bound_symbols.contains(&base_sym) {
+                continue;
+            }
+            if !DOM_PROPS.contains(&prop) {
+                continue;
+            }
+            let s = content_offset + ae.span.start;
+            let e = content_offset + end_span.end;
+            ctx.diagnostic(msg, Span::new(s, e));
+        }
+    }
+}
+
+fn is_ident_char(c: char) -> bool {
+    c.is_alphanumeric() || c == '_' || c == '$'
+}
+
+/// Strip `ParenthesizedExpression` and `ChainExpression` wrappers to get the
+/// underlying expression — e.g. `(foo?.remove)` → `foo?.remove`.
+fn strip_wrappers<'a>(expr: &'a Expression<'a>) -> &'a Expression<'a> {
+    match expr {
+        Expression::ParenthesizedExpression(p) => strip_wrappers(&p.expression),
+        Expression::ChainExpression(c) => {
+            // ChainExpression's `expression` is a ChainElement; downcast to Expression.
+            match &c.expression {
+                oxc::ast::ast::ChainElement::CallExpression(_ce) => expr, // keep the chain as-is
+                _ => expr,
+            }
+        }
+        _ => expr,
+    }
+}
+
+/// For a call callee like `foo.method` or `foo?.method`, find the method
+/// name and the base identifier's symbol id. ONLY matches single-hop
+/// accesses — `foo.bar.method()` and `foo.classList.remove()` are not
+/// flagged since the method is called on an intermediate object, not on
+/// the bound element itself.
+fn base_symbol_and_tail<'a>(
+    callee: &'a Expression<'a>,
+    scoping: &oxc::semantic::Scoping,
+    semantic: &'a oxc::semantic::Semantic<'a>,
+) -> Option<(SymbolId, &'a str, Span)> {
+    let (mem_obj, prop, end) = match callee {
+        Expression::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
+        Expression::ComputedMemberExpression(m) => (&m.object, computed_property_name(&m.expression)?, m.span),
+        Expression::ChainExpression(c) => match &c.expression {
+            oxc::ast::ast::ChainElement::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
+            oxc::ast::ast::ChainElement::ComputedMemberExpression(m) => {
+                (&m.object, computed_property_name(&m.expression)?, m.span)
+            }
+            oxc::ast::ast::ChainElement::CallExpression(ce) => match &ce.callee {
+                Expression::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
+                Expression::ComputedMemberExpression(m) => (&m.object, computed_property_name(&m.expression)?, m.span),
+                _ => return None,
+            },
+            _ => return None,
+        },
+        _ => return None,
+    };
+    // Require the object to be the bound identifier directly — no intermediate
+    // property access.
+    let base_id = match mem_obj {
+        Expression::Identifier(id) => id,
+        _ => return None,
+    };
+    let sid = scoping.get_reference(base_id.reference_id()).symbol_id()?;
+    let _ = semantic;
+    Some((sid, prop, end))
+}
+
+/// Same single-hop constraint for assignment targets.
+fn assignment_target_tail<'a>(
+    target: &'a AssignmentTarget<'a>,
+    scoping: &oxc::semantic::Scoping,
+    semantic: &'a oxc::semantic::Semantic<'a>,
+) -> Option<(SymbolId, &'a str, Span)> {
+    let (object, prop, span) = match target {
+        AssignmentTarget::StaticMemberExpression(m) => (&m.object, m.property.name.as_str(), m.span),
+        AssignmentTarget::ComputedMemberExpression(m) => (&m.object, computed_property_name(&m.expression)?, m.span),
+        _ => return None,
+    };
+    let base_id = match object {
+        Expression::Identifier(id) => id,
+        _ => return None,
+    };
+    let sid = scoping.get_reference(base_id.reference_id()).symbol_id()?;
+    let _ = semantic;
+    Some((sid, prop, span))
+}
+
+fn computed_property_name<'a>(expr: &'a Expression<'a>) -> Option<&'a str> {
+    match expr {
+        Expression::StringLiteral(lit) => lit.value.as_str(),
+        _ => None,
+    }
+}
+
+#[cfg(test)]
+mod span_tests {
+    #[test]
+    fn parenthesized_optional_calls_report_the_member_expression() {
+        let source = "<!-- é -->\n<script data-x='>'>let el; (/* keep */ el?.remove)();</script><p bind:this={el}/>";
+        let allocator = oxc::allocator::Allocator::default();
+        let parsed = oxvelte_parser::parse_for_lint(source, &allocator);
+        let diagnostics = crate::Linter::all().lint_with_config(&parsed.ast, source, Default::default());
+        let reads: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.rule_name == "svelte/no-dom-manipulating")
+            .map(|d| &source[d.span.start as usize..d.span.end as usize])
+            .collect();
+        assert_eq!(reads, ["el?.remove"]);
+    }
+}

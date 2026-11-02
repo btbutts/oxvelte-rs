@@ -1,10 +1,9 @@
 pub use oxvelte_compiler as compiler;
+pub use oxvelte_linter as linter;
+pub use oxvelte_linter::config;
 pub use oxvelte_parser as parser;
 pub use oxvelte_parser::ast;
 
-mod compiler_ignore;
-pub mod config;
-pub mod linter;
 pub mod watch;
 
 #[cfg(feature = "custom-rules")]
