@@ -1,6 +1,7 @@
 # Reorganizing `src/` modules into a workspace of internal crates — plan
 
-Status: proposed 02NOV2026; **phases 1–6 complete 02NOV2026** —
+Status: proposed 02NOV2026; **phases 1–7 complete 02NOV2026** (build
+metrics in `reorg-build-metrics-2026-11-02.md`; KIMI.md layout updated) —
 phase 1: `[workspace]`/`[workspace.package]`/`[workspace.dependencies]` in
 the root `Cargo.toml`, all root deps inheriting, `resolver = "2"`, version
 literal moved to `[workspace.package]`, `release.sh` on the perl
