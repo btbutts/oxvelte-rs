@@ -5,8 +5,8 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::tsrs::ts_locator;
-use crate::tsrs::{TsrsClient, TsrsError};
+use crate::ts_locator;
+use crate::{TsrsClient, TsrsError};
 
 /// One appended template expression's extent in the virtual source and where
 /// it came from in the real source. All offsets are UTF-16 code units.
@@ -146,7 +146,7 @@ pub struct TsrsSession {
     /// case-insensitive), used to construct node handles.
     path_key: String,
     /// Lazily decoded node records for the virtual file.
-    node_records: Option<Vec<crate::tsrs::binary_ast::NodeRecord>>,
+    node_records: Option<Vec<crate::binary_ast::NodeRecord>>,
     /// UTF-16 length of the component source; template expressions live at
     /// offsets beyond it.
     pub source_len_utf16: usize,
@@ -167,16 +167,13 @@ impl TsrsSession {
             let bytes = self
                 .client
                 .get_source_file_data(self.snapshot, &self.project, &self.virtual_filename)?;
-            self.node_records = Some(
-                crate::tsrs::binary_ast::read_nodes(&bytes).ok_or_else(|| TsrsError::Server {
-                    method: "getSourceFile".to_owned(),
-                    message: "unrecognized binary AST encoding".to_owned(),
-                })?,
-            );
+            self.node_records = Some(crate::binary_ast::read_nodes(&bytes).ok_or_else(|| TsrsError::Server {
+                method: "getSourceFile".to_owned(),
+                message: "unrecognized binary AST encoding".to_owned(),
+            })?);
         }
         let records = self.node_records.as_deref().unwrap_or(&[]);
-        let Some(record) =
-            crate::tsrs::binary_ast::find_by_span(records, &self.virtual_units, start as u32, end as u32)
+        let Some(record) = crate::binary_ast::find_by_span(records, &self.virtual_units, start as u32, end as u32)
         else {
             return Ok(None);
         };
@@ -194,7 +191,7 @@ impl TsrsSession {
         &mut self,
         start: usize,
         end: usize,
-    ) -> Result<Option<crate::tsrs::protocol::TypeResponse>, TsrsError> {
+    ) -> Result<Option<crate::protocol::TypeResponse>, TsrsError> {
         let Some(handle) = self.handle_at_span(start, end)? else {
             return Ok(None);
         };
@@ -243,7 +240,7 @@ impl TsrsSession {
         let mut root_files: Vec<String> = Vec::new();
         let mut snapshot = 0u64;
         if let Some(tsconfig) = &tsconfig {
-            let resp: crate::tsrs::protocol::CreateSnapshotResponse = client.request(
+            let resp: crate::protocol::CreateSnapshotResponse = client.request(
                 "createSnapshot",
                 &serde_json::json!({ "openProjects": [tsconfig.to_string_lossy()] }),
             )?;

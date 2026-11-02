@@ -13,7 +13,7 @@ pub mod custom_rules;
 #[cfg(feature = "tsrs-inference")]
 pub use oxvelte_transport as transport;
 #[cfg(feature = "tsrs-inference")]
-pub mod tsrs;
+pub use oxvelte_tsrs as tsrs;
 
 #[cfg(test)]
 mod linter_fixture_tests {

@@ -1,5 +1,5 @@
 //! Client for driving an external `tsrs --api` sidecar over the tuple
-//! framing in `crate::transport::message_pack`. Spawning, session
+//! framing in `oxvelte_transport::message_pack`. Spawning, session
 //! lifecycle, and the typed request helpers the conditions port uses.
 //! See `docs/research/dependency/tsrs-type-aware-checking.md`.
 
@@ -13,8 +13,8 @@ use std::path::Path;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::transport::TransportError;
-use crate::transport::message_pack::{MessagePackReader, MessagePackWriter, MessageType};
+use oxvelte_transport::TransportError;
+use oxvelte_transport::message_pack::{MessagePackReader, MessagePackWriter, MessageType};
 
 /// Routing observability for tests and CI: which typing engine actually
 /// served a run. `TSRS_SERVED` counts the files whose type analysis tsrs
@@ -191,7 +191,7 @@ impl TsrsClient {
                 source,
             })?;
             let encoded = resp["data"].as_str().unwrap_or_default();
-            return crate::tsrs::binary_ast::decode_base64(encoded).ok_or_else(|| TsrsError::Server {
+            return crate::binary_ast::decode_base64(encoded).ok_or_else(|| TsrsError::Server {
                 method: "getSourceFile".to_owned(),
                 message: "invalid base64 AST data".to_owned(),
             });

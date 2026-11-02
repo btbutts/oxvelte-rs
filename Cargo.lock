@@ -2057,6 +2057,7 @@ dependencies = [
  "oxvelte_compiler",
  "oxvelte_parser",
  "oxvelte_transport",
+ "oxvelte_tsrs",
  "precomputed-hash",
  "rayon",
  "regex",
@@ -2098,6 +2099,17 @@ dependencies = [
 [[package]]
 name = "oxvelte_transport"
 version = "0.4.0"
+
+[[package]]
+name = "oxvelte_tsrs"
+version = "0.4.0"
+dependencies = [
+ "oxc",
+ "oxvelte_transport",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
 
 [[package]]
 name = "parking"

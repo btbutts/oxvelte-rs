@@ -62,7 +62,7 @@ path = "scripts/launcher.rs"
 [features]
 default = []
 custom-rules = ["dep:boa_engine"]
-tsrs-inference = []
+tsrs-inference = ["dep:oxvelte_tsrs"]
 
 [dependencies]
 oxc.workspace = true
@@ -70,6 +70,7 @@ oxc_diagnostics.workspace = true
 oxvelte_compiler = { path = "crates/oxvelte_compiler" }
 oxvelte_parser = { path = "crates/oxvelte_parser" }
 oxvelte_transport = { path = "crates/oxvelte_transport" }
+oxvelte_tsrs = { path = "crates/oxvelte_tsrs", optional = true }
 serde.workspace = true
 serde_json.workspace = true
 clap.workspace = true

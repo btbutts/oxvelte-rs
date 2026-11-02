@@ -16,9 +16,9 @@ use oxc::span::{GetSpan, SourceType, Span};
 use oxc::syntax::scope::ScopeFlags;
 use oxvelte_transport::span::byte_utf16;
 
-use crate::tsrs::TsrsError;
-use crate::tsrs::protocol::TypeResponse;
-use crate::tsrs::session::TsrsSession;
+use crate::TsrsError;
+use crate::protocol::TypeResponse;
+use crate::session::TsrsSession;
 
 // TS7 TypeFlags (tsc/internal/checker/types.go at the tsrs pin).
 const ANY: u32 = 1 << 0;
@@ -1040,7 +1040,7 @@ impl<'a> Visit<'a> for MutableReferenceWalker<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tsrs::session::TemplateExpression;
+    use crate::session::TemplateExpression;
     use std::fs;
 
     /// Runs the full analysis over a component with known unnecessary
@@ -1048,7 +1048,7 @@ mod tests {
     /// chain fix. Skips when no tsrs binary is on PATH.
     #[test]
     fn analyze_finds_unnecessary_conditions() {
-        if crate::tsrs::ts_locator::find_on_path().is_none() {
+        if crate::ts_locator::find_on_path().is_none() {
             eprintln!("skipping: no tsrs binary on PATH");
             return;
         }
@@ -1132,7 +1132,7 @@ mod tests {
     /// flow-sensitive.
     #[test]
     fn analyze_skips_mutable_roots_in_templates() {
-        if crate::tsrs::ts_locator::find_on_path().is_none() {
+        if crate::ts_locator::find_on_path().is_none() {
             eprintln!("skipping: no tsrs binary on PATH");
             return;
         }
