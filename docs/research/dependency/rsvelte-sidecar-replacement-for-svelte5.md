@@ -102,7 +102,7 @@ their `[patch]` block removed, `cargo check -p rsvelte`:
 bumps land as routine PRs. After our bump is validated, opening it as an upstream PR is the
 preferred retirement path for the fork.
 
-**Toolchain.** rsvelte uses edition 2024 / `rust-version = "1.95"`; our `rust-toolchain.toml`
+**Toolchain.** rsvelte uses edition 2024 / `rust-version = "1.97"`; our `rust-toolchain.toml`
 tracks `stable`, so rustup handles this with no repo change.
 
 ## Integration design
